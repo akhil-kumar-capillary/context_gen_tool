@@ -21,7 +21,7 @@ services:
       dockerfile: Dockerfile
     environment:
       DATABASE_URL: "postgresql+asyncpg://dev:dev@db:5432/context_gen"
-      DATABASE_URL_SYNC: "postgresql+psycopg2://dev:dev@db:5432/context_gen"
+      DATABASE_URL_SYNC: "postgresql+psycopg://dev:dev@db:5432/context_gen"
       CORS_ORIGINS: '["http://localhost:3000"]'
       SESSION_SECRET: "dev-secret-change-in-production"
     ports:
