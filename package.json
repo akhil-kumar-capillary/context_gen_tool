@@ -1,0 +1,22 @@
+{
+  "name": "aira-context-gen-tool",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "dev:web": "turbo dev --filter=web",
+    "dev:api": "cd apps/api && uvicorn app.main:app --reload --port 8000",
+    "db:migrate": "cd apps/api && alembic upgrade head",
+    "db:revision": "cd apps/api && alembic revision --autogenerate -m"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0"
+  },
+  "packageManager": "npm@10.0.0"
+}
