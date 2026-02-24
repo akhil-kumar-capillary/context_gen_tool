@@ -5,7 +5,7 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "alembic upgrade head && python seed_data.py && uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2",
+    "startCommand": "export PYTHONUNBUFFERED=1 && echo '--- Starting migrations ---' && alembic upgrade head && echo '--- Starting seed ---' && python seed_data.py && echo '--- Starting uvicorn ---' && uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 5,
     "healthcheckPath": "/health",

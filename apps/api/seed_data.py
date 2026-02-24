@@ -1,7 +1,9 @@
 """Seed script to populate roles, permissions, and primary admin.
 Run after initial migration: python seed_data.py
 """
+import sys
 import asyncio
+import traceback
 from sqlalchemy import select
 from app.database import async_session
 from app.models.user import User, Role, Permission, RolePermission, UserRole
@@ -116,11 +118,17 @@ async def seed():
             db.add(UserRole(user_id=admin_user.id, role_id=admin_role.id))
 
         await db.commit()
-        print("Seed data applied successfully!")
-        print(f"  - {len(all_perms)} permissions")
-        print(f"  - {len(ROLES)} roles")
-        print(f"  - Primary admin: {settings.primary_admin_email}")
+        print("Seed data applied successfully!", flush=True)
+        print(f"  - {len(all_perms)} permissions", flush=True)
+        print(f"  - {len(ROLES)} roles", flush=True)
+        print(f"  - Primary admin: {settings.primary_admin_email}", flush=True)
 
 
 if __name__ == "__main__":
-    asyncio.run(seed())
+    print("seed_data.py: starting...", flush=True)
+    try:
+        asyncio.run(seed())
+    except Exception as e:
+        print(f"seed_data.py FAILED: {e}", flush=True)
+        traceback.print_exc()
+        sys.exit(1)
