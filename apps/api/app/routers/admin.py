@@ -26,7 +26,10 @@ async def list_users(
 ):
     result = await db.execute(
         select(User)
-        .options(selectinload(User.roles), selectinload(User.permissions))
+        .options(
+            selectinload(User.roles).selectinload(UserRole.role),
+            selectinload(User.permissions),
+        )
         .order_by(User.email)
     )
     users = result.scalars().all()
