@@ -1,9 +1,13 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.core.websocket import websocket_endpoint
 from app.routers import auth, contexts, databricks, confluence, config_apis, llm, admin, chat
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="aiRA Context Management API",
@@ -12,6 +16,8 @@ app = FastAPI(
 )
 
 # CORS
+logger.info(f"CORS allowed origins: {settings.cors_origins}")
+print(f"CORS allowed origins: {settings.cors_origins}", flush=True)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,

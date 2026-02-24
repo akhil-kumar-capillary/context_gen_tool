@@ -1,8 +1,9 @@
+import json
 import os
 import logging
 from dataclasses import dataclass
 from pydantic_settings import BaseSettings
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from typing import Optional
 
 
@@ -161,6 +162,17 @@ class Settings(BaseSettings):
     # App
     cors_origins: list[str] = ["http://localhost:3000"]
     debug: bool = False
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v):
+        """Parse CORS origins from env var — handles JSON array or comma-separated."""
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("["):
+                return json.loads(v)
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
     # Primary admin email
     primary_admin_email: str = "akhil.kumar@capillarytech.com"
