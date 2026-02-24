@@ -26,8 +26,8 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
-    roles = relationship("UserRole", back_populates="user", cascade="all, delete-orphan")
-    permissions = relationship("UserPermission", back_populates="user", cascade="all, delete-orphan")
+    roles = relationship("UserRole", back_populates="user", cascade="all, delete-orphan", foreign_keys="[UserRole.user_id]")
+    permissions = relationship("UserPermission", back_populates="user", cascade="all, delete-orphan", foreign_keys="[UserPermission.user_id]")
     orgs = relationship("UserOrg", back_populates="user", cascade="all, delete-orphan")
 
 

@@ -1,8 +1,9 @@
 """LLM service abstraction — supports Anthropic and OpenAI with streaming + tool_use.
 
 Yields event dicts:
-  {"type": "chunk", "text": "..."}           — streamed text content
-  {"type": "tool_use", "id": "...", "name": "...", "input": {...}}  — tool call request
+  {"type": "chunk", "text": "..."}                         — streamed text content
+  {"type": "tool_use_start", "id": "...", "name": "..."}   — tool call detected (params still streaming)
+  {"type": "tool_use", "id": "...", "name": "...", "input": {...}}  — tool call complete with params
   {"type": "end", "usage": {...}, "stop_reason": "...", "warning": ...}
 """
 import json
@@ -12,6 +13,41 @@ from typing import AsyncGenerator
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Cached LLM clients — avoids re-creating httpx connection pools per call.
+# Anthropic & OpenAI async clients maintain their own internal httpx pools,
+# so caching them means connections are reused across requests.
+# Keyed by API key to support per-org override keys in the future.
+# ---------------------------------------------------------------------------
+
+_anthropic_clients: dict[str, object] = {}
+_openai_clients: dict[str, object] = {}
+
+
+def _get_anthropic_client(api_key: str | None = None):
+    """Get or create a cached Anthropic async client."""
+    import anthropic
+
+    key = api_key or settings.anthropic_api_key
+    if not key:
+        raise ValueError("Anthropic API key not configured")
+    if key not in _anthropic_clients:
+        _anthropic_clients[key] = anthropic.AsyncAnthropic(api_key=key)
+    return _anthropic_clients[key]
+
+
+def _get_openai_client(api_key: str | None = None):
+    """Get or create a cached OpenAI async client."""
+    import openai
+
+    key = api_key or settings.openai_api_key
+    if not key:
+        raise ValueError("OpenAI API key not configured")
+    if key not in _openai_clients:
+        _openai_clients[key] = openai.AsyncOpenAI(api_key=key)
+    return _openai_clients[key]
 
 
 # ---------------------------------------------------------------------------
@@ -28,13 +64,7 @@ async def stream_anthropic(
     api_key: str | None = None,
 ) -> AsyncGenerator[dict, None]:
     """Stream from Anthropic Claude API with optional tool_use support."""
-    import anthropic
-
-    key = api_key or settings.anthropic_api_key
-    if not key:
-        raise ValueError("Anthropic API key not configured")
-
-    client = anthropic.AsyncAnthropic(api_key=key)
+    client = _get_anthropic_client(api_key)
 
     kwargs: dict = {
         "model": model,
@@ -62,6 +92,8 @@ async def stream_anthropic(
                     current_tool_id = block.id
                     current_tool_name = block.name
                     current_tool_input_json = ""
+                    # Notify immediately that a tool call is being generated
+                    yield {"type": "tool_use_start", "id": block.id, "name": block.name}
 
             elif event.type == "content_block_delta":
                 delta = event.delta
@@ -111,13 +143,7 @@ async def call_anthropic(
 
     Returns: {"content": [...blocks...], "usage": {...}, "stop_reason": "..."}
     """
-    import anthropic
-
-    key = api_key or settings.anthropic_api_key
-    if not key:
-        raise ValueError("Anthropic API key not configured")
-
-    client = anthropic.AsyncAnthropic(api_key=key)
+    client = _get_anthropic_client(api_key)
 
     kwargs: dict = {
         "model": model,
@@ -166,13 +192,7 @@ async def stream_openai(
     api_key: str | None = None,
 ) -> AsyncGenerator[dict, None]:
     """Stream from OpenAI GPT API with optional function-calling support."""
-    import openai
-
-    key = api_key or settings.openai_api_key
-    if not key:
-        raise ValueError("OpenAI API key not configured")
-
-    client = openai.AsyncOpenAI(api_key=key)
+    client = _get_openai_client(api_key)
 
     full_messages = [{"role": "system", "content": system}] + messages
 
@@ -211,6 +231,10 @@ async def stream_openai(
                             "name": tc.function.name or "" if tc.function else "",
                             "arguments": "",
                         }
+                        # Notify immediately that a tool call is being generated
+                        tool_name = tc.function.name if tc.function else ""
+                        if tool_name:
+                            yield {"type": "tool_use_start", "id": tc.id or "", "name": tool_name}
                     if tc.id:
                         tool_calls_acc[idx]["id"] = tc.id
                     if tc.function:
@@ -262,13 +286,7 @@ async def call_openai(
 
     Returns: {"content": [...blocks...], "usage": {...}, "stop_reason": "..."}
     """
-    import openai
-
-    key = api_key or settings.openai_api_key
-    if not key:
-        raise ValueError("OpenAI API key not configured")
-
-    client = openai.AsyncOpenAI(api_key=key)
+    client = _get_openai_client(api_key)
 
     full_messages = [{"role": "system", "content": system}] + messages
 

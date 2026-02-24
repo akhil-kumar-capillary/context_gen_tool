@@ -42,7 +42,8 @@ async def chat_websocket(websocket: WebSocket):
 
       Server → Client:
         {type: "chat_chunk", text: "..."}
-        {type: "tool_start", tool: "...", display: "..."}
+        {type: "tool_preparing", tool: "...", tool_id: "...", display: "..."}
+        {type: "tool_start", tool: "...", tool_id: "...", display: "..."}
         {type: "tool_end", tool: "...", tool_id: "...", summary: "..."}
         {type: "chat_end", conversation_id: "...", usage: {...}, tool_calls: [...]}
         {type: "error", message: "..."}
@@ -94,10 +95,14 @@ async def chat_websocket(websocket: WebSocket):
                 )
 
     except WebSocketDisconnect:
-        ws_manager.disconnect(connection_id, user_id)
+        await ws_manager.disconnect(connection_id, user_id)
+    except RuntimeError:
+        # Starlette raises RuntimeError when WS is already closed
+        logger.info(f"Chat WebSocket closed (connection={connection_id})")
+        await ws_manager.disconnect(connection_id, user_id)
     except Exception as e:
         logger.exception("Chat WebSocket error")
-        ws_manager.disconnect(connection_id, user_id)
+        await ws_manager.disconnect(connection_id, user_id)
 
 
 async def _handle_chat_message(
@@ -105,7 +110,14 @@ async def _handle_chat_message(
     user: dict,
     connection_id: str,
 ):
-    """Process an incoming chat message: load/create conversation, run orchestrator, persist."""
+    """Process an incoming chat message.
+
+    Uses 3 short-lived DB sessions to avoid holding a connection during
+    the (potentially long) LLM streaming phase:
+      1. Load/create conversation + save user message  (quick DB)
+      2. Run LLM orchestrator with tool calls           (no DB held — tools open their own)
+      3. Persist assistant response                      (quick DB)
+    """
     from app.database import async_session
 
     content = msg.get("content", "").strip()
@@ -126,9 +138,13 @@ async def _handle_chat_message(
         )
         return
 
-    async with async_session() as db:
-        try:
-            # Load or create conversation
+    try:
+        # ── Phase 1: Load conversation + save user message (short DB session) ──
+        conv_id = None
+        llm_messages: list[dict] = []
+        is_first_message = False
+
+        async with async_session() as db:
             conversation = None
             if conversation_id:
                 result = await db.execute(
@@ -148,65 +164,85 @@ async def _handle_chat_message(
                 )
                 db.add(conversation)
                 await db.flush()
+                is_first_message = True
+
+            conv_id = conversation.id
 
             # Save user message
             user_msg = ChatMessage(
-                conversation_id=conversation.id,
+                conversation_id=conv_id,
                 role="user",
                 content=content,
             )
             db.add(user_msg)
-            await db.flush()
 
-            # Build LLM message history from conversation
-            llm_messages = _build_llm_messages(conversation, content)
+            # Build LLM message history before closing session.
+            # For new conversations, skip history (messages relationship is empty
+            # and lazy-loading fails in async context — greenlet_spawn error).
+            if is_first_message:
+                llm_messages = [{"role": "user", "content": content}]
+            else:
+                llm_messages = _build_llm_messages(conversation, content)
 
-            # Create tool context
-            tool_ctx = ToolContext(
-                user=user,
-                org_id=org_id,
-                db=db,
-                ws_manager=ws_manager,
-                ws_connection_id=connection_id,
+            await db.commit()
+        # ── Session released — DB connection returned to pool ──
+
+        # ── Phase 2: Run LLM orchestrator (no DB connection held) ──
+        # Tools that need DB will open their own short-lived sessions.
+        # We pass a session factory instead of a live session.
+        tool_ctx = ToolContext(
+            user=user,
+            org_id=org_id,
+            db=None,  # Tools open their own sessions via async_session()
+            ws_manager=ws_manager,
+            ws_connection_id=connection_id,
+        )
+
+        orchestrator = ChatOrchestrator(
+            provider=provider,
+            model=model,
+            tool_context=tool_ctx,
+        )
+
+        async def _on_text_chunk(text):
+            await ws_manager.send_to_connection(
+                connection_id, {"type": "chat_chunk", "text": text}
             )
 
-            # Run orchestrator with streaming callbacks
-            orchestrator = ChatOrchestrator(
-                provider=provider,
-                model=model,
-                tool_context=tool_ctx,
+        async def _on_tool_detected(tool, tool_id, display):
+            await ws_manager.send_to_connection(
+                connection_id,
+                {"type": "tool_preparing", "tool": tool, "tool_id": tool_id, "display": display},
             )
 
-            async def _on_text_chunk(text):
-                await ws_manager.send_to_connection(
-                    connection_id, {"type": "chat_chunk", "text": text}
-                )
-
-            async def _on_tool_start(tool, display):
-                await ws_manager.send_to_connection(
-                    connection_id, {"type": "tool_start", "tool": tool, "display": display}
-                )
-
-            async def _on_tool_end(tool, tool_id, summary):
-                await ws_manager.send_to_connection(
-                    connection_id,
-                    {"type": "tool_end", "tool": tool, "tool_id": tool_id, "summary": summary},
-                )
-
-            async def _on_end(usage):
-                pass  # We send chat_end after we have the full result
-
-            result = await orchestrator.run(
-                messages=llm_messages,
-                on_text_chunk=_on_text_chunk,
-                on_tool_start=_on_tool_start,
-                on_tool_end=_on_tool_end,
-                on_end=_on_end,
+        async def _on_tool_start(tool, tool_id, display):
+            await ws_manager.send_to_connection(
+                connection_id,
+                {"type": "tool_start", "tool": tool, "tool_id": tool_id, "display": display},
             )
 
-            # Save assistant message
+        async def _on_tool_end(tool, tool_id, summary):
+            await ws_manager.send_to_connection(
+                connection_id,
+                {"type": "tool_end", "tool": tool, "tool_id": tool_id, "summary": summary},
+            )
+
+        async def _on_end(usage):
+            pass  # We send chat_end after persisting
+
+        result = await orchestrator.run(
+            messages=llm_messages,
+            on_text_chunk=_on_text_chunk,
+            on_tool_detected=_on_tool_detected,
+            on_tool_start=_on_tool_start,
+            on_tool_end=_on_tool_end,
+            on_end=_on_end,
+        )
+
+        # ── Phase 3: Persist assistant response (short DB session) ──
+        async with async_session() as db:
             assistant_msg = ChatMessage(
-                conversation_id=conversation.id,
+                conversation_id=conv_id,
                 role="assistant",
                 content=result["assistant_text"],
                 tool_calls=result["tool_calls"] if result["tool_calls"] else None,
@@ -214,39 +250,35 @@ async def _handle_chat_message(
             )
             db.add(assistant_msg)
 
-            # Update conversation title if it's the first message
-            existing_msgs = await db.execute(
-                select(func.count(ChatMessage.id)).where(
-                    ChatMessage.conversation_id == conversation.id
-                )
-            )
-            msg_count = existing_msgs.scalar()
-            if msg_count <= 2:  # user + assistant just added
-                conversation.title = content[:100]
+            # Update conversation title if first exchange
+            if is_first_message:
+                conv = await db.get(ChatConversation, conv_id)
+                if conv:
+                    conv.title = content[:100]
 
             await db.commit()
+        # ── Session released ──
 
-            # Send chat_end
-            await ws_manager.send_to_connection(
-                connection_id,
-                {
-                    "type": "chat_end",
-                    "conversation_id": str(conversation.id),
-                    "usage": result["usage"],
-                    "tool_calls": [
-                        {"name": tc["name"], "id": tc["id"]}
-                        for tc in result.get("tool_calls", [])
-                    ],
-                },
-            )
+        # Send chat_end to frontend
+        await ws_manager.send_to_connection(
+            connection_id,
+            {
+                "type": "chat_end",
+                "conversation_id": str(conv_id),
+                "usage": result["usage"],
+                "tool_calls": [
+                    {"name": tc["name"], "id": tc["id"]}
+                    for tc in result.get("tool_calls", [])
+                ],
+            },
+        )
 
-        except Exception as e:
-            logger.exception("Chat message processing failed")
-            await db.rollback()
-            await ws_manager.send_to_connection(
-                connection_id,
-                {"type": "error", "message": f"Failed to process message: {str(e)}"},
-            )
+    except Exception as e:
+        logger.exception("Chat message processing failed")
+        await ws_manager.send_to_connection(
+            connection_id,
+            {"type": "error", "message": f"Failed to process message: {str(e)}"},
+        )
 
 
 def _build_llm_messages(

@@ -37,7 +37,11 @@ export default function OrgPickerPage() {
             </p>
           </div>
           <button
-            onClick={logout}
+            onClick={() => {
+              logout();
+              localStorage.removeItem("aira-auth");
+              window.location.href = "/login";
+            }}
             className="text-sm text-gray-500 hover:text-gray-700"
           >
             Sign out

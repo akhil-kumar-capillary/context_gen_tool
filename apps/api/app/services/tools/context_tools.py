@@ -6,8 +6,11 @@ but return formatted strings suitable for LLM consumption.
 import base64
 import json
 import logging
+import re
 from pathlib import Path
 
+import aiofiles
+import aiofiles.os
 import httpx
 
 from app.services.tools.registry import registry
@@ -134,13 +137,15 @@ async def get_context_content(ctx: ToolContext, context_name: str) -> str:
 @registry.tool(
     name="create_context",
     description=(
-        "Create a new context document. Call this when the user provides new "
-        "context to save, or asks you to create a context document from the "
-        "conversation. The content should be well-formatted markdown."
+        "Draft a new context document and stage it for the user's review in the "
+        "'AI Generated' tab. The user can then review, edit, and upload it manually. "
+        "Call this when the user asks you to create a context document. "
+        "The content should be well-formatted markdown. "
+        "This does NOT upload directly — it stages for review first."
     ),
     module="context_management",
     requires_permission=("context_management", "create"),
-    annotations={"display": "Creating context document..."},
+    annotations={"display": "Drafting context document..."},
 )
 async def create_context(
     ctx: ToolContext,
@@ -148,28 +153,57 @@ async def create_context(
     content: str,
     scope: str = "org",
 ) -> str:
-    """Create a new context document.
+    """Draft a new context document and stage it for review in the AI Generated tab.
 
     name: Name for the new context document (max 100 chars, alphanumeric + _:#()-,)
     content: The context content in markdown format
     scope: Scope of the context — 'org' (default) or 'personal'
     """
-    encoded = base64.b64encode(content.encode("utf-8")).decode("utf-8")
-
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.post(
-            f"{ctx.base_url}/ask-aira/context/upload_context",
-            headers={
-                **ctx.capillary_headers(),
-                "Content-Type": "application/x-www-form-urlencoded",
+    # Stage in the "AI Generated" tab via WebSocket event
+    if ctx.ws_manager and ctx.ws_connection_id:
+        await ctx.ws_manager.send_to_connection(
+            ctx.ws_connection_id,
+            {
+                "type": "ai_context_staged",
+                "context": {"name": name, "content": content, "scope": scope},
             },
-            data={"name": name, "context": encoded, "scope": scope},
         )
 
-    if resp.status_code != 200:
-        return f"Error: Failed to create context '{name}' (HTTP {resp.status_code})"
+    return (
+        f"Context document '{name}' has been drafted and staged in the 'AI Generated' tab "
+        f"with scope '{scope}'. The user can review, edit, and upload it from there, "
+        f"or ask you to upload all staged contexts."
+    )
 
-    return f"Successfully created context document '{name}' with scope '{scope}'."
+
+# ---------------------------------------------------------------------------
+# Tool: upload_staged_contexts
+# ---------------------------------------------------------------------------
+
+
+@registry.tool(
+    name="upload_staged_contexts",
+    description=(
+        "Upload all staged AI-generated context documents to the organization. "
+        "Call this ONLY when the user explicitly asks to upload, save, or push the "
+        "staged contexts from the 'AI Generated' tab."
+    ),
+    module="context_management",
+    requires_permission=("context_management", "create"),
+    annotations={"display": "Uploading staged contexts..."},
+)
+async def upload_staged_contexts(ctx: ToolContext) -> str:
+    """Trigger bulk upload of all staged AI-generated contexts."""
+    if ctx.ws_manager and ctx.ws_connection_id:
+        await ctx.ws_manager.send_to_connection(
+            ctx.ws_connection_id,
+            {"type": "trigger_bulk_upload"},
+        )
+
+    return (
+        "Upload has been triggered. The staged contexts in the 'AI Generated' tab "
+        "are being uploaded. Check the tab for individual upload status."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -308,6 +342,85 @@ async def delete_context(ctx: ToolContext, context_name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Helpers: JSON parsing for refactoring output
+# ---------------------------------------------------------------------------
+
+_NAME_REGEX = re.compile(r"^[a-zA-Z0-9 _:#()\-,]+$")
+
+
+def _parse_refactor_output(text: str) -> list[dict]:
+    """Parse LLM refactoring output — handles code fences, truncation, name sanitization.
+
+    Ported from the desktop app's parse-llm-response.ts for consistency.
+    """
+    text = text.strip()
+
+    # Strip code fences (```json ... ```)
+    if text.startswith("```"):
+        lines = text.split("\n")
+        start = 1
+        end = len(lines) - 1 if lines[-1].strip() == "```" else len(lines)
+        text = "\n".join(lines[start:end])
+
+    parsed = None
+
+    # Try 1: Direct JSON parse
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        # Try 2: Regex extraction of JSON array
+        match = re.search(r"\[[\s\S]*\]", text)
+        if match:
+            try:
+                parsed = json.loads(match.group(0))
+            except json.JSONDecodeError:
+                pass
+
+        # Try 3: Truncation recovery — salvage complete objects from a cut-off response
+        if parsed is None:
+            arr_start = text.find("[")
+            if arr_start != -1:
+                partial = text[arr_start:]
+                last_brace = partial.rfind("}")
+                if last_brace != -1:
+                    try:
+                        parsed = json.loads(partial[: last_brace + 1] + "]")
+                        logger.warning(
+                            "Refactor output was truncated — recovered %d partial documents",
+                            len(parsed) if isinstance(parsed, list) else 0,
+                        )
+                    except json.JSONDecodeError:
+                        pass
+
+    if not isinstance(parsed, list):
+        raise ValueError(
+            f"Could not parse LLM response as JSON array. Response starts with: {text[:200]}"
+        )
+
+    # Validate and sanitize each document
+    result: list[dict] = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name", "")).strip()
+        content = str(item.get("content", "")).strip()
+        if not name or not content:
+            continue
+        # Enforce name constraints
+        if len(name) > 100:
+            name = name[:100]
+        if not _NAME_REGEX.match(name):
+            name = re.sub(r"[^a-zA-Z0-9 _:#()\-,]", "", name)
+        result.append({
+            "name": name,
+            "content": content,
+            "scope": item.get("scope", "org"),
+        })
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Tool: refactor_all_contexts
 # ---------------------------------------------------------------------------
 
@@ -316,10 +429,10 @@ async def delete_context(ctx: ToolContext, context_name: str) -> str:
     name="refactor_all_contexts",
     description=(
         "Restructure and clean up all context documents using the refactoring "
-        "blueprint. This will fetch all contexts, send them to an LLM for "
-        "restructuring, and upload the cleaned results. Call this when the user "
-        "asks to restructure, optimize, deduplicate, or clean up their contexts. "
-        "This is a long-running operation."
+        "blueprint. This fetches all contexts, sends them to an LLM for "
+        "restructuring, and stages the results in the 'AI Generated' tab for review. "
+        "Nothing is overwritten — the user reviews and uploads manually. "
+        "Call this when the user asks to restructure, optimize, deduplicate, or clean up their contexts."
     ),
     module="context_management",
     requires_permission=("context_management", "refactor"),
@@ -347,53 +460,61 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
     if not contexts:
         return "No context documents found to refactor."
 
-    # 2. Build content payload
-    content_parts = []
+    # 2. Load blueprint (async file I/O to avoid blocking event loop)
+    # The blueprint IS the system prompt — matching the desktop app's approach
+    blueprint = ""
+    if await aiofiles.os.path.exists(BLUEPRINT_PATH):
+        async with aiofiles.open(BLUEPRINT_PATH, encoding="utf-8") as f:
+            blueprint = await f.read()
+
+    if not blueprint:
+        return "Error: Blueprint file not found. Cannot refactor without restructuring guidelines."
+
+    system_prompt = blueprint
+
+    # 3. Build user message with token budget + structured context formatting
+    # (matching desktop app's formatContextsForLLM)
+    max_output_tokens = settings.sanitize_max_output_tokens
+    budget_per_file = max_output_tokens // max(len(contexts), 1)
+
+    user_parts: list[str] = [
+        "Below are ALL the context documents for this organization. "
+        "Please restructure them according to the blueprint instructions.\n\n"
+        f"IMPORTANT: You have a total output budget of ~{max_output_tokens} tokens. "
+        f"There are {len(contexts)} context document(s), so aim for ~{budget_per_file} tokens "
+        "per document. Be concise — compress and restructure without losing critical information.\n\n"
+        "Return your response as a JSON array where each element has:\n"
+        '- "name": the context document name (max 100 chars, only alphanumeric, spaces, _:#()-,)\n'
+        '- "content": the restructured context content in markdown\n\n'
+        "Respond ONLY with the JSON array, no additional text before or after it.\n\n"
+        "---\n\n",
+    ]
+
     name_to_id: dict[str, str] = {}
-    for c in contexts:
-        name = c.get("name", "Unnamed")
+    for i, c in enumerate(contexts):
+        name = c.get("name", f"Context {i + 1}")
         cid = c.get("id", c.get("contextId", ""))
         raw_content = c.get("content", c.get("context", ""))
+        scope = c.get("scope", "org")
         # Try base64 decode
         try:
             raw_content = base64.b64decode(raw_content).decode("utf-8")
         except Exception:
             pass
-        content_parts.append(f"--- Document: {name} ---\n{raw_content}")
+        user_parts.append(f"### Context Document {i + 1}: {name}\n")
+        user_parts.append(f"Scope: {scope}\n")
+        user_parts.append(f"Content:\n{raw_content}\n\n---\n\n")
         name_to_id[name] = cid
 
-    combined = "\n\n".join(content_parts)
+    user_content = "".join(user_parts)
 
     # Cap the payload
-    if len(combined) > settings.max_payload_chars:
-        combined = combined[: settings.max_payload_chars]
+    if len(user_content) > settings.max_payload_chars:
+        user_content = user_content[: settings.max_payload_chars]
 
-    # 3. Load blueprint
-    blueprint = ""
-    if BLUEPRINT_PATH.exists():
-        blueprint = BLUEPRINT_PATH.read_text(encoding="utf-8")
+    messages = [{"role": "user", "content": user_content}]
 
-    # 4. Build prompt
-    system_prompt = f"""You are a context document restructuring assistant.
-
-{blueprint}
-
-The user has {len(contexts)} context documents that need to be restructured into a clean,
-well-organized set. Apply the blueprint rules above.
-
-IMPORTANT: Return ONLY a valid JSON array. No explanation text before or after."""
-
-    messages = [
-        {
-            "role": "user",
-            "content": (
-                f"Here are the current context documents to restructure:\n\n{combined}\n\n"
-                "Please restructure these into a clean set of documents following the blueprint."
-            ),
-        }
-    ]
-
-    # 5. Stream LLM response (collect full output)
+    # 4. Stream LLM response (collect full output)
     full_output = ""
     provider = "anthropic"  # Default to Anthropic for refactoring
     model = "claude-sonnet-4-20250514"
@@ -416,56 +537,42 @@ IMPORTANT: Return ONLY a valid JSON array. No explanation text before or after."
     except Exception as e:
         return f"Error during LLM refactoring: {str(e)}"
 
-    # 6. Parse output
+    # 5. Parse output (robust: handles code fences, truncation, name sanitization)
     try:
-        # Find JSON array in output
-        start = full_output.find("[")
-        end = full_output.rfind("]") + 1
-        if start == -1 or end == 0:
-            return f"Error: LLM did not return valid JSON. Raw output starts with: {full_output[:200]}"
+        new_docs = _parse_refactor_output(full_output)
+    except ValueError as e:
+        return f"Error: {str(e)}"
 
-        new_docs = json.loads(full_output[start:end])
-    except json.JSONDecodeError as e:
-        return f"Error parsing LLM output as JSON: {str(e)}"
+    if not new_docs:
+        return "Error: LLM returned empty results. The response may have been truncated."
 
-    # 7. Upload restructured documents
-    upload_results = []
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        for doc in new_docs:
-            doc_name = doc.get("name", "Unnamed")
-            doc_content = doc.get("content", "")
-            encoded = base64.b64encode(doc_content.encode("utf-8")).decode("utf-8")
+    # 6. Stage restructured documents in the AI Generated tab (not direct upload)
+    staged_names = []
+    for doc in new_docs:
+        doc_name = doc.get("name", "Unnamed")
+        doc_content = doc.get("content", "")
+        doc_scope = doc.get("scope", "org")
 
-            existing_id = name_to_id.get(doc_name)
-            if existing_id:
-                # Update existing
-                r = await client.put(
-                    f"{ctx.base_url}/ask-aira/context/update_context",
-                    params={"context_id": existing_id},
-                    headers={
-                        **ctx.capillary_headers(),
-                        "Content-Type": "application/x-www-form-urlencoded",
+        if ctx.ws_manager and ctx.ws_connection_id:
+            await ctx.ws_manager.send_to_connection(
+                ctx.ws_connection_id,
+                {
+                    "type": "ai_context_staged",
+                    "context": {
+                        "name": doc_name,
+                        "content": doc_content,
+                        "scope": doc_scope,
                     },
-                    data={"name": doc_name, "context": encoded, "scope": "org"},
-                )
-                status = "updated" if r.status_code == 200 else f"error ({r.status_code})"
-            else:
-                # Create new
-                r = await client.post(
-                    f"{ctx.base_url}/ask-aira/context/upload_context",
-                    headers={
-                        **ctx.capillary_headers(),
-                        "Content-Type": "application/x-www-form-urlencoded",
-                    },
-                    data={"name": doc_name, "context": encoded, "scope": "org"},
-                )
-                status = "created" if r.status_code == 200 else f"error ({r.status_code})"
-
-            upload_results.append(f"- **{doc_name}**: {status}")
+                },
+            )
+        staged_names.append(f"- **{doc_name}**")
 
     summary = (
         f"Refactoring complete! Restructured {len(contexts)} documents into "
-        f"{len(new_docs)} clean documents:\n\n"
-        + "\n".join(upload_results)
+        f"{len(new_docs)} clean documents. They have been staged in the "
+        f"'AI Generated' tab for review:\n\n"
+        + "\n".join(staged_names)
+        + "\n\nThe user can review, edit, and upload them from the 'AI Generated' tab, "
+        "or ask you to upload all staged contexts."
     )
     return summary

@@ -28,8 +28,9 @@ interface ChatState {
   startStreaming: () => void;
   appendChunk: (text: string) => void;
   addToolCall: (tool: ToolCallStatus) => void;
+  updateToolCallStatus: (toolId: string, status: ToolCallStatus["status"], display?: string) => void;
   completeToolCall: (toolId: string, summary: string) => void;
-  finishStreaming: (conversationId: string, usage?: LLMUsage, toolCalls?: ToolCallStatus[]) => void;
+  finishStreaming: (conversationId: string, usage?: LLMUsage, toolCalls?: ToolCallStatus[], error?: string) => void;
 
   // Actions — new chat
   newConversation: () => void;
@@ -82,6 +83,13 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       activeToolCalls: [...state.activeToolCalls, tool],
     })),
 
+  updateToolCallStatus: (toolId, status, display) =>
+    set((state) => ({
+      activeToolCalls: state.activeToolCalls.map((tc) =>
+        tc.id === toolId ? { ...tc, status, ...(display ? { display } : {}) } : tc
+      ),
+    })),
+
   completeToolCall: (toolId, summary) =>
     set((state) => ({
       activeToolCalls: state.activeToolCalls.map((tc) =>
@@ -89,7 +97,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       ),
     })),
 
-  finishStreaming: (conversationId, usage, toolCalls) => {
+  finishStreaming: (conversationId, usage, toolCalls, error) => {
     const { streamingText, activeToolCalls } = get();
 
     // Create the assistant message from streamed content
@@ -97,9 +105,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       id: crypto.randomUUID(),
       conversationId,
       role: "assistant",
-      content: streamingText,
+      content: streamingText || (error ? "" : ""),
       toolCalls: toolCalls || activeToolCalls,
       tokenUsage: usage,
+      error,
       createdAt: new Date().toISOString(),
     };
 
@@ -109,7 +118,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       activeToolCalls: [],
       messages: [...state.messages, assistantMessage],
       // Update conversation in the list
-      activeConversationId: conversationId,
+      activeConversationId: conversationId || state.activeConversationId,
     }));
   },
 

@@ -1,0 +1,68 @@
+# Production Docker Compose — uses env vars from host / .env file
+# Usage: docker compose -f docker-compose.prod.yml up -d
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-context_gen}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-context_gen}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-context_gen}"
+      DATABASE_URL_SYNC: "postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-context_gen}"
+      SESSION_SECRET: ${SESSION_SECRET}
+      CORS_ORIGINS: ${CORS_ORIGINS:-'["https://your-domain.com"]'}
+      PRIMARY_ADMIN_EMAIL: ${PRIMARY_ADMIN_EMAIL:-akhil.kumar@capillarytech.com}
+      # LLM API keys
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # Databricks tokens (per cluster — set only what you need)
+      DATABRICKS_APAC2_TOKEN: ${DATABRICKS_APAC2_TOKEN:-}
+      DATABRICKS_APAC_TOKEN: ${DATABRICKS_APAC_TOKEN:-}
+      DATABRICKS_EU_TOKEN: ${DATABRICKS_EU_TOKEN:-}
+      DATABRICKS_US_TOKEN: ${DATABRICKS_US_TOKEN:-}
+      DATABRICKS_TATA_TOKEN: ${DATABRICKS_TATA_TOKEN:-}
+      DATABRICKS_USHC_TOKEN: ${DATABRICKS_USHC_TOKEN:-}
+      DATABRICKS_SEA_TOKEN: ${DATABRICKS_SEA_TOKEN:-}
+      # Confluence (optional)
+      CONFLUENCE_URL: ${CONFLUENCE_URL:-}
+      CONFLUENCE_EMAIL: ${CONFLUENCE_EMAIL:-}
+      CONFLUENCE_API_TOKEN: ${CONFLUENCE_API_TOKEN:-}
+    command: >
+      sh -c "alembic upgrade head && python seed_data.py && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api:8000}
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:

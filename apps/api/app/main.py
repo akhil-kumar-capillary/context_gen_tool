@@ -30,8 +30,8 @@ app.include_router(llm.router, prefix="/api/llm", tags=["llm"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 
-# WebSocket — general purpose
-app.add_api_websocket_route("/ws", websocket_endpoint)
+# WebSocket — general purpose (used by Databricks pipeline progress etc.)
+app.add_api_websocket_route("/api/ws", websocket_endpoint)
 
 # WebSocket — chat (handled by chat router itself at /api/chat/ws/chat)
 

@@ -1,8 +1,11 @@
 """LLM operations — sanitize/refactor, chat, blueprint management."""
-import json
 import logging
 from pathlib import Path
+
+import aiofiles
+import aiofiles.os
 from fastapi import APIRouter, Depends
+
 from app.core.auth import get_current_user
 from app.core.rbac import require_permission
 
@@ -15,8 +18,13 @@ BLUEPRINT_PATH = Path(__file__).parent.parent / "resources" / "blueprint.md"
 @router.get("/blueprint")
 async def get_blueprint(current_user: dict = Depends(get_current_user)):
     """Return the default blueprint text for context refactoring."""
-    if BLUEPRINT_PATH.exists():
-        return {"blueprint": BLUEPRINT_PATH.read_text(encoding="utf-8")}
+    try:
+        if await aiofiles.os.path.exists(BLUEPRINT_PATH):
+            async with aiofiles.open(BLUEPRINT_PATH, encoding="utf-8") as f:
+                content = await f.read()
+            return {"blueprint": content}
+    except Exception:
+        logger.exception("Failed to read blueprint")
     return {"blueprint": None}
 
 

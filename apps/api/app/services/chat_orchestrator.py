@@ -11,7 +11,7 @@ import time
 from typing import Callable, Awaitable
 
 from app.config import settings
-from app.services.llm_service import stream_llm, call_llm
+from app.services.llm_service import stream_llm
 from app.services.tools.registry import registry, ToolDefinition
 from app.services.tools.tool_context import ToolContext
 from app.services.chat_prompts import build_system_prompt
@@ -38,7 +38,8 @@ class ChatOrchestrator:
         self,
         messages: list[dict],
         on_text_chunk: Callable[[str], Awaitable[None]],
-        on_tool_start: Callable[[str, str], Awaitable[None]],
+        on_tool_detected: Callable[[str, str, str], Awaitable[None]],
+        on_tool_start: Callable[[str, str, str], Awaitable[None]],
         on_tool_end: Callable[[str, str, str], Awaitable[None]],
         on_end: Callable[[dict], Awaitable[None]],
     ) -> dict:
@@ -47,7 +48,8 @@ class ChatOrchestrator:
         Args:
             messages: Conversation history in LLM message format
             on_text_chunk: Callback(text) for streamed text
-            on_tool_start: Callback(tool_name, display_text) when tool starts
+            on_tool_detected: Callback(tool_name, tool_id, display) when LLM starts generating a tool call
+            on_tool_start: Callback(tool_name, tool_id, display_text) when tool execution begins
             on_tool_end: Callback(tool_name, tool_id, summary) when tool finishes
             on_end: Callback(usage_dict) when generation is complete
 
@@ -57,10 +59,8 @@ class ChatOrchestrator:
               - tool_calls: List of {name, id, input, result} dicts
               - usage: Aggregate {input_tokens, output_tokens}
         """
-        # Get permitted tools for this user
-        permitted_tools = await registry.get_permitted_tools(
-            self.ctx.user_id, self.ctx.is_admin, self.ctx.db,
-        )
+        # Get permitted tools for this user (opens short-lived DB session internally)
+        permitted_tools = await registry.get_permitted_tools(self.ctx)
 
         # Build tool definitions in the right format
         if self.provider == "anthropic":
@@ -86,25 +86,14 @@ class ChatOrchestrator:
                 f"(provider={self.provider}, model={self.model})"
             )
 
-            # Decide: stream the first round (user sees text), non-stream for tool loops
-            if round_num == 0:
-                # First round: stream to frontend
-                round_text, round_tool_calls, round_usage = await self._stream_round(
-                    system=system,
-                    messages=working_messages,
-                    tools=tool_defs,
-                    on_text_chunk=on_text_chunk,
-                )
-            else:
-                # Subsequent tool rounds: use non-streaming for speed
-                round_text, round_tool_calls, round_usage = await self._call_round(
-                    system=system,
-                    messages=working_messages,
-                    tools=tool_defs,
-                )
-                # Still stream any text to frontend
-                if round_text:
-                    await on_text_chunk(round_text)
+            # Stream every round so the user always sees real-time progress
+            round_text, round_tool_calls, round_usage = await self._stream_round(
+                system=system,
+                messages=working_messages,
+                tools=tool_defs,
+                on_text_chunk=on_text_chunk,
+                on_tool_detected=on_tool_detected,
+            )
 
             all_text += round_text
             total_usage["input_tokens"] += round_usage.get("input_tokens", 0)
@@ -132,7 +121,7 @@ class ChatOrchestrator:
                     else f"Running {tool_name}..."
                 )
 
-                await on_tool_start(tool_name, display)
+                await on_tool_start(tool_name, tool_id, display)
 
                 start = time.time()
                 result = await registry.execute_tool(tool_name, self.ctx, tool_input)
@@ -183,6 +172,7 @@ class ChatOrchestrator:
         messages: list[dict],
         tools: list[dict] | None,
         on_text_chunk: Callable[[str], Awaitable[None]],
+        on_tool_detected: Callable[[str, str, str], Awaitable[None]],
     ) -> tuple[str, list[dict], dict]:
         """Execute a streaming round. Returns (text, tool_calls, usage)."""
         text = ""
@@ -200,43 +190,22 @@ class ChatOrchestrator:
             if event["type"] == "chunk":
                 text += event["text"]
                 await on_text_chunk(event["text"])
+            elif event["type"] == "tool_use_start":
+                # LLM started generating a tool call — notify frontend immediately
+                tool_name = event["name"]
+                tool_def = registry.get_tool(tool_name)
+                display = (
+                    tool_def.annotations.get("display", f"Preparing {tool_name}...")
+                    if tool_def
+                    else f"Preparing {tool_name}..."
+                )
+                await on_tool_detected(tool_name, event["id"], display)
             elif event["type"] == "tool_use":
                 tool_calls.append(event)
             elif event["type"] == "end":
                 usage = event.get("usage", {})
 
         return text, tool_calls, usage
-
-    # -----------------------------------------------------------------
-    # Internal: non-streaming round
-    # -----------------------------------------------------------------
-
-    async def _call_round(
-        self,
-        system: str,
-        messages: list[dict],
-        tools: list[dict] | None,
-    ) -> tuple[str, list[dict], dict]:
-        """Execute a non-streaming round. Returns (text, tool_calls, usage)."""
-        result = await call_llm(
-            provider=self.provider,
-            model=self.model,
-            system=system,
-            messages=messages,
-            max_tokens=settings.chat_max_output_tokens,
-            tools=tools,
-        )
-
-        text = ""
-        tool_calls: list[dict] = []
-
-        for block in result.get("content", []):
-            if block["type"] == "text":
-                text += block["text"]
-            elif block["type"] == "tool_use":
-                tool_calls.append(block)
-
-        return text, tool_calls, result.get("usage", {})
 
     # -----------------------------------------------------------------
     # Message formatting helpers

@@ -91,6 +91,7 @@ export interface ChatMessage {
   content: string;
   toolCalls?: ToolCallStatus[];
   tokenUsage?: LLMUsage;
+  error?: string;
   createdAt: string;
 }
 
@@ -99,7 +100,7 @@ export interface ToolCallStatus {
   id: string;
   input?: Record<string, unknown>;
   result?: string;
-  status: "running" | "done" | "error";
+  status: "preparing" | "running" | "done" | "error";
   display?: string;
   summary?: string;
 }

@@ -5,25 +5,26 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import Depends, HTTPException, Request
 
-from app.config import settings
+from app.config import settings, CLUSTER_INTOUCH_MAP, normalize_cluster_key
 
 logger = logging.getLogger(__name__)
 
-# Cluster URL mapping (matches frontend CLUSTERS)
+# Auth slug → Intouch base URL (derived from canonical config)
+# Login uses lowercase slugs; CLUSTER_INTOUCH_MAP uses canonical CAPS keys.
 CLUSTER_URLS = {
-    "apac2": "https://apac2.intouch.capillarytech.com",
-    "apac": "https://apac.intouch.capillarytech.com",
-    "eu": "https://eu.intouch.capillarytech.com",
-    "north-america": "https://north-america.intouch.capillarytech.com",
-    "tata": "https://tata.intouch.capillarytech.com",
-    "ushc": "https://ushc.intouch.capillarytech.com",
-    "sea": "https://sea.intouch.capillarytech.com",
+    "apac2":         CLUSTER_INTOUCH_MAP.get("APAC2", ""),
+    "apac":          CLUSTER_INTOUCH_MAP.get("APAC", ""),
+    "eu":            CLUSTER_INTOUCH_MAP.get("EU", ""),
+    "north-america": CLUSTER_INTOUCH_MAP.get("US", ""),
+    "tata":          CLUSTER_INTOUCH_MAP.get("TATA", ""),
+    "ushc":          CLUSTER_INTOUCH_MAP.get("USHC", ""),
+    "sea":           CLUSTER_INTOUCH_MAP.get("SEA", ""),
 }
 
 
 async def login_to_capillary(username: str, password: str, cluster: str) -> dict:
     """Authenticate against Capillary Intouch and return token + user info."""
-    base_url = CLUSTER_URLS.get(cluster)
+    base_url = CLUSTER_URLS.get(cluster.lower())
     if not base_url:
         raise HTTPException(400, f"Unknown cluster: {cluster}")
 
@@ -55,9 +56,9 @@ async def login_to_capillary(username: str, password: str, cluster: str) -> dict
         proxy_org_list = user_data.get("user", {}).get("proxyOrgList", [])
 
         orgs = [
-            {"id": org.get("id"), "name": org.get("name", f"Org {org.get('id')}")}
+            {"id": org.get("orgID"), "name": org.get("orgName", f"Org {org.get('orgID')}")}
             for org in proxy_org_list
-            if org.get("id")
+            if org.get("orgID")
         ]
 
         return {

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from typing import Dict, Set
@@ -7,44 +8,56 @@ logger = logging.getLogger(__name__)
 
 
 class WebSocketManager:
-    """Manages WebSocket connections and broadcasts progress messages."""
+    """Manages WebSocket connections and broadcasts progress messages.
+
+    Uses an asyncio.Lock to protect mutable connection state from
+    concurrent coroutine access (multiple users connecting/disconnecting
+    at the same time).
+    """
 
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
         self.user_connections: Dict[int, Set[str]] = {}
+        self._lock = asyncio.Lock()
 
     async def connect(self, websocket: WebSocket, connection_id: str, user_id: int | None = None):
         await websocket.accept()
-        self.active_connections[connection_id] = websocket
-        if user_id:
-            if user_id not in self.user_connections:
-                self.user_connections[user_id] = set()
-            self.user_connections[user_id].add(connection_id)
-        logger.info(f"WebSocket connected: {connection_id}")
+        async with self._lock:
+            self.active_connections[connection_id] = websocket
+            if user_id:
+                if user_id not in self.user_connections:
+                    self.user_connections[user_id] = set()
+                self.user_connections[user_id].add(connection_id)
+        logger.info(f"WebSocket connected: {connection_id} (user={user_id})")
 
-    def disconnect(self, connection_id: str, user_id: int | None = None):
-        self.active_connections.pop(connection_id, None)
-        if user_id and user_id in self.user_connections:
-            self.user_connections[user_id].discard(connection_id)
-            if not self.user_connections[user_id]:
-                del self.user_connections[user_id]
+    async def disconnect(self, connection_id: str, user_id: int | None = None):
+        async with self._lock:
+            self.active_connections.pop(connection_id, None)
+            if user_id and user_id in self.user_connections:
+                self.user_connections[user_id].discard(connection_id)
+                if not self.user_connections[user_id]:
+                    del self.user_connections[user_id]
         logger.info(f"WebSocket disconnected: {connection_id}")
 
     async def send_to_connection(self, connection_id: str, message: dict):
-        ws = self.active_connections.get(connection_id)
+        async with self._lock:
+            ws = self.active_connections.get(connection_id)
         if ws:
             try:
                 await ws.send_text(json.dumps(message))
             except Exception:
-                self.disconnect(connection_id)
+                await self.disconnect(connection_id)
 
     async def send_to_user(self, user_id: int, message: dict):
-        connection_ids = self.user_connections.get(user_id, set())
-        for conn_id in list(connection_ids):
+        async with self._lock:
+            connection_ids = list(self.user_connections.get(user_id, set()))
+        for conn_id in connection_ids:
             await self.send_to_connection(conn_id, message)
 
     async def broadcast(self, message: dict):
-        for conn_id in list(self.active_connections.keys()):
+        async with self._lock:
+            conn_ids = list(self.active_connections.keys())
+        for conn_id in conn_ids:
             await self.send_to_connection(conn_id, message)
 
 
@@ -70,7 +83,6 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_text()
-            # Handle incoming messages if needed
             try:
                 msg = json.loads(data)
                 if msg.get("type") == "ping":
@@ -80,4 +92,4 @@ async def websocket_endpoint(websocket: WebSocket):
             except json.JSONDecodeError:
                 pass
     except WebSocketDisconnect:
-        ws_manager.disconnect(connection_id, user_id)
+        await ws_manager.disconnect(connection_id, user_id)

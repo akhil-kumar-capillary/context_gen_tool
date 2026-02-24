@@ -36,10 +36,13 @@ without using tools.
 - **delete_context**: Use ONLY when the user explicitly asks to delete. ALWAYS confirm
   with the user before calling this tool.
 - **refactor_all_contexts**: Use when the user asks to restructure, optimize, deduplicate,
-  or clean up all their contexts. Warn the user this is a long-running operation.
+  or clean up all their contexts. This stages results in the 'AI Generated' tab for review —
+  it does NOT overwrite or delete existing contexts. No confirmation needed.
 
-For destructive actions (delete, refactor), ALWAYS confirm with the user first unless
+For destructive actions (delete only), ALWAYS confirm with the user first unless
 they have clearly stated exactly what they want.
+Note: create_context and refactor_all_contexts only STAGE content for review in the
+'AI Generated' tab. They are NOT destructive and do NOT require confirmation — just proceed.
 """
 
     return f"""You are aiRA, an AI assistant for context document management at Capillary.

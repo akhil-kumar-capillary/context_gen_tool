@@ -51,7 +51,7 @@ export function ChatInput({ onSend }: ChatInputProps) {
         <select
           value={provider}
           onChange={(e) => setProvider(e.target.value as "anthropic" | "openai")}
-          className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-xs text-gray-600 focus:border-violet-300 focus:outline-none focus:ring-1 focus:ring-violet-300"
+          className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs text-gray-600 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
         >
           <option value="anthropic">Anthropic</option>
           <option value="openai">OpenAI</option>
@@ -59,7 +59,7 @@ export function ChatInput({ onSend }: ChatInputProps) {
         <select
           value={model}
           onChange={(e) => setModel(e.target.value)}
-          className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-xs text-gray-600 focus:border-violet-300 focus:outline-none focus:ring-1 focus:ring-violet-300"
+          className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs text-gray-600 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
         >
           {models.map((m) => (
             <option key={m.id} value={m.id}>

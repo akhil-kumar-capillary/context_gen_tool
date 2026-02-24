@@ -24,6 +24,10 @@ class RevokePermissionRequest(BaseModel):
     operation: str
 
 
+class ToggleAdminRequest(BaseModel):
+    user_email: str
+
+
 class SecretUpdateRequest(BaseModel):
     key: str  # e.g. 'anthropic_api_key', 'databricks_token'
     value: str

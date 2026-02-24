@@ -1,6 +1,6 @@
 "use client";
 
-import { User, Bot } from "lucide-react";
+import { User, Bot, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MarkdownRenderer } from "./markdown-renderer";
 import { ToolCallIndicator } from "./tool-call-indicator";
@@ -48,17 +48,30 @@ export function ChatMessage({ message }: ChatMessageProps) {
           </div>
         )}
 
+        {/* Error display */}
+        {isAssistant && message.error && (
+          <div className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2.5 text-sm text-red-700">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+            <div>
+              <p className="font-medium">Something went wrong</p>
+              <p className="mt-0.5 text-xs text-red-600">{message.error}</p>
+            </div>
+          </div>
+        )}
+
         {/* Message content */}
         {isUser ? (
           <p className="whitespace-pre-wrap text-sm text-gray-800">
             {message.content}
           </p>
-        ) : (
+        ) : message.content ? (
           <MarkdownRenderer
             content={message.content}
             className="prose-sm max-w-none text-gray-800"
           />
-        )}
+        ) : !message.error ? (
+          <p className="text-sm italic text-gray-400">No response</p>
+        ) : null}
 
         {/* Token usage */}
         {isAssistant && message.tokenUsage && (
@@ -106,13 +119,13 @@ export function StreamingMessage({ text, toolCalls }: StreamingMessageProps) {
             content={text}
             className="prose-sm max-w-none text-gray-800"
           />
-        ) : (
+        ) : toolCalls.length === 0 ? (
           <div className="flex items-center gap-1.5">
             <div className="h-2 w-2 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.3s]" />
             <div className="h-2 w-2 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.15s]" />
             <div className="h-2 w-2 animate-bounce rounded-full bg-violet-400" />
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

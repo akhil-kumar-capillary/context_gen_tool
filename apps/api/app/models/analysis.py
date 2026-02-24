@@ -56,3 +56,14 @@ class AnalysisFingerprint(Base):
     select_col_count = Column(Integer, default=0)
     alias_map_json = Column(JSONB)
     created_at = Column(DateTime(timezone=True), default=utcnow)
+
+
+class AnalysisNotebook(Base):
+    """Linkage between analysis runs and the notebooks that contributed."""
+    __tablename__ = "analysis_notebooks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    analysis_id = Column(UUID(as_uuid=True), ForeignKey("analysis_runs.id", ondelete="CASCADE"), index=True)
+    notebook_id = Column(Integer, ForeignKey("notebook_metadata.id", ondelete="CASCADE"), index=True)
+    sql_count = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), default=utcnow)

@@ -14,7 +14,10 @@ export function DashboardHeader() {
 
   const handleLogout = () => {
     logout();
-    router.push("/login");
+    // Explicitly clear persisted auth from localStorage
+    // (Zustand persist may not flush before the hard redirect)
+    localStorage.removeItem("aira-auth");
+    window.location.href = "/login";
   };
 
   return (

@@ -8,9 +8,11 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.core.auth import require_admin
 from app.models.user import User, Role, Permission, UserRole, UserPermission
+from app.config import settings
 from app.schemas.admin import (
     GrantRoleRequest, RevokeRoleRequest,
     GrantPermissionRequest, RevokePermissionRequest,
+    ToggleAdminRequest,
 )
 
 router = APIRouter()
@@ -29,6 +31,7 @@ async def list_users(
     )
     users = result.scalars().all()
 
+    superadmin = settings.primary_admin_email
     return {
         "users": [
             {
@@ -36,6 +39,7 @@ async def list_users(
                 "email": u.email,
                 "display_name": u.display_name,
                 "is_admin": u.is_admin,
+                "is_superadmin": u.email == superadmin,
                 "is_active": u.is_active,
                 "roles": [ur.role.name for ur in u.roles] if u.roles else [],
                 "last_login_at": u.last_login_at.isoformat() if u.last_login_at else None,
@@ -68,6 +72,35 @@ async def list_permissions(
             for p in perms
         ]
     }
+
+
+@router.post("/users/toggle-admin")
+async def toggle_admin(
+    req: ToggleAdminRequest,
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Promote or demote a user to/from admin.
+
+    Superadmin (primary_admin_email) can never be demoted — not even
+    by themselves.  Only existing admins can call this endpoint.
+    """
+    superadmin = settings.primary_admin_email
+
+    # Block demoting the superadmin
+    if req.user_email == superadmin:
+        raise HTTPException(403, f"{superadmin} is the superadmin and cannot be demoted")
+
+    user_result = await db.execute(select(User).where(User.email == req.user_email))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, f"User '{req.user_email}' not found")
+
+    user.is_admin = not user.is_admin
+    await db.commit()
+
+    action = "promoted to admin" if user.is_admin else "demoted from admin"
+    return {"message": f"{req.user_email} {action}", "is_admin": user.is_admin}
 
 
 @router.post("/users/grant-role")

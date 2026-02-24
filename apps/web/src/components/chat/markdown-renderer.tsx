@@ -2,6 +2,7 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 
 interface MarkdownRendererProps {
   content: string;
@@ -13,6 +14,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
     <div className={className}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw]}
         components={{
           // Style code blocks
           code({ className, children, ...props }) {
@@ -64,29 +66,29 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           },
           // Style other elements
           p({ children }) {
-            return <p className="mb-2 leading-relaxed">{children}</p>;
+            return <p className="mb-2 text-sm leading-relaxed">{children}</p>;
           },
           ul({ children }) {
-            return <ul className="mb-2 list-disc pl-6 space-y-1">{children}</ul>;
+            return <ul className="mb-2 list-disc pl-6 space-y-1 text-sm">{children}</ul>;
           },
           ol({ children }) {
-            return <ol className="mb-2 list-decimal pl-6 space-y-1">{children}</ol>;
+            return <ol className="mb-2 list-decimal pl-6 space-y-1 text-sm">{children}</ol>;
           },
           li({ children }) {
-            return <li className="text-gray-700">{children}</li>;
+            return <li className="text-sm text-gray-700">{children}</li>;
           },
           h1({ children }) {
-            return <h1 className="mb-3 text-xl font-bold text-gray-900">{children}</h1>;
+            return <h1 className="mb-3 text-base font-bold text-gray-900">{children}</h1>;
           },
           h2({ children }) {
-            return <h2 className="mb-2 text-lg font-semibold text-gray-900">{children}</h2>;
+            return <h2 className="mb-2 text-sm font-semibold text-gray-900">{children}</h2>;
           },
           h3({ children }) {
-            return <h3 className="mb-2 text-base font-semibold text-gray-800">{children}</h3>;
+            return <h3 className="mb-2 text-sm font-semibold text-gray-800">{children}</h3>;
           },
           blockquote({ children }) {
             return (
-              <blockquote className="my-2 border-l-4 border-blue-300 bg-blue-50 py-2 pl-4 italic text-gray-700">
+              <blockquote className="my-2 border-l-4 border-blue-300 bg-blue-50 py-2 pl-4 text-sm italic text-gray-700">
                 {children}
               </blockquote>
             );
@@ -97,7 +99,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
                 href={href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-600 underline hover:text-blue-800"
+                className="text-sm text-blue-600 underline hover:text-blue-800"
               >
                 {children}
               </a>

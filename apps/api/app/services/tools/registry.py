@@ -267,22 +267,27 @@ class ToolRegistry:
 
     async def get_permitted_tools(
         self,
-        user_id: int,
-        is_admin: bool,
-        db: Any,
+        ctx: ToolContext,
     ) -> list[ToolDefinition]:
-        """Return tools the user has permission to use."""
+        """Return tools the user has permission to use.
+
+        Uses ctx.get_db() to acquire a short-lived session for permission
+        checks, avoiding the need for a long-lived DB connection.
+        """
         from app.core.rbac import check_permission
 
         permitted: list[ToolDefinition] = []
-        for tool_def in self._tools.values():
-            if tool_def.requires_permission is None:
-                permitted.append(tool_def)
-                continue
-            module, operation = tool_def.requires_permission
-            has_perm = await check_permission(user_id, is_admin, module, operation, db)
-            if has_perm:
-                permitted.append(tool_def)
+        async with ctx.get_db() as db:
+            for tool_def in self._tools.values():
+                if tool_def.requires_permission is None:
+                    permitted.append(tool_def)
+                    continue
+                module, operation = tool_def.requires_permission
+                has_perm = await check_permission(
+                    ctx.user_id, ctx.is_admin, module, operation, db,
+                )
+                if has_perm:
+                    permitted.append(tool_def)
         return permitted
 
     # -- Tool execution --
@@ -301,13 +306,14 @@ class ToolRegistry:
         if not tool_def:
             return f"Error: Unknown tool '{name}'"
 
-        # Permission check
+        # Permission check — uses short-lived DB session via ctx.get_db()
         if tool_def.requires_permission:
             from app.core.rbac import check_permission
             module, operation = tool_def.requires_permission
-            has_perm = await check_permission(
-                ctx.user_id, ctx.is_admin, module, operation, ctx.db,
-            )
+            async with ctx.get_db() as db:
+                has_perm = await check_permission(
+                    ctx.user_id, ctx.is_admin, module, operation, db,
+                )
             if not has_perm:
                 return (
                     f"Permission denied: You don't have '{module}.{operation}' "
