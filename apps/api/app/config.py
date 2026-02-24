@@ -3,7 +3,7 @@ import os
 import logging
 from dataclasses import dataclass
 from pydantic_settings import BaseSettings
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from typing import Optional
 
 
@@ -159,20 +159,21 @@ class Settings(BaseSettings):
     confluence_email: Optional[str] = None
     confluence_api_token: Optional[str] = None
 
-    # App
-    cors_origins: list[str] = ["http://localhost:3000"]
+    # App — stored as raw string from env to avoid pydantic-settings JSON parse issue.
+    # Env var: CORS_ORIGINS (mapped via validation_alias)
+    cors_origins_raw: str = Field(
+        default='["http://localhost:3000"]',
+        validation_alias="CORS_ORIGINS",
+    )
     debug: bool = False
 
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, v):
-        """Parse CORS origins from env var — handles JSON array or comma-separated."""
-        if isinstance(v, str):
-            v = v.strip()
-            if v.startswith("["):
-                return json.loads(v)
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
-        return v
+    @property
+    def cors_origins(self) -> list[str]:
+        """Parse CORS origins — handles JSON array or comma-separated plain URLs."""
+        raw = self.cors_origins_raw.strip()
+        if raw.startswith("["):
+            return json.loads(raw)
+        return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
     # Primary admin email
     primary_admin_email: str = "akhil.kumar@capillarytech.com"
@@ -206,7 +207,12 @@ class Settings(BaseSettings):
     chat_history_window: int = 20
     max_tool_rounds: int = 5
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "extra": "ignore",
+        "populate_by_name": True,
+    }
 
     @model_validator(mode="after")
     def _resolve_empty_env_vars(self) -> "Settings":
