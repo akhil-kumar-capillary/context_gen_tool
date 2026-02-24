@@ -1,3 +1,4 @@
+import os
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
@@ -8,6 +9,12 @@ from app.models import *  # noqa: F401,F403 — import all models for autogenera
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+# Override alembic.ini URL with env var (for Railway/production).
+# Locally, if DATABASE_URL_SYNC is not set, falls back to alembic.ini default.
+db_url = os.environ.get("DATABASE_URL_SYNC")
+if db_url:
+    config.set_main_option("sqlalchemy.url", db_url)
 
 target_metadata = Base.metadata
 
