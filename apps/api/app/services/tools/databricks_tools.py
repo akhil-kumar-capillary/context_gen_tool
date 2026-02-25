@@ -4,9 +4,6 @@ These tools allow the AI to interact with the Databricks pipeline:
 list runs, view analysis results, check connection status, etc.
 """
 
-import json
-from typing import Optional
-
 from app.services.tools.registry import registry
 from app.services.tools.tool_context import ToolContext
 from app.services.databricks.storage import StorageService

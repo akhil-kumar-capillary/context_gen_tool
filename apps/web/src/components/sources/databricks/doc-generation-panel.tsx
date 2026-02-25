@@ -73,6 +73,20 @@ export function DocGenerationPanel() {
     }
   }, [activeAnalysisId, isGenerating, token, setIsGenerating, clearGenerationProgress]);
 
+  const handleCancelGeneration = useCallback(async () => {
+    if (!activeAnalysisId) return;
+    try {
+      await apiClient.post(
+        `/api/sources/databricks/llm/cancel/${activeAnalysisId}`,
+        {},
+        { token: token || undefined }
+      );
+    } catch {
+      // Backend will also send ws event; just reset UI
+    }
+    setIsGenerating(false);
+  }, [activeAnalysisId, token, setIsGenerating]);
+
   // Detect which docs are being generated from progress events
   const docProgress: Record<string, string> = {};
   for (const evt of generationProgress) {
@@ -122,28 +136,39 @@ export function DocGenerationPanel() {
               Default Filters, and Query Patterns.
             </p>
 
-            <button
-              onClick={handleGenerate}
-              disabled={isGenerating}
-              className={cn(
-                "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all",
-                isGenerating
-                  ? "bg-gray-100 text-gray-400"
-                  : "bg-violet-600 text-white hover:bg-violet-700 shadow-sm"
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleGenerate}
+                disabled={isGenerating}
+                className={cn(
+                  "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all",
+                  isGenerating
+                    ? "bg-gray-100 text-gray-400"
+                    : "bg-violet-600 text-white hover:bg-violet-700 shadow-sm"
+                )}
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4" />
+                    Generate Documents
+                  </>
+                )}
+              </button>
+              {isGenerating && (
+                <button
+                  onClick={handleCancelGeneration}
+                  className="flex items-center gap-1.5 rounded-lg bg-[#eb6c6c] px-3 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-[#d95b5b]"
+                >
+                  <XCircle className="h-4 w-4" />
+                  Cancel
+                </button>
               )}
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Play className="h-4 w-4" />
-                  Generate Documents
-                </>
-              )}
-            </button>
+            </div>
 
             {/* Per-doc progress */}
             {Object.keys(docProgress).length > 0 && (

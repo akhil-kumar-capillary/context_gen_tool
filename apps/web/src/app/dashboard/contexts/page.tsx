@@ -9,7 +9,7 @@ import { ChatInput } from "@/components/chat/chat-input";
 
 export default function ContextsPage() {
   const { activeConversationId } = useChatStore();
-  const { sendMessage } = useChatWebSocket();
+  const { sendMessage, cancelChat } = useChatWebSocket();
 
   const handleSend = useCallback(
     (content: string) => {
@@ -34,7 +34,7 @@ export default function ContextsPage() {
           </span>
         </div>
         <ChatMessageList />
-        <ChatInput onSend={handleSend} />
+        <ChatInput onSend={handleSend} onCancel={cancelChat} />
       </div>
     </div>
   );

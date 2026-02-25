@@ -158,11 +158,23 @@ async def run_extraction(
             modified_since_epoch_ms: Optional[int] = None
 
             if modified_since:
-                try:
-                    dt = datetime.strptime(modified_since, "%Y-%m-%d")
-                    modified_since_epoch_ms = int(dt.timestamp() * 1000)
-                except ValueError:
-                    pass
+                for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"):
+                    try:
+                        dt = datetime.strptime(modified_since, fmt)
+                        modified_since_epoch_ms = int(dt.timestamp() * 1000)
+                        break
+                    except ValueError:
+                        continue
+                if not modified_since_epoch_ms:
+                    logger.error(
+                        f"Invalid modified_since date format: '{modified_since}'. "
+                        f"Expected YYYY-MM-DD. Filter will NOT be applied."
+                    )
+                    await emit(
+                        "filter", 0, 0,
+                        f"⚠️ Invalid date '{modified_since}' — expected YYYY-MM-DD. "
+                        f"Processing all notebooks without date filter."
+                    )
 
             if modified_since_epoch_ms:
                 notebooks, skipped_notebooks = filter_notebooks_by_modified_date(

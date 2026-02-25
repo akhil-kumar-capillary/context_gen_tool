@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.core.auth import login_to_capillary, create_session_token, get_current_user
 from app.models.user import User
-from app.schemas.auth import LoginRequest, LoginResponse, UserResponse, OrgResponse, SelectOrgRequest
+from app.schemas.auth import LoginRequest, LoginResponse, UserResponse, OrgResponse
 from app.config import settings
 
 router = APIRouter()

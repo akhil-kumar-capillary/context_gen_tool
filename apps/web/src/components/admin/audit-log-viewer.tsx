@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAdminStore } from "@/stores/admin-store";
 import { Loader2, RefreshCw, ScrollText, ChevronDown, ChevronUp } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 
 export function AuditLogViewer() {
   const { auditLogs, auditLoading, auditError, fetchAuditLogs } =
@@ -16,15 +16,6 @@ export function AuditLogViewer() {
     fetchAuditLogs(pageSize, page * pageSize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
-
-  const formatDate = (iso: string | null) => {
-    if (!iso) return "—";
-    try {
-      return new Date(iso).toLocaleString();
-    } catch {
-      return iso;
-    }
-  };
 
   const actionColor = (action: string) => {
     if (action.includes("delete") || action.includes("revoke"))

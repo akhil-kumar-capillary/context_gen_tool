@@ -25,6 +25,7 @@ export function useDatabricksWebSocket() {
     setIsExtracting,
     setIsAnalyzing,
     setIsGenerating,
+    setActiveAnalysisId,
   } = useDatabricksStore();
 
   const connect = useCallback(() => {
@@ -80,8 +81,12 @@ export function useDatabricksWebSocket() {
               error: data.error as string,
             });
             break;
-          case "analysis_complete":
+          case "analysis_complete": {
             setIsAnalyzing(false);
+            const analysisResult = (data as ProgressEvent & { result?: Record<string, unknown> }).result;
+            if (analysisResult?.analysis_id) {
+              setActiveAnalysisId(analysisResult.analysis_id as string);
+            }
             addAnalysisProgress({
               type: "analysis_progress",
               phase: "complete",
@@ -89,6 +94,7 @@ export function useDatabricksWebSocket() {
               detail: "Analysis complete",
             });
             break;
+          }
           case "analysis_failed":
             setIsAnalyzing(false);
             addAnalysisProgress({
@@ -114,6 +120,33 @@ export function useDatabricksWebSocket() {
               phase: "error",
               status: "failed",
               error: data.error as string,
+            });
+            break;
+          case "extraction_cancelled":
+            setIsExtracting(false);
+            addExtractionProgress({
+              type: "extraction_progress",
+              phase: "cancelled",
+              status: "cancelled",
+              detail: "Cancelled by user",
+            });
+            break;
+          case "analysis_cancelled":
+            setIsAnalyzing(false);
+            addAnalysisProgress({
+              type: "analysis_progress",
+              phase: "cancelled",
+              status: "cancelled",
+              detail: "Cancelled by user",
+            });
+            break;
+          case "generation_cancelled":
+            setIsGenerating(false);
+            addGenerationProgress({
+              type: "llm_progress",
+              phase: "cancelled",
+              status: "cancelled",
+              detail: "Cancelled by user",
             });
             break;
           case "pong":
@@ -144,6 +177,7 @@ export function useDatabricksWebSocket() {
     setIsExtracting,
     setIsAnalyzing,
     setIsGenerating,
+    setActiveAnalysisId,
   ]);
 
   // Auto-connect on mount

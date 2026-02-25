@@ -12,6 +12,7 @@ import {
   Briefcase,
   CheckCircle2,
   AlertTriangle,
+  XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api-client";
@@ -39,11 +40,12 @@ export function ExtractionPanel() {
     extractionProgress,
     setIsExtracting,
     clearExtractionProgress,
+    activeExtractionId,
     setActiveExtractionId,
     setActiveStep,
   } = useDatabricksStore();
 
-  const [rootPath, setRootPath] = useState("/Workspace");
+  const [rootPath, setRootPath] = useState("/Workspace/Users");
   const [modifiedSince, setModifiedSince] = useState("");
   const [maxWorkers, setMaxWorkers] = useState(10);
 
@@ -72,6 +74,20 @@ export function ExtractionPanel() {
     isExtracting, rootPath, modifiedSince, maxWorkers, token,
     setIsExtracting, clearExtractionProgress, setActiveExtractionId,
   ]);
+
+  const handleCancel = useCallback(async () => {
+    if (!activeExtractionId) return;
+    try {
+      await apiClient.post(
+        `/api/sources/databricks/extract/cancel/${activeExtractionId}`,
+        {},
+        { token: token || undefined }
+      );
+    } catch {
+      // Backend will also send ws event; just reset UI
+    }
+    setIsExtracting(false);
+  }, [activeExtractionId, token, setIsExtracting]);
 
   // Derive latest progress state
   const lastProgress = extractionProgress[extractionProgress.length - 1];
@@ -162,7 +178,7 @@ export function ExtractionPanel() {
           </div>
         </div>
 
-        <div className="mt-4">
+        <div className="mt-4 flex items-center gap-2">
           <button
             onClick={handleStart}
             disabled={isExtracting}
@@ -185,6 +201,15 @@ export function ExtractionPanel() {
               </>
             )}
           </button>
+          {isExtracting && (
+            <button
+              onClick={handleCancel}
+              className="flex items-center gap-1.5 rounded-lg bg-[#eb6c6c] px-3 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-[#d95b5b]"
+            >
+              <XCircle className="h-4 w-4" />
+              Cancel
+            </button>
+          )}
         </div>
       </div>
 

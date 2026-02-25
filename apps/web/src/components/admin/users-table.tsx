@@ -16,7 +16,7 @@ export function UsersTable() {
     roles, fetchRoles,
     permissions, fetchPermissions,
     toggleAdmin, revokeRole, revokePermission,
-    actionLoading, fetchAuditLogs,
+    actionLoading,
   } = useAdminStore();
 
   const [searchTerm, setSearchTerm] = useState("");

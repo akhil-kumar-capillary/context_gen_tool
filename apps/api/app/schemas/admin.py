@@ -1,5 +1,4 @@
 from pydantic import BaseModel
-from typing import Optional
 
 
 class GrantRoleRequest(BaseModel):
@@ -26,19 +25,3 @@ class RevokePermissionRequest(BaseModel):
 
 class ToggleAdminRequest(BaseModel):
     user_email: str
-
-
-class SecretUpdateRequest(BaseModel):
-    key: str  # e.g. 'anthropic_api_key', 'databricks_token'
-    value: str
-    org_id: Optional[int] = None  # None = global, int = per-org
-
-
-class UserListResponse(BaseModel):
-    id: int
-    email: str
-    display_name: Optional[str]
-    is_admin: bool
-    is_active: bool
-    roles: list[str]
-    permissions: list[dict]

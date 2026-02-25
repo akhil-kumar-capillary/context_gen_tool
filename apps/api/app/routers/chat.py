@@ -1,4 +1,5 @@
 """Chat router — WebSocket endpoint for streaming chat + REST for conversation CRUD."""
+import asyncio
 import json
 import logging
 import uuid
@@ -65,6 +66,13 @@ async def chat_websocket(websocket: WebSocket):
 
     await ws_manager.connect(websocket, connection_id, user_id)
 
+    # Per-connection cancel event — set when client sends {"type": "cancel"}
+    cancel_event = asyncio.Event()
+
+    # Track the currently-running chat task so the receive loop stays free
+    # to process cancel / ping messages while the LLM streams.
+    active_chat_task: asyncio.Task | None = None
+
     try:
         while True:
             raw = await websocket.receive_text()
@@ -82,11 +90,32 @@ async def chat_websocket(websocket: WebSocket):
                 await ws_manager.send_to_connection(connection_id, {"type": "pong"})
                 continue
 
+            if msg_type == "cancel":
+                logger.info(f"Chat cancel requested (connection={connection_id})")
+                cancel_event.set()
+                continue
+
             if msg_type == "chat_message":
-                await _handle_chat_message(
-                    msg=msg,
-                    user=user,
-                    connection_id=connection_id,
+                # If a previous chat is still running, cancel it first
+                if active_chat_task and not active_chat_task.done():
+                    cancel_event.set()
+                    try:
+                        await asyncio.wait_for(active_chat_task, timeout=2.0)
+                    except (asyncio.TimeoutError, Exception):
+                        active_chat_task.cancel()
+
+                # Reset cancel event for new message
+                cancel_event.clear()
+
+                # Run as a background task so the receive loop stays free
+                # to read cancel messages while LLM streams
+                active_chat_task = asyncio.create_task(
+                    _handle_chat_message(
+                        msg=msg,
+                        user=user,
+                        connection_id=connection_id,
+                        cancel_event=cancel_event,
+                    )
                 )
             else:
                 await ws_manager.send_to_connection(
@@ -95,13 +124,22 @@ async def chat_websocket(websocket: WebSocket):
                 )
 
     except WebSocketDisconnect:
+        cancel_event.set()  # Cancel any in-flight processing
+        if active_chat_task and not active_chat_task.done():
+            active_chat_task.cancel()
         await ws_manager.disconnect(connection_id, user_id)
     except RuntimeError:
         # Starlette raises RuntimeError when WS is already closed
         logger.info(f"Chat WebSocket closed (connection={connection_id})")
+        cancel_event.set()
+        if active_chat_task and not active_chat_task.done():
+            active_chat_task.cancel()
         await ws_manager.disconnect(connection_id, user_id)
     except Exception as e:
         logger.exception("Chat WebSocket error")
+        cancel_event.set()
+        if active_chat_task and not active_chat_task.done():
+            active_chat_task.cancel()
         await ws_manager.disconnect(connection_id, user_id)
 
 
@@ -109,6 +147,7 @@ async def _handle_chat_message(
     msg: dict,
     user: dict,
     connection_id: str,
+    cancel_event: asyncio.Event | None = None,
 ):
     """Process an incoming chat message.
 
@@ -237,7 +276,23 @@ async def _handle_chat_message(
             on_tool_start=_on_tool_start,
             on_tool_end=_on_tool_end,
             on_end=_on_end,
+            cancel_event=cancel_event,
         )
+
+        was_cancelled = result.get("cancelled", False)
+
+        # On cancel, send chat_end immediately so the frontend gets instant
+        # feedback — before the DB persist.
+        if was_cancelled:
+            await ws_manager.send_to_connection(
+                connection_id,
+                {
+                    "type": "chat_end",
+                    "conversation_id": str(conv_id),
+                    "usage": result["usage"],
+                    "tool_calls": [],
+                },
+            )
 
         # ── Phase 3: Persist assistant response (short DB session) ──
         async with async_session() as db:
@@ -250,28 +305,28 @@ async def _handle_chat_message(
             )
             db.add(assistant_msg)
 
-            # Update conversation title if first exchange
-            if is_first_message:
+            # Update conversation title on first non-cancelled exchange
+            if is_first_message and not was_cancelled:
                 conv = await db.get(ChatConversation, conv_id)
                 if conv:
                     conv.title = content[:100]
 
             await db.commit()
-        # ── Session released ──
 
-        # Send chat_end to frontend
-        await ws_manager.send_to_connection(
-            connection_id,
-            {
-                "type": "chat_end",
-                "conversation_id": str(conv_id),
-                "usage": result["usage"],
-                "tool_calls": [
-                    {"name": tc["name"], "id": tc["id"]}
-                    for tc in result.get("tool_calls", [])
-                ],
-            },
-        )
+        # For normal (non-cancelled) completion, send chat_end after persisting
+        if not was_cancelled:
+            await ws_manager.send_to_connection(
+                connection_id,
+                {
+                    "type": "chat_end",
+                    "conversation_id": str(conv_id),
+                    "usage": result["usage"],
+                    "tool_calls": [
+                        {"name": tc["name"], "id": tc["id"]}
+                        for tc in result.get("tool_calls", [])
+                    ],
+                },
+            )
 
     except Exception as e:
         logger.exception("Chat message processing failed")

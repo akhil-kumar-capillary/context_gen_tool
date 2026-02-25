@@ -6,7 +6,7 @@ import {
   Database, Loader2, RefreshCw, Download, Check, AlertCircle,
   ChevronRight, BarChart3, Megaphone, Users, Ticket, Star, Coins,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -157,15 +157,6 @@ export default function ConfigApisPage() {
   const getIcon = (typeId: string) => {
     const Icon = API_ICONS[typeId] || Database;
     return <Icon className="h-4 w-4" />;
-  };
-
-  const formatDate = (iso: string | null) => {
-    if (!iso) return "—";
-    try {
-      return new Date(iso).toLocaleString();
-    } catch {
-      return iso;
-    }
   };
 
   return (

@@ -1,5 +1,4 @@
 from pydantic import BaseModel
-from typing import Optional
 
 
 class LoginRequest(BaseModel):
@@ -24,8 +23,3 @@ class UserResponse(BaseModel):
 class LoginResponse(BaseModel):
     token: str
     user: UserResponse
-
-
-class SelectOrgRequest(BaseModel):
-    org_id: int
-    org_name: str

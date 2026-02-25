@@ -2,11 +2,9 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, CONTEXT_NAME_REGEX, CONTEXT_NAME_ERROR } from "@/lib/utils";
 import { useContextStore } from "@/stores/context-store";
 import { MarkdownRenderer } from "@/components/chat/markdown-renderer";
-
-const CONTEXT_NAME_REGEX = /^[a-zA-Z0-9 _:#()\-,]*$/;
 
 export function NewContextDialog() {
   const { createContext, setIsCreating } = useContextStore();
@@ -25,7 +23,7 @@ export function NewContextDialog() {
       return;
     }
     if (!CONTEXT_NAME_REGEX.test(name)) {
-      setError("Name can only contain letters, numbers, spaces, and _ : # ( ) - ,");
+      setError(CONTEXT_NAME_ERROR);
       return;
     }
     if (name.length > 100) {

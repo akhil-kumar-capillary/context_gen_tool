@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useCallback, useState } from "react";
-import { Loader2, Play, BarChart3, ChevronRight } from "lucide-react";
+import { Loader2, Play, BarChart3, ChevronRight, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth-store";
@@ -12,7 +12,7 @@ import {
 } from "@/stores/databricks-store";
 
 export function AnalysisPanel() {
-  const { token } = useAuthStore();
+  const { token, orgId: currentOrgId } = useAuthStore();
   const {
     activeExtractionId,
     orgIds,
@@ -23,6 +23,7 @@ export function AnalysisPanel() {
     setIsAnalyzing,
     analysisProgress,
     clearAnalysisProgress,
+    activeAnalysisId,
     setActiveAnalysisId,
     analysisRuns,
     setAnalysisRuns,
@@ -45,9 +46,14 @@ export function AnalysisPanel() {
           { token: token || undefined }
         );
         setOrgIds(data.org_ids);
-        // Auto-select first org
-        if (data.org_ids.length > 0 && !selectedOrgId) {
-          setSelectedOrgId(data.org_ids[0].org_id);
+        // Auto-select: always prefer the user's current org, fall back to first
+        if (data.org_ids.length > 0) {
+          const currentMatch = currentOrgId
+            ? data.org_ids.find((o) => o.org_id === String(currentOrgId))
+            : null;
+          setSelectedOrgId(
+            currentMatch ? currentMatch.org_id : data.org_ids[0].org_id
+          );
         }
       } catch (err) {
         console.error("Failed to load org IDs:", err);
@@ -57,7 +63,8 @@ export function AnalysisPanel() {
     };
 
     loadOrgs();
-  }, [activeExtractionId, token, setOrgIds, setSelectedOrgId, selectedOrgId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeExtractionId, token, currentOrgId, setOrgIds, setSelectedOrgId]);
 
   // Load analysis history
   useEffect(() => {
@@ -103,12 +110,65 @@ export function AnalysisPanel() {
     setIsAnalyzing, clearAnalysisProgress,
   ]);
 
+  const handleCancelAnalysis = useCallback(async () => {
+    if (!activeExtractionId || !selectedOrgId) return;
+    try {
+      await apiClient.post(
+        `/api/sources/databricks/analysis/cancel/${activeExtractionId}/${selectedOrgId}`,
+        {},
+        { token: token || undefined }
+      );
+    } catch {
+      // Backend will also send ws event; just reset UI
+    }
+    setIsAnalyzing(false);
+  }, [activeExtractionId, selectedOrgId, token, setIsAnalyzing]);
+
   const lastProgress = analysisProgress[analysisProgress.length - 1];
   const isComplete = lastProgress?.phase === "complete" || lastProgress?.status === "done";
+
+  // When analysis completes, reload history so the new run appears
+  // and fallback-set activeAnalysisId if the WS handler didn't capture it
+  useEffect(() => {
+    if (!isComplete || !activeExtractionId) return;
+
+    const reloadHistory = async () => {
+      try {
+        const data = await apiClient.get<{ runs: AnalysisRun[] }>(
+          `/api/sources/databricks/analysis/history/${activeExtractionId}`,
+          { token: token || undefined }
+        );
+        setAnalysisRuns(data.runs);
+
+        // If WS didn't set activeAnalysisId, pick the most recent run
+        if (!activeAnalysisId && data.runs.length > 0) {
+          setActiveAnalysisId(data.runs[0].id);
+        }
+      } catch (err) {
+        console.error("Failed to reload analysis history:", err);
+      }
+    };
+
+    reloadHistory();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isComplete, activeExtractionId, token]);
 
   const handleSelectAnalysis = (analysisId: string) => {
     setActiveAnalysisId(analysisId);
     setActiveStep("generate");
+  };
+
+  const handleContinueToGenerate = () => {
+    // If activeAnalysisId is already set (from WS or fallback), just navigate
+    if (activeAnalysisId) {
+      setActiveStep("generate");
+      return;
+    }
+    // Last resort: pick the most recent analysis run from history
+    if (analysisRuns.length > 0) {
+      setActiveAnalysisId(analysisRuns[0].id);
+      setActiveStep("generate");
+    }
   };
 
   return (
@@ -177,6 +237,15 @@ export function AnalysisPanel() {
                   </>
                 )}
               </button>
+              {isAnalyzing && (
+                <button
+                  onClick={handleCancelAnalysis}
+                  className="flex items-center gap-1.5 rounded-lg bg-[#eb6c6c] px-3 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-[#d95b5b]"
+                >
+                  <XCircle className="h-4 w-4" />
+                  Cancel
+                </button>
+              )}
 
               {lastProgress && (
                 <span className="text-sm text-gray-500">
@@ -202,7 +271,7 @@ export function AnalysisPanel() {
 
             {isComplete && (
               <button
-                onClick={() => setActiveStep("generate")}
+                onClick={handleContinueToGenerate}
                 className="flex w-full items-center justify-center gap-2 rounded-lg bg-violet-600 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-violet-700"
               >
                 Continue to Doc Generation

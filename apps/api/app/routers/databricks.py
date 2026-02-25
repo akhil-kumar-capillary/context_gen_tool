@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from app.core.auth import get_current_user
 from app.core.rbac import require_permission
 from app.core.websocket import ws_manager
+from app.core.task_registry import task_registry
 from app.config import get_databricks_cluster, get_all_configured_clusters, normalize_cluster_key
 
 from app.services.databricks.storage import StorageService
@@ -205,14 +206,34 @@ async def start_extraction(
             await ws_manager.send_to_user(user_id, {
                 "type": "extraction_complete", "run_id": run_id, "result": result,
             })
+        except asyncio.CancelledError:
+            logger.info(f"Extraction {run_id} cancelled by user")
+            storage = StorageService()
+            await storage.fail_extraction_run(run_id, "Cancelled by user")
+            await ws_manager.send_to_user(user_id, {
+                "type": "extraction_cancelled", "run_id": run_id,
+            })
         except Exception as e:
             logger.exception(f"Extraction {run_id} failed")
             await ws_manager.send_to_user(user_id, {
                 "type": "extraction_failed", "run_id": run_id, "error": str(e),
             })
 
-    asyncio.create_task(_run())
+    task_registry.create_task(_run(), name=f"extraction-{run_id}", user_id=user_id)
     return {"run_id": run_id, "status": "started"}
+
+
+@router.post("/extract/cancel/{run_id}")
+async def cancel_extraction(
+    run_id: str,
+    current_user: dict = Depends(require_permission("databricks", "extract")),
+):
+    """Cancel a running extraction task."""
+    user_id = current_user["user_id"]
+    cancelled = task_registry.cancel_task(f"extraction-{run_id}")
+    if not cancelled:
+        raise HTTPException(status_code=404, detail="No active extraction task found for this run_id")
+    return {"cancelled": True, "run_id": run_id}
 
 
 @router.get("/extract/runs")
@@ -315,6 +336,8 @@ async def start_analysis(
     user_id = current_user["user_id"]
     progress_cb = _ws_progress_callback(user_id, "analysis")
 
+    task_name = f"analysis-{req.run_id}-{req.org_id}"
+
     async def _run():
         try:
             result = await run_analysis(
@@ -326,14 +349,33 @@ async def start_analysis(
             await ws_manager.send_to_user(user_id, {
                 "type": "analysis_complete", "result": result,
             })
+        except asyncio.CancelledError:
+            logger.info(f"Analysis {task_name} cancelled by user")
+            await ws_manager.send_to_user(user_id, {
+                "type": "analysis_cancelled", "run_id": req.run_id,
+            })
         except Exception as e:
             logger.exception(f"Analysis for run {req.run_id} failed")
             await ws_manager.send_to_user(user_id, {
                 "type": "analysis_failed", "run_id": req.run_id, "error": str(e),
             })
 
-    asyncio.create_task(_run())
+    task_registry.create_task(_run(), name=task_name, user_id=user_id)
     return {"status": "started", "run_id": req.run_id, "org_id": req.org_id}
+
+
+@router.post("/analysis/cancel/{run_id}/{org_id}")
+async def cancel_analysis(
+    run_id: str,
+    org_id: str,
+    current_user: dict = Depends(require_permission("databricks", "analyze")),
+):
+    """Cancel a running analysis task."""
+    task_name = f"analysis-{run_id}-{org_id}"
+    cancelled = task_registry.cancel_task(task_name)
+    if not cancelled:
+        raise HTTPException(status_code=404, detail="No active analysis task found")
+    return {"cancelled": True, "run_id": run_id, "org_id": org_id}
 
 
 @router.get("/analysis/history")
@@ -473,6 +515,12 @@ async def generate_docs(
                 "analysis_id": req.analysis_id,
                 "result": result,
             })
+        except asyncio.CancelledError:
+            logger.info(f"Doc generation for {req.analysis_id} cancelled by user")
+            await ws_manager.send_to_user(user_id, {
+                "type": "generation_cancelled",
+                "analysis_id": req.analysis_id,
+            })
         except Exception as e:
             logger.exception(f"Doc generation for {req.analysis_id} failed")
             await ws_manager.send_to_user(user_id, {
@@ -481,8 +529,20 @@ async def generate_docs(
                 "error": str(e),
             })
 
-    asyncio.create_task(_run())
+    task_registry.create_task(_run(), name=f"generation-{req.analysis_id}", user_id=user_id)
     return {"status": "started", "analysis_id": req.analysis_id}
+
+
+@router.post("/llm/cancel/{analysis_id}")
+async def cancel_generation(
+    analysis_id: str,
+    current_user: dict = Depends(require_permission("databricks", "generate")),
+):
+    """Cancel a running document generation task."""
+    cancelled = task_registry.cancel_task(f"generation-{analysis_id}")
+    if not cancelled:
+        raise HTTPException(status_code=404, detail="No active generation task found")
+    return {"cancelled": True, "analysis_id": analysis_id}
 
 
 @router.get("/llm/docs/{analysis_id}")

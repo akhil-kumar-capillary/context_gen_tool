@@ -8,7 +8,7 @@ import { ChatInput } from "./chat-input";
 
 export function ChatPanel() {
   const { activeConversationId } = useChatStore();
-  const { sendMessage } = useChatWebSocket();
+  const { sendMessage, cancelChat } = useChatWebSocket();
 
   const handleSend = useCallback(
     (content: string) => {
@@ -20,7 +20,7 @@ export function ChatPanel() {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <ChatMessageList />
-      <ChatInput onSend={handleSend} />
+      <ChatInput onSend={handleSend} onCancel={cancelChat} />
     </div>
   );
 }

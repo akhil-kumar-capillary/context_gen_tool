@@ -13,17 +13,23 @@ class WebSocketManager:
     Uses an asyncio.Lock to protect mutable connection state from
     concurrent coroutine access (multiple users connecting/disconnecting
     at the same time).
+
+    Per-connection send locks serialize sends to the same WebSocket
+    (required by ASGI spec) while allowing parallel sends to different
+    connections.
     """
 
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
         self.user_connections: Dict[int, Set[str]] = {}
-        self._lock = asyncio.Lock()
+        self._lock = asyncio.Lock()           # protects connection map mutations
+        self._send_locks: Dict[str, asyncio.Lock] = {}  # per-connection send serialization
 
     async def connect(self, websocket: WebSocket, connection_id: str, user_id: int | None = None):
         await websocket.accept()
         async with self._lock:
             self.active_connections[connection_id] = websocket
+            self._send_locks[connection_id] = asyncio.Lock()
             if user_id:
                 if user_id not in self.user_connections:
                     self.user_connections[user_id] = set()
@@ -33,6 +39,7 @@ class WebSocketManager:
     async def disconnect(self, connection_id: str, user_id: int | None = None):
         async with self._lock:
             self.active_connections.pop(connection_id, None)
+            self._send_locks.pop(connection_id, None)
             if user_id and user_id in self.user_connections:
                 self.user_connections[user_id].discard(connection_id)
                 if not self.user_connections[user_id]:
@@ -40,11 +47,14 @@ class WebSocketManager:
         logger.info(f"WebSocket disconnected: {connection_id}")
 
     async def send_to_connection(self, connection_id: str, message: dict):
+        # Look up both ws and its send lock atomically under the manager lock
         async with self._lock:
             ws = self.active_connections.get(connection_id)
-        if ws:
+            send_lock = self._send_locks.get(connection_id)
+        if ws and send_lock:
             try:
-                await ws.send_text(json.dumps(message))
+                async with send_lock:
+                    await ws.send_text(json.dumps(message))
             except Exception:
                 await self.disconnect(connection_id)
 

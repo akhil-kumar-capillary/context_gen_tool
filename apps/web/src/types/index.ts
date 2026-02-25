@@ -12,12 +12,6 @@ export interface User {
   orgs: Org[];
 }
 
-export interface LoginRequest {
-  username: string;
-  password: string;
-  cluster: string;
-}
-
 export interface LoginResponse {
   token: string;
   user: User;
@@ -49,25 +43,6 @@ export interface LLMUsage {
   input_tokens: number;
   output_tokens: number;
   warning?: string;
-}
-
-// RBAC types
-export interface Role {
-  id: number;
-  name: string;
-  description: string;
-}
-
-export interface Permission {
-  id: number;
-  module: string;
-  operation: string;
-  description: string;
-}
-
-export interface UserWithRoles extends User {
-  roles: Role[];
-  permissions: Permission[];
 }
 
 // Cluster configuration

@@ -1,16 +1,17 @@
 "use client";
 
 import { useState, useRef, useEffect, type KeyboardEvent } from "react";
-import { Send, Loader2 } from "lucide-react";
+import { Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useSettingsStore, ANTHROPIC_MODELS, OPENAI_MODELS } from "@/stores/settings-store";
 
 interface ChatInputProps {
   onSend: (content: string) => void;
+  onCancel?: () => void;
 }
 
-export function ChatInput({ onSend }: ChatInputProps) {
+export function ChatInput({ onSend, onCancel }: ChatInputProps) {
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { isStreaming } = useChatStore();
@@ -91,22 +92,28 @@ export function ChatInput({ onSend }: ChatInputProps) {
             )}
           />
         </div>
-        <button
-          onClick={handleSend}
-          disabled={!input.trim() || isStreaming}
-          className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-all",
-            input.trim() && !isStreaming
-              ? "bg-violet-600 text-white hover:bg-violet-700 shadow-sm"
-              : "bg-gray-100 text-gray-400"
-          )}
-        >
-          {isStreaming ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
+        {isStreaming ? (
+          <button
+            onClick={onCancel}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 shadow-sm transition-all hover:bg-gray-200"
+            title="Stop generating"
+          >
+            <span className="block h-3.5 w-3.5 rounded-sm bg-[#eb6c6c]" />
+          </button>
+        ) : (
+          <button
+            onClick={handleSend}
+            disabled={!input.trim()}
+            className={cn(
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-all",
+              input.trim()
+                ? "bg-violet-600 text-white hover:bg-violet-700 shadow-sm"
+                : "bg-gray-100 text-gray-400"
+            )}
+          >
             <Send className="h-4 w-4" />
-          )}
-        </button>
+          </button>
+        )}
       </div>
 
       <p className="mt-1.5 text-center text-[10px] text-gray-400">

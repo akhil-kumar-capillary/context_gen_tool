@@ -1,12 +1,8 @@
-from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 from app.database import Base
-
-
-def utcnow():
-    return datetime.now(timezone.utc)
+from app.utils import utcnow
 
 
 class ContextDoc(Base):

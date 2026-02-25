@@ -2,7 +2,6 @@ import jwt
 import httpx
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 from fastapi import Depends, HTTPException, Request
 
 from app.config import settings, CLUSTER_INTOUCH_MAP, normalize_cluster_key

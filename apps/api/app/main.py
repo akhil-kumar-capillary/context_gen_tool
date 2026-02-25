@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.core.websocket import websocket_endpoint
+from app.core.task_registry import task_registry
 from app.routers import auth, contexts, databricks, confluence, config_apis, llm, admin, chat
 
 logger = logging.getLogger(__name__)
@@ -15,9 +16,11 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# CORS
+# Startup info
+_db_host = settings.database_url.split("@")[1].split("/")[0] if "@" in settings.database_url else "default"
+logger.info(f"Environment: {settings.env}")
+logger.info(f"Database host: {_db_host}")
 logger.info(f"CORS allowed origins: {settings.cors_origins}")
-print(f"CORS allowed origins: {settings.cors_origins}", flush=True)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -40,6 +43,12 @@ app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.add_api_websocket_route("/api/ws", websocket_endpoint)
 
 # WebSocket — chat (handled by chat router itself at /api/chat/ws/chat)
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cancel all running background tasks on server shutdown."""
+    await task_registry.cancel_all(timeout=10.0)
 
 
 @app.get("/health")

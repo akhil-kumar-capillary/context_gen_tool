@@ -8,7 +8,7 @@ individual booleans → structural_flags JSONB, short-lived sessions.
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import select, func, delete, update, and_, exists, text
@@ -18,12 +18,26 @@ from app.database import async_session
 from app.models.extraction import ExtractionRun, ExtractedSQL, NotebookMetadata
 from app.models.analysis import AnalysisRun, AnalysisFingerprint, AnalysisNotebook
 from app.models.context_doc import ContextDoc
+from app.utils import utcnow as _utcnow
 
 logger = logging.getLogger(__name__)
 
 
-def _utcnow():
-    return datetime.now(timezone.utc)
+def _parse_dt(val) -> datetime | None:
+    """Coerce a date string or epoch-ms int to a datetime, or return None."""
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        return val
+    if isinstance(val, (int, float)):
+        return datetime.fromtimestamp(val / 1000)
+    if isinstance(val, str):
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(val, fmt)
+            except ValueError:
+                continue
+    return None
 
 
 class StorageService:
@@ -203,15 +217,15 @@ class StorageService:
                     user_name=r.get("User"),
                     object_id=r.get("ObjectID"),
                     language=r.get("Language"),
-                    created_at=r.get("CreatedAt"),
-                    modified_at=r.get("ModifiedAt"),
+                    created_at=_parse_dt(r.get("CreatedAt")),
+                    modified_at=_parse_dt(r.get("ModifiedAt")),
                     cell_number=r.get("CellNumber"),
                     file_type=r.get("FileType"),
                     cleaned_sql=r.get("CleanedSQL"),
                     sql_hash=r.get("SQLHash"),
                     is_valid=bool(r.get("IsValidSQL")),
                     original_snippet=r.get("OriginalSnippet"),
-                    extracted_at=r.get("ExtractedAt"),
+                    extracted_at=_parse_dt(r.get("ExtractedAt")),
                 )
                 for r in sql_results
             ]
@@ -254,6 +268,8 @@ class StorageService:
 
     async def get_distinct_org_ids(self, run_id: str) -> list[dict]:
         """Return distinct org_ids for a run with SQL counts."""
+        from sqlalchemy import case
+
         uid = uuid.UUID(run_id)
         async with async_session() as db:
             stmt = (
@@ -261,8 +277,8 @@ class StorageService:
                     ExtractedSQL.org_id,
                     func.count().label("total_sqls"),
                     func.sum(
-                        func.cast(ExtractedSQL.is_valid, type_=func.coalesce.type)
-                    ).label("valid_sqls_raw"),
+                        case((ExtractedSQL.is_valid == True, 1), else_=0)  # noqa: E712
+                    ).label("valid_sqls"),
                 )
                 .where(
                     and_(
@@ -272,19 +288,9 @@ class StorageService:
                     )
                 )
                 .group_by(ExtractedSQL.org_id)
-                .order_by(text("total_sqls DESC"))
+                .order_by(func.count().desc())
             )
-            # Use raw SQL for the SUM(CASE WHEN is_valid THEN 1 ELSE 0 END) pattern
-            stmt = text("""
-                SELECT org_id,
-                       COUNT(*) as total_sqls,
-                       SUM(CASE WHEN is_valid THEN 1 ELSE 0 END) as valid_sqls
-                FROM extracted_sqls
-                WHERE run_id = :run_id AND org_id IS NOT NULL AND org_id != ''
-                GROUP BY org_id
-                ORDER BY valid_sqls DESC
-            """)
-            result = await db.execute(stmt, {"run_id": uid})
+            result = await db.execute(stmt)
             return [
                 {"org_id": row.org_id, "total_sqls": row.total_sqls, "valid_sqls": row.valid_sqls}
                 for row in result.all()
@@ -326,8 +332,8 @@ class StorageService:
                     user_name=r.get("User"),
                     object_id=r.get("ObjectID"),
                     language=r.get("Language"),
-                    created_at=r.get("CreatedAt"),
-                    modified_at=r.get("ModifiedAt"),
+                    created_at=_parse_dt(r.get("CreatedAt")),
+                    modified_at=_parse_dt(r.get("ModifiedAt")),
                     has_content=bool(r.get("HasContent")),
                     file_type=r.get("FileType"),
                     status=r.get("Status", "Processed"),
@@ -335,9 +341,9 @@ class StorageService:
                     job_id=r.get("JobID"),
                     job_name=r.get("JobName"),
                     cont_success_run_count=r.get("Cont_Success_Run_Count"),
-                    earliest_run_date=r.get("Earliest_Run_Date"),
+                    earliest_run_date=_parse_dt(r.get("Earliest_Run_Date")),
                     trigger_type=r.get("Trigger_Type"),
-                    extracted_at=r.get("ExtractedAt"),
+                    extracted_at=_parse_dt(r.get("ExtractedAt")),
                 )
                 for r in notebook_data
             ]

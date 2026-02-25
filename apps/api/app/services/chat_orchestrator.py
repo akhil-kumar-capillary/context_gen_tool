@@ -6,9 +6,10 @@ Flow:
   3. If LLM emits tool_use → execute tool → send result back to LLM
   4. Repeat steps 1-3 (max N rounds) until LLM produces a final text response
 """
+import asyncio
 import logging
 import time
-from typing import Callable, Awaitable
+from typing import Callable, Awaitable, Optional
 
 from app.config import settings
 from app.services.llm_service import stream_llm
@@ -42,6 +43,7 @@ class ChatOrchestrator:
         on_tool_start: Callable[[str, str, str], Awaitable[None]],
         on_tool_end: Callable[[str, str, str], Awaitable[None]],
         on_end: Callable[[dict], Awaitable[None]],
+        cancel_event: Optional[asyncio.Event] = None,
     ) -> dict:
         """Execute the chat orchestration loop.
 
@@ -52,12 +54,14 @@ class ChatOrchestrator:
             on_tool_start: Callback(tool_name, tool_id, display_text) when tool execution begins
             on_tool_end: Callback(tool_name, tool_id, summary) when tool finishes
             on_end: Callback(usage_dict) when generation is complete
+            cancel_event: Optional event; when set, the orchestrator stops ASAP.
 
         Returns:
             dict with keys:
               - assistant_text: Full accumulated assistant text
               - tool_calls: List of {name, id, input, result} dicts
               - usage: Aggregate {input_tokens, output_tokens}
+              - cancelled: True if stopped early due to cancel_event
         """
         # Get permitted tools for this user (opens short-lived DB session internally)
         permitted_tools = await registry.get_permitted_tools(self.ctx)
@@ -80,7 +84,15 @@ class ChatOrchestrator:
         # Working copy of messages (we append tool results to this)
         working_messages = list(messages)
 
+        cancelled = False
+
         for round_num in range(self.max_tool_rounds + 1):
+            # Check for cancellation before each round
+            if cancel_event and cancel_event.is_set():
+                logger.info("Chat orchestrator cancelled before round %d", round_num + 1)
+                cancelled = True
+                break
+
             logger.info(
                 f"Chat round {round_num + 1}/{self.max_tool_rounds + 1} "
                 f"(provider={self.provider}, model={self.model})"
@@ -93,11 +105,18 @@ class ChatOrchestrator:
                 tools=tool_defs,
                 on_text_chunk=on_text_chunk,
                 on_tool_detected=on_tool_detected,
+                cancel_event=cancel_event,
             )
 
             all_text += round_text
             total_usage["input_tokens"] += round_usage.get("input_tokens", 0)
             total_usage["output_tokens"] += round_usage.get("output_tokens", 0)
+
+            # Check for cancellation after streaming
+            if cancel_event and cancel_event.is_set():
+                logger.info("Chat orchestrator cancelled after streaming round %d", round_num + 1)
+                cancelled = True
+                break
 
             if not round_tool_calls:
                 # No tool calls — LLM gave a final answer
@@ -109,6 +128,12 @@ class ChatOrchestrator:
 
             tool_results_content = []
             for tc in round_tool_calls:
+                # Check for cancellation before each tool execution
+                if cancel_event and cancel_event.is_set():
+                    logger.info("Chat orchestrator cancelled before tool %s", tc["name"])
+                    cancelled = True
+                    break
+
                 tool_name = tc["name"]
                 tool_id = tc["id"]
                 tool_input = tc["input"]
@@ -142,6 +167,9 @@ class ChatOrchestrator:
                     self._build_tool_result(tool_id, tool_name, result)
                 )
 
+            if cancelled:
+                break
+
             # Append tool results to messages
             if self.provider == "anthropic":
                 working_messages.append({
@@ -160,6 +188,7 @@ class ChatOrchestrator:
             "assistant_text": all_text,
             "tool_calls": all_tool_calls,
             "usage": total_usage,
+            "cancelled": cancelled,
         }
 
     # -----------------------------------------------------------------
@@ -173,6 +202,7 @@ class ChatOrchestrator:
         tools: list[dict] | None,
         on_text_chunk: Callable[[str], Awaitable[None]],
         on_tool_detected: Callable[[str, str, str], Awaitable[None]],
+        cancel_event: Optional[asyncio.Event] = None,
     ) -> tuple[str, list[dict], dict]:
         """Execute a streaming round. Returns (text, tool_calls, usage)."""
         text = ""
@@ -186,12 +216,13 @@ class ChatOrchestrator:
             messages=messages,
             max_tokens=settings.chat_max_output_tokens,
             tools=tools,
+            cancel_event=cancel_event,
         ):
+
             if event["type"] == "chunk":
                 text += event["text"]
                 await on_text_chunk(event["text"])
             elif event["type"] == "tool_use_start":
-                # LLM started generating a tool call — notify frontend immediately
                 tool_name = event["name"]
                 tool_def = registry.get_tool(tool_name)
                 display = (

@@ -1,15 +1,11 @@
 import uuid
-from datetime import datetime, timezone
 from sqlalchemy import (
     Column, Integer, String, Boolean, DateTime, Text, ForeignKey,
 )
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.database import Base
-
-
-def utcnow():
-    return datetime.now(timezone.utc)
+from app.utils import utcnow
 
 
 class ExtractionRun(Base):
@@ -72,8 +68,8 @@ class NotebookMetadata(Base):
     file_type = Column(String(50))
     status = Column(String(50), default="Processed")
     is_attached_to_jobs = Column(String(10), default="No")
-    job_id = Column(String(100))
-    job_name = Column(String(255))
+    job_id = Column(Text)
+    job_name = Column(Text)
     cont_success_run_count = Column(Integer)
     earliest_run_date = Column(DateTime(timezone=True))
     trigger_type = Column(String(50))

@@ -5,7 +5,6 @@ Uses Basic Auth (email + API token) for Confluence Cloud.
 from __future__ import annotations
 
 import asyncio
-import re
 from functools import partial
 from typing import Optional
 

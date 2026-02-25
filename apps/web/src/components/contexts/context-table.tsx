@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect } from "react";
-import { Plus, Loader2, RefreshCw } from "lucide-react";
+import { Plus, Loader2, RefreshCw, Download } from "lucide-react";
 import { useContextStore } from "@/stores/context-store";
+import { useAuthStore } from "@/stores/auth-store";
+import { downloadAllContexts } from "@/lib/utils";
 import { ContextRow } from "./context-row";
 import { NewContextDialog } from "./new-context-dialog";
 import { EditContextDialog } from "./edit-context-dialog";
 
 export function ContextTable() {
+  const { orgName } = useAuthStore();
   const {
     contexts,
     isLoading,
@@ -43,13 +46,23 @@ export function ContextTable() {
             <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
           </button>
         </div>
-        <button
-          onClick={() => setIsCreating(true)}
-          className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-700"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          New Context
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsCreating(true)}
+            className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-700"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New Context
+          </button>
+          <button
+            onClick={() => downloadAllContexts(contexts, orgName)}
+            disabled={contexts.length === 0 || isLoading}
+            className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Download All
+          </button>
+        </div>
       </div>
 
       {/* Error */}

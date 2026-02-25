@@ -98,7 +98,8 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     })),
 
   finishStreaming: (conversationId, usage, toolCalls, error) => {
-    const { streamingText, activeToolCalls } = get();
+    const { isStreaming, streamingText, activeToolCalls } = get();
+    if (!isStreaming) return; // Idempotency guard — prevent duplicate assistant messages
 
     // Create the assistant message from streamed content
     const assistantMessage: ChatMessage = {

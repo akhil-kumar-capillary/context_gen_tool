@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { MessageSquarePlus, MessageSquare, Trash2, Loader2 } from "lucide-react";
+import { MessageSquarePlus, MessageSquare, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chat-store";
 import { useAuthStore } from "@/stores/auth-store";

@@ -208,7 +208,8 @@ def _build_focus_payload(
             if isinstance(vc, list):
                 enums[col] = [{"v": v, "n": n} for v, n in vc[:20]]
             elif isinstance(vc, dict):
-                enums[col] = [{"v": v, "n": n} for v, n in sorted(vc.items(), key=lambda x: -x[1])[:20]]
+                safe_items = [(v, n) for v, n in vc.items() if isinstance(n, (int, float))]
+                enums[col] = [{"v": v, "n": n} for v, n in sorted(safe_items, key=lambda x: -x[1])[:20]]
 
     case_whens = []
     for fp in fingerprints:

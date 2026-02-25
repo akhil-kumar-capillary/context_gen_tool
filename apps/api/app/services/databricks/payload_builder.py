@@ -202,7 +202,8 @@ def build_payload_03(
                 enums[col] = [{"v": v, "n": n} for v, n in vc[:30]]
         elif isinstance(vc, dict):
             if len(vc) <= settings.max_enum_distinct:
-                enums[col] = [{"v": v, "n": n} for v, n in sorted(vc.items(), key=lambda x: -x[1])[:30]]
+                safe_items = [(v, n) for v, n in vc.items() if isinstance(n, (int, float))]
+                enums[col] = [{"v": v, "n": n} for v, n in sorted(safe_items, key=lambda x: -x[1])[:30]]
 
     agg_items = counters.get("agg_pattern", [])
     kpis = [{"f": str(f), "n": n, "pct": _pct(n, total_weight)} for f, n in agg_items]

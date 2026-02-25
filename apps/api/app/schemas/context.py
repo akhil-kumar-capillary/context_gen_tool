@@ -1,5 +1,4 @@
 from pydantic import BaseModel
-from typing import Optional
 
 
 class ContextCreateRequest(BaseModel):
@@ -13,10 +12,6 @@ class ContextUpdateRequest(BaseModel):
     name: str
     content: str
     scope: str = "org"
-
-
-class ContextDeleteRequest(BaseModel):
-    context_id: str
 
 
 class BulkUploadItem(BaseModel):

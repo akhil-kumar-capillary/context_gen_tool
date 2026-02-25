@@ -3,7 +3,7 @@ import os
 import logging
 from dataclasses import dataclass
 from pydantic_settings import BaseSettings
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, model_validator
 from typing import Optional
 
 
@@ -141,6 +141,9 @@ def get_all_configured_clusters() -> list[dict]:
 
 
 class Settings(BaseSettings):
+    # Environment — set ENV=production on Railway; defaults to development locally
+    env: str = "development"
+
     # Database
     database_url: str = "postgresql+asyncpg://dev:dev@localhost:5432/context_gen"
     database_url_sync: str = "postgresql+psycopg://dev:dev@localhost:5432/context_gen"
@@ -229,6 +232,30 @@ class Settings(BaseSettings):
                 val = _env_or_dotenv(key.upper())
                 if val:
                     object.__setattr__(self, key, val)
+        return self
+
+    @model_validator(mode="after")
+    def _resolve_env_defaults(self) -> "Settings":
+        """When ENV=development, force local DB URLs regardless of .env file.
+
+        This allows the .env to contain production (Railway) URLs while
+        still working locally without any manual switching.
+        """
+        if self.env == "development":
+            local_async = "postgresql+asyncpg://dev:dev@localhost:5432/context_gen"
+            local_sync = "postgresql+psycopg://dev:dev@localhost:5432/context_gen"
+
+            if "localhost" not in self.database_url:
+                logger.info("ENV=development: overriding DATABASE_URL → local")
+                object.__setattr__(self, "database_url", local_async)
+            if "localhost" not in self.database_url_sync:
+                logger.info("ENV=development: overriding DATABASE_URL_SYNC → local")
+                object.__setattr__(self, "database_url_sync", local_sync)
+
+            # Ensure CORS includes localhost for local dev
+            if "localhost:3000" not in self.cors_origins_raw:
+                object.__setattr__(self, "cors_origins_raw", '["http://localhost:3000"]')
+
         return self
 
 

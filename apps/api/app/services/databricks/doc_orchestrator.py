@@ -270,15 +270,28 @@ def _reconstruct_counters(counters_json: dict) -> dict:
     The analysis orchestrator saves counters via `counters_to_serializable()`,
     which converts each Counter to a list of [key, count] tuples.
     The payload builders expect dicts with lists of (key, count) tuples (Counter.most_common() format).
+
+    NOTE: counters_to_serializable() also embeds "literal_vals" and "alias_conv"
+    as nested dicts — those are handled separately in run_generation() and must
+    be skipped here (their values are dicts-of-lists, not flat [key, count] pairs).
     """
+    # Keys that have nested structure and are handled separately
+    _NESTED_KEYS = {"literal_vals", "alias_conv"}
+
     result = {}
     for counter_name, entries in counters_json.items():
+        if counter_name in _NESTED_KEYS:
+            continue
         if isinstance(entries, list):
             # Already in [[key, count], ...] format — convert to list of tuples
             result[counter_name] = [(item[0], item[1]) for item in entries if len(item) >= 2]
         elif isinstance(entries, dict):
             # Dict format — convert to sorted list of tuples
-            result[counter_name] = sorted(entries.items(), key=lambda x: -x[1])
+            # Ensure values are numeric before negating for sort
+            result[counter_name] = sorted(
+                ((k, v) for k, v in entries.items() if isinstance(v, (int, float))),
+                key=lambda x: -x[1],
+            )
         else:
             result[counter_name] = []
     return result
