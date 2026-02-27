@@ -1,13 +1,19 @@
 """Seed script to populate roles, permissions, and primary admin.
 Run after initial migration: python seed_data.py
 """
+import os
 import sys
 import asyncio
 import traceback
 from sqlalchemy import select
-from app.database import async_session
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from app.models.user import User, Role, Permission, RolePermission, UserRole
 from app.config import settings
+
+# Use DATABASE_URL from env if available (for Railway), otherwise fall back to settings
+_db_url = os.environ.get("DATABASE_URL") or settings.database_url
+_engine = create_async_engine(_db_url)
+_session = async_sessionmaker(_engine, class_=AsyncSession, expire_on_commit=False)
 
 # Module definitions
 MODULES = {
@@ -46,7 +52,7 @@ ROLES = {
 
 
 async def seed():
-    async with async_session() as db:
+    async with _session() as db:
         # 1. Seed permissions
         all_perms = {}
         for module, operations in MODULES.items():
@@ -135,7 +141,9 @@ async def seed():
 
 
 if __name__ == "__main__":
-    print("seed_data.py: starting...", flush=True)
+    # Show which DB we're connecting to (mask password)
+    _safe_url = _db_url.split("@")[-1] if "@" in _db_url else _db_url
+    print(f"seed_data.py: starting... (db host: {_safe_url}, ENV={os.environ.get('ENV', 'not set')})", flush=True)
     try:
         asyncio.run(seed())
     except Exception as e:
