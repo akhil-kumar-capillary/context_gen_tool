@@ -11,6 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Cache-bust: Railway caches COPY layers aggressively;
+# change this value to force a fresh COPY when needed.
+ARG CACHEBUST=1
 COPY . .
 
 EXPOSE 8000
