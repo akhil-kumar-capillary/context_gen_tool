@@ -19,4 +19,4 @@ COPY . .
 EXPOSE 8000
 
 # Production: use --workers for concurrency; dev override in docker-compose
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
