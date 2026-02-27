@@ -104,7 +104,7 @@ function ModuleAccessTree({
   // Initialize local state from user's current permissions
   const serverPerms = useMemo(() => {
     const s = new Set<string>();
-    for (const p of user.direct_permissions) {
+    for (const p of user.direct_permissions || []) {
       s.add(permKey(p.module, p.operation));
     }
     return s;
@@ -340,7 +340,7 @@ export function UsersTable() {
 
   /** Get unique module names from user's direct permissions */
   const getUserModules = (u: AdminUser) =>
-    Array.from(new Set(u.direct_permissions.map((p) => p.module)));
+    Array.from(new Set((u.direct_permissions || []).map((p) => p.module)));
 
   return (
     <div className="space-y-4">
