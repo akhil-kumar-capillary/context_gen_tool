@@ -1,3 +1,4 @@
+from typing import List
 from pydantic import BaseModel
 
 
@@ -25,3 +26,13 @@ class RevokePermissionRequest(BaseModel):
 
 class ToggleAdminRequest(BaseModel):
     user_email: str
+
+
+class PermissionEntry(BaseModel):
+    module: str
+    operation: str
+
+
+class SetPermissionsRequest(BaseModel):
+    user_email: str
+    permissions: List[PermissionEntry]

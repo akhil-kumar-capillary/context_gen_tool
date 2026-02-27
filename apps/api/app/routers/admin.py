@@ -12,7 +12,7 @@ from app.config import settings
 from app.schemas.admin import (
     GrantRoleRequest, RevokeRoleRequest,
     GrantPermissionRequest, RevokePermissionRequest,
-    ToggleAdminRequest,
+    ToggleAdminRequest, SetPermissionsRequest,
 )
 
 router = APIRouter()
@@ -28,7 +28,7 @@ async def list_users(
         select(User)
         .options(
             selectinload(User.roles).selectinload(UserRole.role),
-            selectinload(User.permissions),
+            selectinload(User.permissions).selectinload(UserPermission.permission),
         )
         .order_by(User.email)
     )
@@ -45,6 +45,10 @@ async def list_users(
                 "is_superadmin": u.email == superadmin,
                 "is_active": u.is_active,
                 "roles": [ur.role.name for ur in u.roles] if u.roles else [],
+                "direct_permissions": [
+                    {"module": up.permission.module, "operation": up.permission.operation}
+                    for up in u.permissions
+                ] if u.permissions else [],
                 "last_login_at": u.last_login_at.isoformat() if u.last_login_at else None,
             }
             for u in users
@@ -225,6 +229,54 @@ async def revoke_permission(
         await db.delete(up)
         await db.commit()
     return {"message": f"Permission revoked"}
+
+
+@router.post("/users/set-permissions")
+async def set_permissions(
+    req: SetPermissionsRequest,
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk-set ALL direct permissions for a user (replaces existing)."""
+    # Find or create user
+    user_result = await db.execute(select(User).where(User.email == req.user_email))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        user = User(email=req.user_email, is_active=True)
+        db.add(user)
+        await db.flush()
+
+    # Delete all existing direct permissions for this user
+    existing = await db.execute(
+        select(UserPermission).where(UserPermission.user_id == user.id)
+    )
+    for up in existing.scalars().all():
+        await db.delete(up)
+    await db.flush()
+
+    # Insert new permissions
+    granted = []
+    for perm_req in req.permissions:
+        perm_result = await db.execute(
+            select(Permission).where(
+                Permission.module == perm_req.module,
+                Permission.operation == perm_req.operation,
+            )
+        )
+        perm = perm_result.scalar_one_or_none()
+        if perm:
+            db.add(UserPermission(
+                user_id=user.id,
+                permission_id=perm.id,
+                granted_by=current_user["user_id"],
+            ))
+            granted.append(f"{perm_req.module}.{perm_req.operation}")
+
+    await db.commit()
+    return {
+        "message": f"Set {len(granted)} permissions for {req.user_email}",
+        "granted": granted,
+    }
 
 
 @router.get("/audit-logs")

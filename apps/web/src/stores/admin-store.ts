@@ -13,6 +13,7 @@ export interface AdminUser {
   is_superadmin: boolean;
   is_active: boolean;
   roles: string[];
+  direct_permissions: { module: string; operation: string }[];
   last_login_at: string | null;
 }
 
@@ -79,6 +80,7 @@ interface AdminState {
   revokeRole: (userEmail: string, roleName: string) => Promise<boolean>;
   grantPermission: (userEmail: string, module: string, operation: string) => Promise<boolean>;
   revokePermission: (userEmail: string, module: string, operation: string) => Promise<boolean>;
+  setPermissions: (userEmail: string, permissions: { module: string; operation: string }[]) => Promise<boolean>;
 
   clearActionFeedback: () => void;
 }
@@ -250,6 +252,24 @@ export const useAdminStore = create<AdminState>()((set) => ({
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({ user_email: userEmail, module, operation }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
+      set({ actionMessage: data.message, actionLoading: false });
+      return true;
+    } catch (e) {
+      set({ actionError: e instanceof Error ? e.message : "Failed", actionLoading: false });
+      return false;
+    }
+  },
+
+  setPermissions: async (userEmail, permissions) => {
+    set({ actionLoading: true, actionMessage: null, actionError: null });
+    try {
+      const resp = await fetch(`${API}/api/admin/users/set-permissions`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ user_email: userEmail, permissions }),
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
