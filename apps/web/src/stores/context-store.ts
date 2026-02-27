@@ -31,6 +31,9 @@ interface ContextState {
   setIsCreating: (creating: boolean) => void;
   setError: (error: string | null) => void;
 
+  // Reset
+  reset: () => void;
+
   // AI Generated actions
   setAiContexts: (contexts: AiGeneratedContext[] | null) => void;
   setSanitizeUsage: (usage: LLMUsage | null) => void;
@@ -196,6 +199,20 @@ export const useContextStore = create<ContextState>((set, get) => ({
       }
     }
   },
+
+  // --- Reset ---
+
+  reset: () =>
+    set({
+      contexts: [],
+      isLoading: false,
+      error: null,
+      editingContextId: null,
+      confirmDeleteId: null,
+      isCreating: false,
+      aiContexts: null,
+      sanitizeUsage: null,
+    }),
 
   // --- UI setters ---
 

@@ -12,6 +12,7 @@ import {
   Shield,
   LayoutDashboard,
   MessageSquare,
+  GitBranch,
 } from "lucide-react";
 
 const navItems = [
@@ -45,6 +46,12 @@ const navItems = [
     icon: Settings2,
     module: "config_apis",
   },
+  {
+    label: "Context Engine",
+    href: "/dashboard/context-engine",
+    icon: GitBranch,
+    module: "context_engine",
+  },
 ];
 
 export function AppSidebar() {
@@ -65,24 +72,35 @@ export function AppSidebar() {
         <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
           Modules
         </p>
-        {navItems.map((item) => {
-          const isActive = pathname.startsWith(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-primary/10 text-primary"
-                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              )}
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </Link>
-          );
-        })}
+        {navItems
+          .filter((item) => {
+            // Admin sees all modules
+            if (user?.isAdmin) return true;
+            const modules = user?.allowedModules;
+            if (!modules) {
+              // Modules not loaded yet — show only chat until /me/modules resolves
+              return item.module === "general";
+            }
+            return modules.includes(item.module);
+          })
+          .map((item) => {
+            const isActive = pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                  isActive
+                    ? "bg-primary/10 text-primary"
+                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                )}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            );
+          })}
 
         {user?.isAdmin && (
           <>

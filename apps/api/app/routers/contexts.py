@@ -2,7 +2,7 @@
 import base64
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
-from app.core.auth import get_current_user
+from app.core.rbac import require_permission
 from app.schemas.context import ContextCreateRequest, ContextUpdateRequest, BulkUploadRequest
 
 router = APIRouter()
@@ -18,7 +18,7 @@ def _headers(user: dict, org_id: int) -> dict:
 @router.get("/list")
 async def list_contexts(
     org_id: int = Query(...),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_permission("context_management", "view")),
 ):
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(
@@ -34,7 +34,7 @@ async def list_contexts(
 async def upload_context(
     req: ContextCreateRequest,
     org_id: int = Query(...),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_permission("context_management", "create")),
 ):
     encoded = base64.b64encode(req.content.encode("utf-8")).decode("utf-8")
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -55,7 +55,7 @@ async def upload_context(
 async def update_context(
     req: ContextUpdateRequest,
     org_id: int = Query(...),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_permission("context_management", "edit")),
 ):
     encoded = base64.b64encode(req.content.encode("utf-8")).decode("utf-8")
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -77,7 +77,7 @@ async def update_context(
 async def delete_context(
     context_id: str = Query(...),
     org_id: int = Query(...),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_permission("context_management", "delete")),
 ):
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.delete(
@@ -94,7 +94,7 @@ async def delete_context(
 async def bulk_upload(
     req: BulkUploadRequest,
     org_id: int = Query(...),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_permission("context_management", "create")),
 ):
     results = []
     for item in req.contexts:

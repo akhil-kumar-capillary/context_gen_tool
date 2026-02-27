@@ -396,7 +396,7 @@ Write documents in this exact order (dependencies flow downward):
 6th+: 06/07/08+_CONTEXT     (references everything above + declares overrides)
 
 4.2 — Content Migration Rules
-Follow these 11 rules for every piece of content migrated:
+Follow these 12 rules for every piece of content migrated:
 
 Rule M-1: Tables over prose. If information can be expressed as a table, use a table. LLMs parse structured tables more reliably than paragraphs.
 
@@ -430,6 +430,8 @@ Rule M-10: End every document with a Scalability section. A brief "To add..." se
 
 Rule M-11: Output documents must read as fresh, original documents. Every output document must read as if it was always written this way. There must be zero references to restructuring, migration, modification, prior versions, source documents, or the process that created them.
 
+Rule M-12: Mandatory opening description. Every document MUST begin with a 2-4 sentence description in the first 100-200 characters. This description must explain: (a) what this document contains, (b) when the AI should load/refer to this document, and (c) what types of user questions this document helps answer. This acts as a retrieval hint — it helps the system decide when to load this context. It must be the VERY FIRST content, before any sections or headers.
+
 FORBIDDEN language in output documents:
   - "Migrated from..."
   - "Previously in..."
@@ -449,7 +451,7 @@ For each document, follow this process:
 1. Write the header (role statement, one-line description)
 2. Write section headings based on the item mapping from Phase 3
 3. Migrate items one by one from the extraction list
-4. Apply formatting rules M-1 through M-11
+4. Apply formatting rules M-1 through M-12
 5. Add cross-references where needed (by rule ID)
 6. Add the scalability section
 7. Re-read the complete document for internal consistency
@@ -460,6 +462,10 @@ Apply these uniformly across all documents:
 Markdown structure:
 ```
 # [NUMBER] — [DOCUMENT NAME]
+
+[2-4 sentence description: what this document contains, when the AI should
+load/refer to it, and what types of questions it helps answer. This MUST be
+the first 100-200 characters of the document — it serves as the retrieval hint.]
 
 > **Role:** One-sentence role description.
 
@@ -675,7 +681,8 @@ PHASE 3: ARCHITECTURE DESIGN
 
 PHASE 4: CONTENT MIGRATION
 [ ] Documents written in dependency order (01 first, conditionals last)
-[ ] All formatting rules (M-1 through M-11) applied
+[ ] All formatting rules (M-1 through M-12) applied
+[ ] Every document starts with a 100-200 character retrieval description (M-12)
 [ ] Every rule has a unique ID
 [ ] Every conditional rule has an explicit trigger
 [ ] Every override names what it overrides by ID

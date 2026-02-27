@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.core.websocket import websocket_endpoint
 from app.core.task_registry import task_registry
-from app.routers import auth, contexts, databricks, confluence, config_apis, llm, admin, chat
+from app.routers import auth, contexts, databricks, confluence, config_apis, llm, admin, chat, context_engine
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,7 @@ app.include_router(config_apis.router, prefix="/api/sources/config-apis", tags=[
 app.include_router(llm.router, prefix="/api/llm", tags=["llm"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
+app.include_router(context_engine.router, prefix="/api/context-engine", tags=["context-engine"])
 
 # WebSocket — general purpose (used by Databricks pipeline progress etc.)
 app.add_api_websocket_route("/api/ws", websocket_endpoint)

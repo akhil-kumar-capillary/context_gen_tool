@@ -9,9 +9,18 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@nivo/bar": "^0.99.0",
+    "@nivo/core": "^0.99.0",
+    "@nivo/heatmap": "^0.99.0",
+    "@nivo/sunburst": "^0.99.0",
+    "@nivo/tooltip": "^0.99.0",
+    "@nivo/treemap": "^0.99.0",
     "@tanstack/react-query": "^5.59.0",
+    "@tanstack/react-table": "^8.21.3",
+    "@xyflow/react": "^12.10.1",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "framer-motion": "^12.34.3",
     "jszip": "^3.10.1",
     "lucide-react": "^0.451.0",
     "next": "^14.2.15",

@@ -4,8 +4,10 @@ from app.models.analysis import AnalysisRun, AnalysisFingerprint, AnalysisNotebo
 from app.models.context_doc import ContextDoc
 from app.models.context import ManagedContext, RefactoringRun
 from app.models.source_run import ConfluenceExtraction, ConfigApiExtraction
+from app.models.config_pipeline import ConfigExtractionRun, ConfigAnalysisRun
 from app.models.audit_log import AuditLog
 from app.models.chat import ChatConversation, ChatMessage
+from app.models.context_tree import ContextTreeRun
 
 __all__ = [
     "User", "Role", "Permission", "UserRole", "UserPermission",
@@ -15,6 +17,8 @@ __all__ = [
     "ContextDoc",
     "ManagedContext", "RefactoringRun",
     "ConfluenceExtraction", "ConfigApiExtraction",
+    "ConfigExtractionRun", "ConfigAnalysisRun",
     "AuditLog",
     "ChatConversation", "ChatMessage",
+    "ContextTreeRun",
 ]

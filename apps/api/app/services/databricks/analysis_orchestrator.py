@@ -154,7 +154,7 @@ async def run_analysis(
         await storage.save_analysis_fingerprints(analysis_id, fp_dicts)
 
         # Link notebooks that contributed
-        notebook_links = _compute_notebook_links(sql_records, run_id)
+        notebook_links = await _compute_notebook_links(sql_records, run_id, storage)
         if notebook_links:
             await storage.save_analysis_notebooks(analysis_id, notebook_links)
 
@@ -182,29 +182,33 @@ async def run_analysis(
         raise
 
 
-def _compute_notebook_links(
-    sql_records: list[dict], run_id: str
+async def _compute_notebook_links(
+    sql_records: list[dict], run_id: str, storage: StorageService
 ) -> list[dict]:
     """Compute notebook → SQL count linkage from SQL records.
 
-    Note: This returns notebook_id based on the record's id field.
-    The router/orchestrator should ensure notebook_metadata IDs are populated.
+    Resolves notebook_metadata IDs by matching notebook_path from the
+    extracted SQL records against the notebook_metadata table for the run.
     """
-    # Group SQLs by notebook path to compute sql_count per notebook
+    # 1. Group SQLs by notebook path to compute sql_count per notebook
     nb_counts: dict[str, int] = {}
-    nb_ids: dict[str, int] = {}
     for r in sql_records:
         path = r.get("notebook_path") or r.get("NotebookPath", "")
-        nb_counts[path] = nb_counts.get(path, 0) + 1
-        # Use the notebook metadata id if available
-        if "notebook_metadata_id" in r:
-            nb_ids[path] = r["notebook_metadata_id"]
+        if path:
+            nb_counts[path] = nb_counts.get(path, 0) + 1
 
+    if not nb_counts:
+        return []
+
+    # 2. Resolve notebook_metadata IDs by path from the DB
+    nb_id_map = await storage.get_notebook_id_map(run_id)
+
+    # 3. Build links for paths that have a matching notebook_metadata record
     links = []
     for path, count in nb_counts.items():
-        if path in nb_ids:
+        if path in nb_id_map:
             links.append({
-                "notebook_id": nb_ids[path],
+                "notebook_id": nb_id_map[path],
                 "sql_count": count,
             })
 

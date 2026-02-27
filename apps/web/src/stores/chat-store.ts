@@ -34,6 +34,9 @@ interface ChatState {
 
   // Actions — new chat
   newConversation: () => void;
+
+  // Reset all state (org change)
+  reset: () => void;
 }
 
 export const useChatStore = create<ChatState>()((set, get) => ({
@@ -127,6 +130,18 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
   newConversation: () =>
     set({
+      activeConversationId: null,
+      messages: [],
+      isStreaming: false,
+      streamingText: "",
+      activeToolCalls: [],
+    }),
+
+  // --- Reset all state (org change) ---
+
+  reset: () =>
+    set({
+      conversations: [],
       activeConversationId: null,
       messages: [],
       isStreaming: false,

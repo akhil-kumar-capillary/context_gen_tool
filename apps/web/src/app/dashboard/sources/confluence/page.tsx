@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { useAuthStore } from "@/stores/auth-store";
+import { ModuleGuard } from "@/components/layout/module-guard";
 import {
   Plug, Search, FolderOpen, Download, Loader2, RefreshCw,
   ChevronRight, FileText, Check, AlertCircle, ExternalLink,
@@ -193,6 +194,7 @@ export default function ConfluencePage() {
   };
 
   return (
+    <ModuleGuard module="confluence">
     <div className="space-y-6">
       {/* Header */}
       <div>
@@ -482,5 +484,6 @@ export default function ConfluencePage() {
         </div>
       )}
     </div>
+    </ModuleGuard>
   );
 }

@@ -172,6 +172,13 @@ THE 5 DOCUMENTS AND THEIR BOUNDARIES:
   05_QUERY_PATTERNS   -> Complete reusable SQL templates for every business scenario.
 
 CRITICAL WRITING RULES:
+  - MANDATORY OPENING: The document MUST begin with a 2-4 sentence description in the
+    first 100-200 characters. This description must explain:
+    (a) What this document contains
+    (b) When the AI should load/refer to this document
+    (c) What types of user questions this document helps answer
+    This description acts as a retrieval hint — it helps the system decide when to load
+    this context. It must be the VERY FIRST content in the document, before any sections.
   - NEVER mention query counts, usage percentages, or frequency stats.
     Do NOT write "used in 90% of queries" or "appears 120 times".
     Write as authoritative documentation, not statistical analysis.

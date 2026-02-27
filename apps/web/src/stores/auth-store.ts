@@ -15,12 +15,14 @@ interface AuthState {
   setAuth: (token: string, user: User, cluster: string, baseUrl: string) => void;
   setOrgs: (orgs: Org[]) => void;
   selectOrg: (orgId: number, orgName: string) => void;
+  setAllowedModules: (modules: string[]) => void;
+  hasModuleAccess: (module: string) => boolean;
   logout: () => void;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       token: null,
       user: null,
       isLoggedIn: false,
@@ -43,6 +45,19 @@ export const useAuthStore = create<AuthState>()(
       setOrgs: (orgs) => set({ orgs }),
 
       selectOrg: (orgId, orgName) => set({ orgId, orgName }),
+
+      setAllowedModules: (modules) =>
+        set((state) => ({
+          user: state.user ? { ...state.user, allowedModules: modules } : null,
+        })),
+
+      hasModuleAccess: (module: string): boolean => {
+        const { user } = get();
+        if (!user) return false;
+        if (user.isAdmin) return true;
+        if (module === "general") return true;
+        return user.allowedModules?.includes(module) ?? false;
+      },
 
       logout: () =>
         set({

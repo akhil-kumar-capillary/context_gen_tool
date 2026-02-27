@@ -153,6 +153,11 @@ export function AnalysisPanel() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isComplete, activeExtractionId, token]);
 
+  const handleViewDashboard = (analysisId: string) => {
+    setActiveAnalysisId(analysisId);
+    // Stay on "analyze" step — RunDetailView will render the dashboard below
+  };
+
   const handleSelectAnalysis = (analysisId: string) => {
     setActiveAnalysisId(analysisId);
     setActiveStep("generate");
@@ -287,27 +292,61 @@ export function AnalysisPanel() {
         <div className="rounded-xl border border-gray-200 bg-white p-6">
           <h3 className="mb-3 text-sm font-semibold text-gray-900">Analysis History</h3>
           <div className="space-y-2">
-            {analysisRuns.map((run) => (
-              <div
-                key={run.id}
-                className="flex items-center justify-between rounded-lg border border-gray-200 p-3 hover:bg-gray-50"
-              >
-                <div>
-                  <span className="text-sm font-medium text-gray-900">
-                    org={run.org_id} v{run.version}
-                  </span>
-                  <span className="ml-2 text-xs text-gray-500">
-                    {run.fingerprint_count ?? 0} fingerprints, {run.notebook_count ?? 0} notebooks
-                  </span>
-                </div>
-                <button
-                  onClick={() => handleSelectAnalysis(run.id)}
-                  className="rounded-md px-3 py-1.5 text-xs font-medium text-violet-600 hover:bg-violet-50"
+            {analysisRuns.map((run) => {
+              const isActive = activeAnalysisId === run.id;
+              return (
+                <div
+                  key={run.id}
+                  onClick={() => handleViewDashboard(run.id)}
+                  className={cn(
+                    "flex items-center justify-between rounded-lg border p-3 cursor-pointer transition-all",
+                    isActive
+                      ? "border-violet-300 bg-violet-50 ring-1 ring-violet-200"
+                      : "border-gray-200 hover:bg-gray-50"
+                  )}
                 >
-                  Generate Docs
-                </button>
-              </div>
-            ))}
+                  <div className="flex items-center gap-3 min-w-0">
+                    <BarChart3 className={cn(
+                      "h-4 w-4 flex-shrink-0",
+                      isActive ? "text-violet-600" : "text-gray-400"
+                    )} />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-900">
+                          org={run.org_id} v{run.version}
+                        </span>
+                        {isActive && (
+                          <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700">
+                            Viewing
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs text-gray-500">
+                        {run.fingerprint_count ?? 0} fingerprints · {run.notebook_count ?? 0} notebooks
+                        {run.created_at && (
+                          <> · {new Date(run.created_at).toLocaleDateString()}</>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectAnalysis(run.id);
+                      }}
+                      className="rounded-md px-3 py-1.5 text-xs font-medium text-violet-600 hover:bg-violet-100 transition-colors"
+                    >
+                      Generate Docs
+                    </button>
+                    <ChevronRight className={cn(
+                      "h-4 w-4 transition-transform",
+                      isActive ? "text-violet-500 rotate-90" : "text-gray-400"
+                    )} />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

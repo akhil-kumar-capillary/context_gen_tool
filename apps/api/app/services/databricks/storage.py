@@ -391,6 +391,16 @@ class StorageService:
             rows = result.scalars().all()
             return [self._nb_to_dict(r) for r in rows]
 
+    async def get_notebook_id_map(self, run_id: str) -> dict[str, int]:
+        """Return {notebook_path: id} map for all notebook_metadata in a run."""
+        uid = uuid.UUID(run_id)
+        async with async_session() as db:
+            stmt = select(
+                NotebookMetadata.notebook_path, NotebookMetadata.id
+            ).where(NotebookMetadata.run_id == uid)
+            result = await db.execute(stmt)
+            return {row.notebook_path: row.id for row in result.all()}
+
     def _nb_to_dict(self, nb: NotebookMetadata) -> dict:
         return {
             "id": nb.id,
@@ -677,15 +687,20 @@ class StorageService:
             await db.commit()
 
     async def get_analysis_notebooks(self, analysis_id: str) -> list[dict]:
-        """Get notebooks linked to an analysis run with metadata."""
+        """Get notebooks linked to an analysis run with full metadata."""
         uid = uuid.UUID(analysis_id)
         async with async_session() as db:
             stmt = text("""
                 SELECT an.id, an.analysis_id, an.notebook_id, an.sql_count,
                        an.created_at,
                        nm.notebook_path, nm.notebook_name, nm.user_name,
-                       nm.language, nm.status, nm.is_attached_to_jobs,
-                       nm.job_id, nm.job_name
+                       nm.object_id, nm.language, nm.has_content, nm.file_type,
+                       nm.status, nm.is_attached_to_jobs,
+                       nm.job_id, nm.job_name,
+                       nm.cont_success_run_count, nm.earliest_run_date,
+                       nm.trigger_type,
+                       nm.created_at  AS nb_created_at,
+                       nm.modified_at AS nb_modified_at
                 FROM analysis_notebooks an
                 JOIN notebook_metadata nm ON an.notebook_id = nm.id
                 WHERE an.analysis_id = :analysis_id

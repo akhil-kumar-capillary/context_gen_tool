@@ -9,7 +9,7 @@ import type { LoginResponse } from "@/types";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { setAuth } = useAuthStore();
+  const { setAuth, setAllowedModules } = useAuthStore();
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -31,6 +31,19 @@ export default function LoginPage() {
       });
 
       setAuth(response.token, response.user, cluster, selectedCluster.url);
+
+      // Fetch user's allowed modules
+      try {
+        const modulesResp = await apiClient.get<{ modules: string[] }>(
+          "/api/auth/me/modules",
+          { token: response.token }
+        );
+        setAllowedModules(modulesResp.modules);
+      } catch {
+        // Fallback: only chat is universally accessible
+        setAllowedModules(["general"]);
+      }
+
       router.push("/org-picker");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");

@@ -12,34 +12,34 @@ from app.config import settings
 # Module definitions
 MODULES = {
     "databricks": ["view", "extract", "analyze", "generate"],
-    "confluence": ["view", "extract", "generate"],
-    "config_apis": ["view", "fetch", "generate"],
+    "confluence": ["view", "connect", "extract", "generate"],
+    "config_apis": ["view", "fetch", "analyze", "generate"],
     "context_management": ["view", "create", "edit", "delete", "refactor"],
+    "context_engine": ["view", "edit", "generate", "sync"],
     "admin": ["view", "manage_users", "manage_secrets"],
 }
 
 # Role definitions
+# Roles define the *access level* (what operations a user can do).
+# Module access is granted independently by admin via direct UserPermissions.
+# See ROLE_CAPABILITIES in app/core/rbac.py for how these interact.
 ROLES = {
     "admin": {
         "description": "Full access to all modules and administration",
         "permissions": "all",
     },
     "operator": {
-        "description": "Can use all source modules and manage contexts",
+        "description": "Full CRUD access level (modules granted separately by admin)",
         "permissions": {
-            "databricks": ["view", "extract", "analyze", "generate"],
-            "confluence": ["view", "extract", "generate"],
-            "config_apis": ["view", "fetch", "generate"],
             "context_management": ["view", "create", "edit", "delete", "refactor"],
+            "context_engine": ["view", "edit", "generate", "sync"],
         },
     },
     "viewer": {
-        "description": "Read-only access to contexts and source data",
+        "description": "Read-only access level (modules granted separately by admin)",
         "permissions": {
-            "databricks": ["view"],
-            "confluence": ["view"],
-            "config_apis": ["view"],
             "context_management": ["view"],
+            "context_engine": ["view"],
         },
     },
 }
@@ -96,6 +96,16 @@ async def seed():
                 )
                 if not existing.scalar_one_or_none():
                     db.add(RolePermission(role_id=role.id, permission_id=perm.id))
+
+            # Remove stale RolePermissions no longer in the role definition
+            # (e.g. viewer losing databricks:view after role narrowing)
+            target_perm_ids = {p.id for p in target_perms}
+            all_role_perms = await db.execute(
+                select(RolePermission).where(RolePermission.role_id == role.id)
+            )
+            for rp in all_role_perms.scalars().all():
+                if rp.permission_id not in target_perm_ids:
+                    await db.delete(rp)
 
         # 3. Seed primary admin user
         result = await db.execute(

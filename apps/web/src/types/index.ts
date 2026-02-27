@@ -10,6 +10,7 @@ export interface User {
   displayName: string;
   isAdmin: boolean;
   orgs: Org[];
+  allowedModules?: string[];
 }
 
 export interface LoginResponse {

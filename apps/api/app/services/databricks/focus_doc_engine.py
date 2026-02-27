@@ -58,6 +58,14 @@ adequately covered within the 5 core context documents.
 
 Reason this doc was created: {reason}
 
+MANDATORY OPENING: The document MUST begin with a 2-4 sentence description in the
+first 100-200 characters. This description must explain:
+(a) What this document contains
+(b) When the AI should load/refer to this document
+(c) What types of user questions this document helps answer
+This description acts as a retrieval hint — it helps the system decide when to load
+this context. It must be the VERY FIRST content in the document, before any sections.
+
 NEVER mention query counts, percentages, or how often something is used.
 Write as an authoritative, self-contained guide.
 

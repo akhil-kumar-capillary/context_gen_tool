@@ -22,6 +22,7 @@ import app.services.tools.context_tools  # noqa: F401
 import app.services.tools.databricks_tools  # noqa: F401
 import app.services.tools.confluence_tools  # noqa: F401
 import app.services.tools.config_api_tools  # noqa: F401
+import app.services.tools.context_engine_tools  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
