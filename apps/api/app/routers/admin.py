@@ -1,6 +1,6 @@
 """Admin panel endpoints — user management, RBAC, secrets, audit logs."""
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.core.auth import require_admin
 from app.models.user import User, Role, Permission, UserRole, UserPermission
+from app.models.audit_log import AuditLog
 from app.config import settings
 from app.schemas.admin import (
     GrantRoleRequest, RevokeRoleRequest,
@@ -17,6 +18,31 @@ from app.schemas.admin import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+async def _audit(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    user_email: str,
+    action: str,
+    module: str | None = None,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
+    details: dict | None = None,
+    ip_address: str | None = None,
+):
+    """Helper to create an audit log entry."""
+    db.add(AuditLog(
+        user_id=user_id,
+        user_email=user_email,
+        action=action,
+        module=module,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        details=details,
+        ip_address=ip_address,
+    ))
 
 
 @router.get("/users")
@@ -84,6 +110,7 @@ async def list_permissions(
 @router.post("/users/toggle-admin")
 async def toggle_admin(
     req: ToggleAdminRequest,
+    request: Request,
     current_user: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -104,15 +131,29 @@ async def toggle_admin(
         raise HTTPException(404, f"User '{req.user_email}' not found")
 
     user.is_admin = not user.is_admin
+
+    action = "promote_admin" if user.is_admin else "demote_admin"
+    await _audit(
+        db,
+        user_id=current_user["user_id"],
+        user_email=current_user.get("email", ""),
+        action=action,
+        module="admin",
+        resource_type="user",
+        resource_id=req.user_email,
+        details={"target_user": req.user_email, "new_is_admin": user.is_admin},
+        ip_address=request.client.host if request.client else None,
+    )
     await db.commit()
 
-    action = "promoted to admin" if user.is_admin else "demoted from admin"
-    return {"message": f"{req.user_email} {action}", "is_admin": user.is_admin}
+    label = "promoted to admin" if user.is_admin else "demoted from admin"
+    return {"message": f"{req.user_email} {label}", "is_admin": user.is_admin}
 
 
 @router.post("/users/grant-role")
 async def grant_role(
     req: GrantRoleRequest,
+    request: Request,
     current_user: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -139,6 +180,18 @@ async def grant_role(
     await db.flush()
 
     db.add(UserRole(user_id=user.id, role_id=role.id, granted_by=current_user["user_id"]))
+
+    await _audit(
+        db,
+        user_id=current_user["user_id"],
+        user_email=current_user.get("email", ""),
+        action="grant_role",
+        module="admin",
+        resource_type="user",
+        resource_id=req.user_email,
+        details={"target_user": req.user_email, "role": req.role_name},
+        ip_address=request.client.host if request.client else None,
+    )
     await db.commit()
     return {"message": f"Role set to '{req.role_name}' for {req.user_email}"}
 
@@ -146,6 +199,7 @@ async def grant_role(
 @router.post("/users/revoke-role")
 async def revoke_role(
     req: RevokeRoleRequest,
+    request: Request,
     current_user: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -165,13 +219,26 @@ async def revoke_role(
     ur = existing.scalar_one_or_none()
     if ur:
         await db.delete(ur)
-        await db.commit()
+
+    await _audit(
+        db,
+        user_id=current_user["user_id"],
+        user_email=current_user.get("email", ""),
+        action="revoke_role",
+        module="admin",
+        resource_type="user",
+        resource_id=req.user_email,
+        details={"target_user": req.user_email, "role": req.role_name},
+        ip_address=request.client.host if request.client else None,
+    )
+    await db.commit()
     return {"message": f"Role '{req.role_name}' revoked from {req.user_email}"}
 
 
 @router.post("/users/grant-permission")
 async def grant_permission(
     req: GrantPermissionRequest,
+    request: Request,
     current_user: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -198,6 +265,18 @@ async def grant_permission(
         return {"message": f"Permission already granted"}
 
     db.add(UserPermission(user_id=user.id, permission_id=perm.id, granted_by=current_user["user_id"]))
+
+    await _audit(
+        db,
+        user_id=current_user["user_id"],
+        user_email=current_user.get("email", ""),
+        action="grant_permission",
+        module="admin",
+        resource_type="user",
+        resource_id=req.user_email,
+        details={"target_user": req.user_email, "permission": f"{req.module}.{req.operation}"},
+        ip_address=request.client.host if request.client else None,
+    )
     await db.commit()
     return {"message": f"Permission '{req.module}.{req.operation}' granted to {req.user_email}"}
 
@@ -205,6 +284,7 @@ async def grant_permission(
 @router.post("/users/revoke-permission")
 async def revoke_permission(
     req: RevokePermissionRequest,
+    request: Request,
     current_user: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -228,13 +308,26 @@ async def revoke_permission(
     up = existing.scalar_one_or_none()
     if up:
         await db.delete(up)
-        await db.commit()
+
+    await _audit(
+        db,
+        user_id=current_user["user_id"],
+        user_email=current_user.get("email", ""),
+        action="revoke_permission",
+        module="admin",
+        resource_type="user",
+        resource_id=req.user_email,
+        details={"target_user": req.user_email, "permission": f"{req.module}.{req.operation}"},
+        ip_address=request.client.host if request.client else None,
+    )
+    await db.commit()
     return {"message": f"Permission revoked"}
 
 
 @router.post("/users/set-permissions")
 async def set_permissions(
     req: SetPermissionsRequest,
+    request: Request,
     current_user: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -273,6 +366,17 @@ async def set_permissions(
             ))
             granted.append(f"{perm_req.module}.{perm_req.operation}")
 
+    await _audit(
+        db,
+        user_id=current_user["user_id"],
+        user_email=current_user.get("email", ""),
+        action="set_permissions",
+        module="admin",
+        resource_type="user",
+        resource_id=req.user_email,
+        details={"target_user": req.user_email, "permissions": granted},
+        ip_address=request.client.host if request.client else None,
+    )
     await db.commit()
     return {
         "message": f"Set {len(granted)} permissions for {req.user_email}",
@@ -287,7 +391,6 @@ async def get_audit_logs(
     limit: int = 100,
     offset: int = 0,
 ):
-    from app.models.audit_log import AuditLog
     result = await db.execute(
         select(AuditLog)
         .order_by(AuditLog.created_at.desc())

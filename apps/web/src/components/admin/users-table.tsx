@@ -100,6 +100,8 @@ function ModuleAccessTree({
 }) {
   const { setPermissions, actionLoading } = useAdminStore();
 
+  const isAdmin = user.roles[0] === "admin";
+
   // Initialize local state from user's current permissions
   const serverPerms = useMemo(() => {
     const s = new Set<string>();
@@ -181,6 +183,57 @@ function ModuleAccessTree({
     const ok = await setPermissions(user.email, perms);
     if (ok) onSaved();
   };
+
+  // Admins have full access — show all checked & disabled
+  if (isAdmin) {
+    return (
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+          Module Access
+        </p>
+        <div className="rounded-lg border border-gray-200 bg-white divide-y divide-gray-100">
+          {MODULE_KEYS.map((mod) => {
+            const modDef = MODULES[mod];
+            const ops = modDef.operations;
+            return (
+              <div key={mod} className="px-3 py-2">
+                <label className="flex items-center gap-2 opacity-70 cursor-default">
+                  <input
+                    type="checkbox"
+                    checked
+                    disabled
+                    className="h-3.5 w-3.5 rounded border-gray-300 text-violet-600"
+                  />
+                  <span className="text-sm font-medium text-gray-800">
+                    {modDef.label}
+                  </span>
+                  <span className="text-[10px] text-gray-400 ml-1">
+                    {ops.length}/{ops.length}
+                  </span>
+                </label>
+                <div className="mt-1.5 ml-5 flex flex-wrap gap-x-4 gap-y-1">
+                  {ops.map((op) => (
+                    <label key={op.key} className="flex items-center gap-1.5 opacity-70 cursor-default">
+                      <input
+                        type="checkbox"
+                        checked
+                        disabled
+                        className="h-3 w-3 rounded border-gray-300 text-blue-600 disabled:opacity-50"
+                      />
+                      <span className="text-xs text-gray-600">{op.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-[11px] text-gray-400 italic">
+          Admins have full access to all modules and operations.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2">
