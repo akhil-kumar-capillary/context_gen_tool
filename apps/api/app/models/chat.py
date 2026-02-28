@@ -16,7 +16,7 @@ class ChatConversation(Base):
     org_id = Column(Integer, nullable=False, index=True)
     title = Column(String(255), default="New Chat")
     provider = Column(String(50), default="anthropic")
-    model = Column(String(100), default="claude-sonnet-4-20250514")
+    model = Column(String(100), default="claude-opus-4-6")
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

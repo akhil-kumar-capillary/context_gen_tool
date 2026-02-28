@@ -35,7 +35,7 @@ async def run_generation(
     analysis_id: str,
     user_id: int,
     provider: str = "anthropic",
-    model: str = "claude-sonnet-4-5-20250929",
+    model: str = "claude-opus-4-6",
     model_map: Optional[dict] = None,
     system_prompts: Optional[dict] = None,
     inclusions: Optional[dict] = None,

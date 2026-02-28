@@ -77,7 +77,7 @@ def _build_comparison_pairs(leaves: list[dict], max_pairs: int = 20) -> list[tup
 async def detect_conflicts(
     tree: dict,
     provider: str = "anthropic",
-    model: str = "claude-sonnet-4-20250514",
+    model: str = "claude-opus-4-6",
 ) -> int:
     """Detect contradictions between leaf nodes.
 

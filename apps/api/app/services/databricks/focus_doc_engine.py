@@ -256,7 +256,7 @@ async def assess_and_author_focus_docs(
     alias_conv: dict,
     preamble: str,
     provider: str = "anthropic",
-    model: str = "claude-sonnet-4-5-20250929",
+    model: str = "claude-opus-4-6",
     focus_domains: Optional[list] = None,
     on_progress: Optional[Callable] = None,
 ) -> dict:

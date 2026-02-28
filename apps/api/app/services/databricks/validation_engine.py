@@ -39,7 +39,7 @@ async def validate_and_patch(
     payloads: dict,
     preamble: str,
     provider: str = "anthropic",
-    model: str = "claude-sonnet-4-5-20250929",
+    model: str = "claude-opus-4-6",
     system_prompts: Optional[dict] = None,
     on_progress: Optional[Callable] = None,
 ) -> dict:

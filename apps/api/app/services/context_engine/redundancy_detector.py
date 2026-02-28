@@ -29,7 +29,7 @@ def _collect_leaves(node: dict) -> list[dict]:
 async def detect_redundancy(
     tree: dict,
     provider: str = "anthropic",
-    model: str = "claude-sonnet-4-20250514",
+    model: str = "claude-opus-4-6",
     threshold: int = 40,
 ) -> int:
     """Detect semantic overlap between leaf nodes.

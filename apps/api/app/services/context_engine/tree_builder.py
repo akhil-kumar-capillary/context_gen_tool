@@ -399,7 +399,7 @@ async def build_tree(
     progress_cb: ProgressCallback | None = None,
     cancel_event: asyncio.Event | None = None,
     provider: str = "anthropic",
-    model: str = "claude-sonnet-4-20250514",
+    model: str = "claude-opus-4-6",
     max_tokens: int = 16000,
 ) -> dict[str, Any]:
     """Ask LLM to organize contexts into a hierarchical tree.

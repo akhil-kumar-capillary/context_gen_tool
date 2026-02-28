@@ -13,8 +13,8 @@ interface SettingsState {
 }
 
 export const ANTHROPIC_MODELS = [
-  { id: "claude-sonnet-4-5-20250929", label: "Claude Sonnet 4.5" },
   { id: "claude-opus-4-6", label: "Claude Opus 4.6" },
+  { id: "claude-sonnet-4-5-20250929", label: "Claude Sonnet 4.5" },
   { id: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
 ] as const;
 
@@ -28,13 +28,13 @@ export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
       provider: "anthropic",
-      model: "claude-sonnet-4-5-20250929",
+      model: "claude-opus-4-6",
       blueprintText: null,
 
       setProvider: (provider) => {
         const defaultModel =
           provider === "anthropic"
-            ? "claude-sonnet-4-5-20250929"
+            ? "claude-opus-4-6"
             : "gpt-4o";
         set({ provider, model: defaultModel });
       },

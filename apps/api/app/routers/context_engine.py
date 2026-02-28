@@ -23,7 +23,7 @@ router = APIRouter(tags=["context-engine"])
 
 class GenerateRequest(BaseModel):
     provider: str = Field(default="anthropic", description="LLM provider")
-    model: str = Field(default="claude-sonnet-4-20250514", description="LLM model")
+    model: str = Field(default="claude-opus-4-6", description="LLM model")
 
 
 class UpdateTreeRequest(BaseModel):

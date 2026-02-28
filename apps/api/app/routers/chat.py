@@ -169,7 +169,7 @@ async def _handle_chat_message(
 
     conversation_id = msg.get("conversation_id")
     provider = msg.get("provider", "anthropic")
-    model = msg.get("model", "claude-sonnet-4-20250514")
+    model = msg.get("model", "claude-opus-4-6")
     org_id = msg.get("org_id")
 
     if not org_id:

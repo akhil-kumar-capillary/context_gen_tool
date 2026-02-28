@@ -54,7 +54,7 @@ class StartAnalysisRequest(BaseModel):
 class GenerateDocsRequest(BaseModel):
     analysis_id: str = Field(..., description="Analysis run UUID")
     provider: str = Field(default="anthropic")
-    model: str = Field(default="claude-sonnet-4-5-20250929")
+    model: str = Field(default="claude-opus-4-6")
     inclusions: Optional[dict] = Field(
         default=None,
         description="Per-doc-type inclusion toggles: {doc_key: {entity_path: bool}}",

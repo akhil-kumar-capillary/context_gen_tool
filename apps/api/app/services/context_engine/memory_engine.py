@@ -71,7 +71,7 @@ async def detect_memory_patterns(
     min_sessions: int = 3,
     min_confidence: int = 70,
     provider: str = "anthropic",
-    model: str = "claude-sonnet-4-20250514",
+    model: str = "claude-opus-4-6",
 ) -> list[dict]:
     """Analyze chat history for recurring patterns.
 

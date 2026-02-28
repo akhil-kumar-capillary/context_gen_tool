@@ -33,7 +33,7 @@ async def propose_restructure(
     node_ids: list[str],
     instruction: str,
     provider: str = "anthropic",
-    model: str = "claude-sonnet-4-20250514",
+    model: str = "claude-opus-4-6",
 ) -> dict:
     """Propose a restructure of selected nodes.
 

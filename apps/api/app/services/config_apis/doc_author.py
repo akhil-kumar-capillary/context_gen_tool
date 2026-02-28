@@ -287,7 +287,7 @@ async def author_doc(
     doc_key: str,
     payload: str,
     provider: str = "anthropic",
-    model: str = "claude-sonnet-4-5-20250929",
+    model: str = "claude-opus-4-6",
     system_prompt_override: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Generate a context document using the LLM service.

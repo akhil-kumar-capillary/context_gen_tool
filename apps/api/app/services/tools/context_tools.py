@@ -517,7 +517,7 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
     # 4. Stream LLM response (collect full output)
     full_output = ""
     provider = "anthropic"  # Default to Anthropic for refactoring
-    model = "claude-sonnet-4-20250514"
+    model = "claude-opus-4-6"
 
     try:
         async for event in stream_llm(

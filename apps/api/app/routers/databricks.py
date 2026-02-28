@@ -47,7 +47,7 @@ class StartAnalysisRequest(BaseModel):
 class GenerateDocsRequest(BaseModel):
     analysis_id: str = Field(..., description="Analysis run UUID")
     provider: str = Field(default="anthropic")
-    model: str = Field(default="claude-sonnet-4-5-20250929")
+    model: str = Field(default="claude-opus-4-6")
     model_map: Optional[dict] = Field(default=None, description="Per-doc model overrides")
     system_prompts: Optional[dict] = Field(default=None, description="Custom system prompts")
     inclusions: Optional[dict] = Field(default=None, description="Payload inclusion overrides")

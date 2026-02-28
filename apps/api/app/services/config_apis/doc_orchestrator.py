@@ -114,7 +114,7 @@ async def run_generation(
     user_id: int,
     org_id: int,
     provider: str = "anthropic",
-    model: str = "claude-sonnet-4-5-20250929",
+    model: str = "claude-opus-4-6",
     inclusions: Optional[Dict[str, Dict[str, bool]]] = None,
     system_prompts: Optional[Dict[str, str]] = None,
     on_progress: Optional[ProgressCallback] = None,
