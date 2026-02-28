@@ -567,3 +567,28 @@ async def get_doc(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     return doc
+
+
+@router.delete("/llm/doc/{doc_id}")
+async def delete_doc(
+    doc_id: int,
+    current_user: dict = Depends(require_permission("databricks", "extract")),
+):
+    """Delete a generated context document."""
+    storage = StorageService()
+    doc = await storage.get_context_doc(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    await storage.delete_context_doc(doc_id)
+    return {"status": "deleted", "doc_id": doc_id}
+
+
+@router.get("/llm/docs")
+async def list_all_docs(
+    org_id: int = Query(...),
+    current_user: dict = Depends(require_permission("databricks", "view")),
+):
+    """List all active generated docs for an org (independent of analysis runs)."""
+    storage = StorageService()
+    docs = await storage.get_all_context_docs(str(org_id))
+    return {"docs": docs, "count": len(docs)}

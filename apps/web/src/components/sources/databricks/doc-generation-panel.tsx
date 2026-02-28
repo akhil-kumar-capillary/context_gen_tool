@@ -8,6 +8,9 @@ import {
   CheckCircle,
   XCircle,
   Sparkles,
+  Copy,
+  Check,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api-client";
@@ -15,7 +18,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { useDatabricksStore, type ContextDoc } from "@/stores/databricks-store";
 
 export function DocGenerationPanel() {
-  const { token } = useAuthStore();
+  const { token, orgId } = useAuthStore();
   const {
     activeAnalysisId,
     isGenerating,
@@ -28,15 +31,18 @@ export function DocGenerationPanel() {
     setIsLoadingDocs,
   } = useDatabricksStore();
 
-  // Load existing docs for the active analysis
+  // Load docs: by analysis ID if selected, otherwise all org docs
   useEffect(() => {
-    if (!activeAnalysisId) return;
+    if (!token) return;
 
     const loadDocs = async () => {
       setIsLoadingDocs(true);
       try {
+        const url = activeAnalysisId
+          ? `/api/sources/databricks/llm/docs/${activeAnalysisId}`
+          : `/api/sources/databricks/llm/docs?org_id=${orgId}`;
         const data = await apiClient.get<{ docs: ContextDoc[]; count: number }>(
-          `/api/sources/databricks/llm/docs/${activeAnalysisId}`,
+          url,
           { token: token || undefined }
         );
         setContextDocs(data.docs);
@@ -48,7 +54,7 @@ export function DocGenerationPanel() {
     };
 
     loadDocs();
-  }, [activeAnalysisId, token, setContextDocs, setIsLoadingDocs]);
+  }, [activeAnalysisId, orgId, token, setContextDocs, setIsLoadingDocs]);
 
   const handleGenerate = useCallback(async () => {
     if (!activeAnalysisId || isGenerating) return;
@@ -87,6 +93,18 @@ export function DocGenerationPanel() {
     setIsGenerating(false);
   }, [activeAnalysisId, token, setIsGenerating]);
 
+  const handleDeleteDoc = async (docId: number) => {
+    if (!confirm("Delete this generated document? This cannot be undone.")) return;
+    try {
+      await apiClient.delete(`/api/sources/databricks/llm/doc/${docId}`, {
+        token: token || undefined,
+      });
+      setContextDocs(contextDocs.filter((d) => d.id !== docId));
+    } catch (err) {
+      console.error("Failed to delete doc:", err);
+    }
+  };
+
   // Detect which docs are being generated from progress events
   const docProgress: Record<string, string> = {};
   for (const evt of generationProgress) {
@@ -118,17 +136,14 @@ export function DocGenerationPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-gray-200 bg-white p-6">
-        <div className="mb-4 flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-violet-600" />
-          <h2 className="text-lg font-semibold text-gray-900">Generate Context Documents</h2>
-        </div>
+      {/* Generation controls — only when an analysis is selected */}
+      {activeAnalysisId && (
+        <div className="rounded-xl border border-gray-200 bg-white p-6">
+          <div className="mb-4 flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-violet-600" />
+            <h2 className="text-lg font-semibold text-gray-900">Generate Context Documents</h2>
+          </div>
 
-        {!activeAnalysisId ? (
-          <p className="text-sm text-gray-500">
-            Select an analysis run first, or go back to the analysis step.
-          </p>
-        ) : (
           <div className="space-y-4">
             <p className="text-sm text-gray-600">
               Generate 5 context documents from the analysis results using LLM.
@@ -204,8 +219,8 @@ export function DocGenerationPanel() {
               </div>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Generated Documents */}
       {contextDocs.length > 0 && (
@@ -217,7 +232,7 @@ export function DocGenerationPanel() {
 
           <div className="space-y-2">
             {contextDocs.map((doc) => (
-              <DocCard key={doc.id} doc={doc} />
+              <DocCard key={doc.id} doc={doc} onDelete={handleDeleteDoc} />
             ))}
           </div>
         </div>
@@ -232,8 +247,28 @@ export function DocGenerationPanel() {
   );
 }
 
-function DocCard({ doc }: { doc: ContextDoc }) {
+function DocCard({
+  doc,
+  onDelete,
+}: {
+  doc: ContextDoc;
+  onDelete: (docId: number) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(doc.doc_content || "");
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onDelete(doc.id);
+  };
+
   return (
     <div className="rounded-lg border border-gray-200 p-3">
       <div
@@ -248,9 +283,29 @@ function DocCard({ doc }: { doc: ContextDoc }) {
             <span className="ml-2 text-xs text-gray-500">{doc.doc_name}</span>
           )}
         </div>
-        <div className="flex items-center gap-2 text-xs text-gray-400">
-          {doc.token_count && <span>~{doc.token_count} tokens</span>}
-          {doc.model_used && <span>{doc.model_used.slice(0, 20)}</span>}
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-gray-400 mr-1">
+            {doc.token_count ? `~${doc.token_count} tokens` : ""}
+            {doc.model_used ? ` · ${doc.model_used.slice(0, 20)}` : ""}
+          </span>
+          <button
+            onClick={handleCopy}
+            className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+            title="Copy content"
+          >
+            {copied ? (
+              <Check className="h-3.5 w-3.5 text-green-500" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" />
+            )}
+          </button>
+          <button
+            onClick={handleDelete}
+            className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+            title="Delete document"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
 

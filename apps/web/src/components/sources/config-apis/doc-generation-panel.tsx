@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
-  Loader2, Play, Square, Check, AlertCircle, Clock, FileText, Copy,
+  Loader2, Play, Square, Check, AlertCircle, Clock, FileText, Copy, Trash2,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { apiClient } from "@/lib/api-client";
@@ -13,7 +13,7 @@ import {
 } from "@/stores/config-apis-store";
 
 export function DocGenerationPanel() {
-  const { token } = useAuthStore();
+  const { token, orgId } = useAuthStore();
   const {
     activeAnalysisId,
     contextDocs,
@@ -32,16 +32,16 @@ export function DocGenerationPanel() {
   const [expandedDoc, setExpandedDoc] = useState<number | null>(null);
   const [copied, setCopied] = useState<number | null>(null);
 
-  // Load existing docs for the analysis
+  // Load docs: by analysis ID if selected, otherwise all org docs
   useEffect(() => {
-    if (!token || !activeAnalysisId) return;
+    if (!token) return;
     const load = async () => {
       setIsLoadingDocs(true);
       try {
-        const data = await apiClient.get<{ docs: ContextDoc[] }>(
-          `/api/sources/config-apis/llm/docs/${activeAnalysisId}`,
-          { token }
-        );
+        const url = activeAnalysisId
+          ? `/api/sources/config-apis/llm/docs/${activeAnalysisId}`
+          : `/api/sources/config-apis/llm/docs?org_id=${orgId}`;
+        const data = await apiClient.get<{ docs: ContextDoc[] }>(url, { token });
         setContextDocs(data.docs);
       } catch {
         // ignore
@@ -49,7 +49,7 @@ export function DocGenerationPanel() {
       setIsLoadingDocs(false);
     };
     load();
-  }, [token, activeAnalysisId, setContextDocs, setIsLoadingDocs]);
+  }, [token, orgId, activeAnalysisId, setContextDocs, setIsLoadingDocs]);
 
   // Reload on generation completion
   const isComplete = generationProgress.some(
@@ -118,75 +118,74 @@ export function DocGenerationPanel() {
     setTimeout(() => setCopied(null), 2000);
   };
 
-  if (!activeAnalysisId) {
-    return (
-      <div className="rounded-xl border border-gray-200 bg-white px-6 py-12 text-center">
-        <p className="text-sm text-gray-400">
-          Select an analysis run first, or go back to the analysis step.
-        </p>
-        <button
-          onClick={() => setActiveStep("analyze")}
-          className="mt-3 text-sm text-violet-600 hover:text-violet-700"
-        >
-          Go to Analysis
-        </button>
-      </div>
-    );
-  }
+  const handleDeleteDoc = async (docId: number) => {
+    if (!token) return;
+    if (!confirm("Delete this generated document? This cannot be undone.")) return;
+    try {
+      await apiClient.delete(`/api/sources/config-apis/llm/doc/${docId}`, { token });
+      setContextDocs(contextDocs.filter((d) => d.id !== docId));
+    } catch (err) {
+      console.error("Failed to delete doc:", err);
+    }
+  };
 
   return (
     <div className="space-y-4">
-      {/* Action buttons */}
-      <div className="flex items-center gap-3">
-        {!isGenerating ? (
-          <button
-            onClick={handleGenerate}
-            className="flex items-center gap-2 rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-violet-700"
-          >
-            <Play className="h-4 w-4" />
-            Generate Context Documents
-          </button>
-        ) : (
-          <button
-            onClick={handleCancel}
-            className="flex items-center gap-2 rounded-lg bg-red-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-red-700"
-          >
-            <Square className="h-4 w-4" />
-            Stop
-          </button>
-        )}
-      </div>
-
-      {/* Progress log */}
-      {generationProgress.length > 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white">
-          <div className="border-b border-gray-200 px-5 py-3">
-            <h3 className="text-sm font-semibold text-gray-700">
-              Generation Progress
-              {isGenerating && <Loader2 className="ml-2 inline h-3.5 w-3.5 animate-spin" />}
-            </h3>
-          </div>
-          <div className="max-h-48 overflow-y-auto p-4">
-            {generationProgress.map((p, i) => (
-              <div
-                key={i}
-                className={cn(
-                  "flex items-start gap-2 py-1 text-xs",
-                  p.status === "failed" ? "text-red-600" : p.phase === "complete" ? "text-green-600" : "text-gray-600"
-                )}
+      {/* Action buttons + progress — only when an analysis is selected */}
+      {activeAnalysisId && (
+        <>
+          <div className="flex items-center gap-3">
+            {!isGenerating ? (
+              <button
+                onClick={handleGenerate}
+                className="flex items-center gap-2 rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-violet-700"
               >
-                {p.status === "done" || p.phase === "complete" ? (
-                  <Check className="mt-0.5 h-3 w-3 shrink-0 text-green-500" />
-                ) : p.status === "failed" ? (
-                  <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-red-500" />
-                ) : (
-                  <Clock className="mt-0.5 h-3 w-3 shrink-0 text-gray-400" />
-                )}
-                <span>{p.detail || p.error || p.phase || "..."}</span>
-              </div>
-            ))}
+                <Play className="h-4 w-4" />
+                Generate Context Documents
+              </button>
+            ) : (
+              <button
+                onClick={handleCancel}
+                className="flex items-center gap-2 rounded-lg bg-red-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-red-700"
+              >
+                <Square className="h-4 w-4" />
+                Stop
+              </button>
+            )}
           </div>
-        </div>
+
+          {/* Progress log */}
+          {generationProgress.length > 0 && (
+            <div className="rounded-xl border border-gray-200 bg-white">
+              <div className="border-b border-gray-200 px-5 py-3">
+                <h3 className="text-sm font-semibold text-gray-700">
+                  Generation Progress
+                  {isGenerating && <Loader2 className="ml-2 inline h-3.5 w-3.5 animate-spin" />}
+                </h3>
+              </div>
+              <div className="max-h-48 overflow-y-auto p-4">
+                {generationProgress.map((p, i) => (
+                  <div
+                    key={i}
+                    className={cn(
+                      "flex items-start gap-2 py-1 text-xs",
+                      p.status === "failed" ? "text-red-600" : p.phase === "complete" ? "text-green-600" : "text-gray-600"
+                    )}
+                  >
+                    {p.status === "done" || p.phase === "complete" ? (
+                      <Check className="mt-0.5 h-3 w-3 shrink-0 text-green-500" />
+                    ) : p.status === "failed" ? (
+                      <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-red-500" />
+                    ) : (
+                      <Clock className="mt-0.5 h-3 w-3 shrink-0 text-gray-400" />
+                    )}
+                    <span>{p.detail || p.error || p.phase || "..."}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Loading indicator */}
@@ -224,20 +223,32 @@ export function DocGenerationPanel() {
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleCopy(doc.id, doc.doc_content || "");
-                  }}
-                  className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                  title="Copy content"
-                >
-                  {copied === doc.id ? (
-                    <Check className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCopy(doc.id, doc.doc_content || "");
+                    }}
+                    className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                    title="Copy content"
+                  >
+                    {copied === doc.id ? (
+                      <Check className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteDoc(doc.id);
+                    }}
+                    className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                    title="Delete document"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </button>
               {expandedDoc === doc.id && doc.doc_content && (
                 <div className="border-t border-gray-200 bg-gray-50 p-5">

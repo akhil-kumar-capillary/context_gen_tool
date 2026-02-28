@@ -324,6 +324,28 @@ class ConfigStorageService:
             r = result.scalar_one_or_none()
         return _context_doc_to_dict(r) if r else None
 
+    async def delete_context_doc(self, doc_id: int) -> None:
+        async with async_session() as db:
+            await db.execute(
+                delete(ContextDoc).where(ContextDoc.id == doc_id)
+            )
+            await db.commit()
+
+    async def get_all_context_docs(self, org_id: str) -> List[Dict[str, Any]]:
+        """Get all active config_apis context docs for an org."""
+        async with async_session() as db:
+            result = await db.execute(
+                select(ContextDoc)
+                .where(
+                    ContextDoc.org_id == org_id,
+                    ContextDoc.source_type == "config_apis",
+                    ContextDoc.status == "active",
+                )
+                .order_by(ContextDoc.created_at.desc())
+            )
+            rows = result.scalars().all()
+        return [_context_doc_to_dict(r) for r in rows]
+
 
 # ---------------------------------------------------------------------------
 # Private serialization helpers

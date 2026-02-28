@@ -144,22 +144,11 @@ class StorageService:
 
         PostgreSQL ON DELETE CASCADE handles analysis_fingerprints,
         analysis_notebooks, extracted_sqls, and notebook_metadata.
-        Context docs need manual deletion as they use source_run_id (not FK cascade).
+        Context docs are preserved independently (they are LLM-generated
+        outputs the user manages via their own delete buttons).
         """
         uid = uuid.UUID(run_id)
         async with async_session() as db:
-            # Get analysis IDs for this run
-            result = await db.execute(
-                select(AnalysisRun.id).where(AnalysisRun.run_id == uid)
-            )
-            analysis_ids = [row[0] for row in result.all()]
-
-            # Delete context docs linked to these analyses
-            for aid in analysis_ids:
-                await db.execute(
-                    delete(ContextDoc).where(ContextDoc.source_run_id == aid)
-                )
-
             # Delete analysis runs (cascades to fingerprints + notebooks)
             await db.execute(
                 delete(AnalysisRun).where(AnalysisRun.run_id == uid)
@@ -517,13 +506,12 @@ class StorageService:
             return [dict(row._mapping) for row in result.all()]
 
     async def delete_analysis_run(self, analysis_id: str):
-        """Delete analysis run and cascaded data."""
+        """Delete analysis run and cascaded data.
+
+        Context docs are preserved (LLM outputs managed independently).
+        """
         uid = uuid.UUID(analysis_id)
         async with async_session() as db:
-            # Delete context docs linked to this analysis
-            await db.execute(
-                delete(ContextDoc).where(ContextDoc.source_run_id == uid)
-            )
             # Delete analysis notebooks + fingerprints (CASCADE handles this)
             await db.execute(
                 delete(AnalysisNotebook).where(AnalysisNotebook.analysis_id == uid)
@@ -759,6 +747,28 @@ class StorageService:
             )
             doc = result.scalar_one_or_none()
             return self._doc_to_dict(doc) if doc else None
+
+    async def delete_context_doc(self, doc_id: int) -> None:
+        async with async_session() as db:
+            await db.execute(
+                delete(ContextDoc).where(ContextDoc.id == doc_id)
+            )
+            await db.commit()
+
+    async def get_all_context_docs(self, org_id: str) -> list[dict]:
+        """Get all active databricks context docs for an org."""
+        async with async_session() as db:
+            result = await db.execute(
+                select(ContextDoc)
+                .where(
+                    ContextDoc.org_id == org_id,
+                    ContextDoc.source_type == "databricks",
+                    ContextDoc.status == "active",
+                )
+                .order_by(ContextDoc.created_at.desc())
+            )
+            docs = result.scalars().all()
+            return [self._doc_to_dict(d) for d in docs]
 
     def _doc_to_dict(self, doc: ContextDoc) -> dict:
         return {
