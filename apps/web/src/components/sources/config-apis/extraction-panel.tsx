@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   Loader2, Play, Square, ChevronDown, ChevronRight,
-  RefreshCw, Check, AlertCircle, Clock,
+  RefreshCw, Check, AlertCircle, Clock, Trash2,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { apiClient } from "@/lib/api-client";
@@ -142,6 +142,21 @@ export function ExtractionPanel() {
       else next.add(catId);
       return next;
     });
+  };
+
+  const handleDeleteExtraction = async (runId: string) => {
+    if (!confirm("Delete this extraction run and all associated data?")) return;
+    try {
+      await apiClient.delete(`/api/sources/config-apis/extract/runs/${runId}`, {
+        token: token || undefined,
+      });
+      setExtractionRuns(extractionRuns.filter((r) => r.id !== runId));
+      if (activeExtractionId === runId) {
+        setActiveExtractionId(null);
+      }
+    } catch (err) {
+      console.error("Failed to delete extraction run:", err);
+    }
   };
 
   const isComplete = extractionProgress.some(
@@ -323,14 +338,14 @@ export function ExtractionPanel() {
           </div>
           <div className="divide-y divide-gray-50">
             {extractionRuns.slice(0, 10).map((run) => (
-              <button
+              <div
                 key={run.id}
                 onClick={() => {
                   setActiveExtractionId(run.id);
                   setActiveStep("analyze");
                 }}
                 className={cn(
-                  "flex w-full items-center justify-between px-5 py-3 text-left hover:bg-gray-50 transition-colors",
+                  "flex w-full items-center justify-between px-5 py-3 text-left hover:bg-gray-50 transition-colors cursor-pointer",
                   activeExtractionId === run.id && "bg-violet-50"
                 )}
               >
@@ -356,8 +371,20 @@ export function ExtractionPanel() {
                     {formatDate(run.created_at || null)} &middot; {run.host}
                   </p>
                 </div>
-                <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
-              </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteExtraction(run.id);
+                    }}
+                    className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                    title="Delete extraction run"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                  <ChevronRight className="h-4 w-4 text-gray-300" />
+                </div>
+              </div>
             ))}
           </div>
         </div>

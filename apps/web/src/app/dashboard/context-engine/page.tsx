@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback, useRef, useState } from "react";
 import {
   Loader2,
   Play,
@@ -13,6 +13,7 @@ import {
   ChevronRight,
   GitBranch,
   Trash2,
+  Sparkles,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { apiClient } from "@/lib/api-client";
@@ -24,9 +25,12 @@ import {
 import { useContextEngineWebSocket } from "@/hooks/use-context-engine-websocket";
 import { TreeView, NodeDetail, SecretDetail } from "@/components/context-engine";
 import { ModuleGuard } from "@/components/layout/module-guard";
+import { useSettingsStore } from "@/stores/settings-store";
 
 export default function ContextEnginePage() {
   const { token, orgId } = useAuthStore();
+  const { blueprintText } = useSettingsStore();
+  const [sanitizeEnabled, setSanitizeEnabled] = useState(false);
   const {
     treeRuns,
     activeRunId,
@@ -173,7 +177,10 @@ export default function ContextEnginePage() {
     try {
       const data = await apiClient.post<{ run_id: string }>(
         `/api/context-engine/generate?org_id=${orgId}`,
-        {},
+        {
+          sanitize: sanitizeEnabled,
+          blueprint_text: sanitizeEnabled && blueprintText ? blueprintText : undefined,
+        },
         { token }
       );
       setActiveRunId(data.run_id);
@@ -215,6 +222,7 @@ export default function ContextEnginePage() {
 
   const handleDeleteRun = async (runId: string) => {
     if (!token) return;
+    if (!confirm("Delete this tree run and all associated data?")) return;
     try {
       await apiClient.delete(`/api/context-engine/runs/${runId}`, { token });
       // Remove from local state
@@ -253,6 +261,21 @@ export default function ContextEnginePage() {
 
         {/* Generate button */}
         <div className="p-4 border-b border-gray-200">
+          {/* Sanitize toggle */}
+          <label className="flex items-center gap-2 mb-3 cursor-pointer group">
+            <input
+              type="checkbox"
+              checked={sanitizeEnabled}
+              onChange={(e) => setSanitizeEnabled(e.target.checked)}
+              disabled={isGenerating}
+              className="h-3.5 w-3.5 rounded border-gray-300 text-violet-600 focus:ring-violet-500 disabled:opacity-50"
+            />
+            <span className="flex items-center gap-1 text-xs text-gray-600 group-hover:text-gray-800 transition-colors">
+              <Sparkles className="h-3 w-3 text-violet-500" />
+              Sanitize content
+            </span>
+          </label>
+
           {!isGenerating ? (
             <button
               onClick={handleGenerate}
@@ -415,7 +438,7 @@ export default function ContextEnginePage() {
                         e.stopPropagation();
                         handleDeleteRun(run.id);
                       }}
-                      className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-50 text-gray-300 hover:text-red-500 transition-all"
+                      className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
                       title="Delete run"
                     >
                       <Trash2 className="h-3 w-3" />

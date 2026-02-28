@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useCallback, useState } from "react";
-import { Loader2, Play, BarChart3, ChevronRight, XCircle } from "lucide-react";
+import { Loader2, Play, BarChart3, ChevronRight, XCircle, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth-store";
@@ -123,6 +123,23 @@ export function AnalysisPanel() {
     }
     setIsAnalyzing(false);
   }, [activeExtractionId, selectedOrgId, token, setIsAnalyzing]);
+
+  const handleDeleteAnalysis = async (analysisId: string) => {
+    if (!confirm("Delete this analysis run and all associated data?")) return;
+    try {
+      await apiClient.delete(`/api/sources/databricks/analysis/${analysisId}`, {
+        token: token || undefined,
+      });
+      // Remove from local state
+      setAnalysisRuns(analysisRuns.filter((r) => r.id !== analysisId));
+      // Clear active if this was the selected one
+      if (activeAnalysisId === analysisId) {
+        setActiveAnalysisId(null);
+      }
+    } catch (err) {
+      console.error("Failed to delete analysis run:", err);
+    }
+  };
 
   const lastProgress = analysisProgress[analysisProgress.length - 1];
   const isComplete = lastProgress?.phase === "complete" || lastProgress?.status === "done";
@@ -338,6 +355,16 @@ export function AnalysisPanel() {
                       className="rounded-md px-3 py-1.5 text-xs font-medium text-violet-600 hover:bg-violet-100 transition-colors"
                     >
                       Generate Docs
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteAnalysis(run.id);
+                      }}
+                      className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                      title="Delete analysis run"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
                     </button>
                     <ChevronRight className={cn(
                       "h-4 w-4 transition-transform",

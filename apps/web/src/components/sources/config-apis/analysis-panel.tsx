@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import {
-  Loader2, Play, Square, ChevronRight, Check, AlertCircle, Clock,
+  Loader2, Play, Square, ChevronRight, Check, AlertCircle, Clock, Trash2,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { apiClient } from "@/lib/api-client";
@@ -85,6 +85,21 @@ export function AnalysisPanel() {
       );
     } catch {
       // ignore
+    }
+  };
+
+  const handleDeleteAnalysis = async (analysisId: string) => {
+    if (!confirm("Delete this analysis run and all associated data?")) return;
+    try {
+      await apiClient.delete(`/api/sources/config-apis/analysis/${analysisId}`, {
+        token: token || undefined,
+      });
+      setAnalysisRuns(analysisRuns.filter((r) => r.id !== analysisId));
+      if (activeAnalysisId === analysisId) {
+        setActiveAnalysisId(null);
+      }
+    } catch (err) {
+      console.error("Failed to delete analysis run:", err);
     }
   };
 
@@ -262,14 +277,14 @@ export function AnalysisPanel() {
           </div>
           <div className="divide-y divide-gray-50">
             {analysisRuns.map((run) => (
-              <button
+              <div
                 key={run.id}
                 onClick={() => {
                   setActiveAnalysisId(run.id);
                   setActiveStep("review");
                 }}
                 className={cn(
-                  "flex w-full items-center justify-between px-5 py-3 text-left hover:bg-gray-50 transition-colors",
+                  "flex w-full items-center justify-between px-5 py-3 text-left hover:bg-gray-50 transition-colors cursor-pointer",
                   activeAnalysisId === run.id && "bg-violet-50"
                 )}
               >
@@ -291,8 +306,20 @@ export function AnalysisPanel() {
                     {formatDate(run.created_at || null)}
                   </p>
                 </div>
-                <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
-              </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteAnalysis(run.id);
+                    }}
+                    className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                    title="Delete analysis run"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                  <ChevronRight className="h-4 w-4 text-gray-300" />
+                </div>
+              </div>
             ))}
           </div>
         </div>

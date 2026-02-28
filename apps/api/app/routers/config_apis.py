@@ -212,6 +212,20 @@ async def get_extraction_run(
     return run
 
 
+@router.delete("/extract/runs/{run_id}")
+async def delete_extraction_run(
+    run_id: str,
+    current_user: dict = Depends(require_permission("config_apis", "extract")),
+):
+    """Delete an extraction run and all associated data."""
+    storage = ConfigStorageService()
+    run = await storage.get_extraction_run(run_id)
+    if not run:
+        raise HTTPException(404, "Extraction run not found")
+    await storage.delete_extraction_run(run_id)
+    return {"status": "deleted", "run_id": run_id}
+
+
 # ══════════════════════════════════════════════════════════════════════
 # EXTRACTION — CALL LOG & RAW DATA
 # ══════════════════════════════════════════════════════════════════════
@@ -350,6 +364,17 @@ async def get_analysis_history(
     storage = ConfigStorageService()
     runs = await storage.get_analysis_history(run_id)
     return {"runs": runs}
+
+
+@router.delete("/analysis/{analysis_id}")
+async def delete_analysis(
+    analysis_id: str,
+    current_user: dict = Depends(require_permission("config_apis", "analyze")),
+):
+    """Delete an analysis run and all associated data."""
+    storage = ConfigStorageService()
+    await storage.delete_analysis_run(analysis_id)
+    return {"status": "deleted", "analysis_id": analysis_id}
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -605,3 +630,28 @@ async def get_generated_doc(
     if not doc:
         raise HTTPException(404, "Document not found")
     return doc
+
+
+@router.delete("/llm/doc/{doc_id}")
+async def delete_generated_doc(
+    doc_id: int,
+    current_user: dict = Depends(require_permission("config_apis", "extract")),
+):
+    """Delete a generated context document."""
+    storage = ConfigStorageService()
+    doc = await storage.get_context_doc(doc_id)
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    await storage.delete_context_doc(doc_id)
+    return {"status": "deleted", "doc_id": doc_id}
+
+
+@router.get("/llm/docs")
+async def list_all_docs(
+    org_id: int = Query(...),
+    current_user: dict = Depends(require_permission("config_apis", "view")),
+):
+    """List all active generated docs for an org (independent of analysis runs)."""
+    storage = ConfigStorageService()
+    docs = await storage.get_all_context_docs(str(org_id))
+    return {"docs": docs}
