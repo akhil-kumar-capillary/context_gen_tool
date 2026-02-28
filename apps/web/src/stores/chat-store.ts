@@ -35,6 +35,13 @@ interface ChatState {
   // Actions — new chat
   newConversation: () => void;
 
+  // Drawer state (global chat bubble)
+  isChatDrawerOpen: boolean;
+  pendingMessage: string | null;
+  setChatDrawerOpen: (open: boolean) => void;
+  queueMessage: (content: string) => void;
+  clearPendingMessage: () => void;
+
   // Reset all state (org change)
   reset: () => void;
 }
@@ -137,6 +144,18 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       activeToolCalls: [],
     }),
 
+  // --- Drawer state (global chat bubble) ---
+
+  isChatDrawerOpen: false,
+  pendingMessage: null,
+
+  setChatDrawerOpen: (open) => set({ isChatDrawerOpen: open }),
+
+  queueMessage: (content) =>
+    set({ pendingMessage: content, isChatDrawerOpen: true }),
+
+  clearPendingMessage: () => set({ pendingMessage: null }),
+
   // --- Reset all state (org change) ---
 
   reset: () =>
@@ -147,5 +166,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       isStreaming: false,
       streamingText: "",
       activeToolCalls: [],
+      isChatDrawerOpen: false,
+      pendingMessage: null,
     }),
 }));

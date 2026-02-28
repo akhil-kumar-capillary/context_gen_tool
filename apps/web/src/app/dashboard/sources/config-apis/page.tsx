@@ -11,7 +11,6 @@ import {
   AnalysisPanel,
   ReviewPanel,
   DocGenerationPanel,
-  ConfigApisChatDrawer,
 } from "@/components/sources/config-apis";
 
 export default function ConfigApisPage() {
@@ -32,36 +31,28 @@ export default function ConfigApisPage() {
 
   return (
     <ModuleGuard module="config_apis">
-      <div className="flex h-[calc(100vh-3.5rem)] -m-6 overflow-hidden">
-        {/* Left: Pipeline content */}
-        <div className="flex-1 overflow-auto p-6">
-          <div className="space-y-6">
-            {/* Header */}
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                Configuration APIs Source
-              </h1>
-              <p className="text-sm text-gray-500">
-                Extract Capillary platform configurations, analyze patterns, and
-                generate context documents.
-              </p>
-            </div>
-
-            {/* Pipeline stepper */}
-            <PipelineStepper />
-
-            {/* Active step content */}
-            <div className="space-y-4">
-              {activeStep === "extract" && <ExtractionPanel />}
-              {activeStep === "analyze" && <AnalysisPanel />}
-              {activeStep === "review" && <ReviewPanel />}
-              {activeStep === "generate" && <DocGenerationPanel />}
-            </div>
-          </div>
+      <div className="space-y-6">
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Configuration APIs Source
+          </h1>
+          <p className="text-sm text-gray-500">
+            Extract Capillary platform configurations, analyze patterns, and
+            generate context documents.
+          </p>
         </div>
 
-        {/* Right: Chat drawer */}
-        <ConfigApisChatDrawer />
+        {/* Pipeline stepper */}
+        <PipelineStepper />
+
+        {/* Active step content */}
+        <div className="space-y-4">
+          {activeStep === "extract" && <ExtractionPanel />}
+          {activeStep === "analyze" && <AnalysisPanel />}
+          {activeStep === "review" && <ReviewPanel />}
+          {activeStep === "generate" && <DocGenerationPanel />}
+        </div>
       </div>
     </ModuleGuard>
   );

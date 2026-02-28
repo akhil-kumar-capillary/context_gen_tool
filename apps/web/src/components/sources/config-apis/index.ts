@@ -7,4 +7,3 @@ export { InclusionPanel } from "./inclusion-panel";
 export { AnalysisDashboard } from "./analysis-dashboard";
 export { PayloadPreview } from "./payload-preview";
 export { DocGenerationPanel } from "./doc-generation-panel";
-export { ConfigApisChatDrawer } from "./config-apis-chat-drawer";

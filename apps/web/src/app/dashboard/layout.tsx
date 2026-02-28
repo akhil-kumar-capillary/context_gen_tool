@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth-store";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
+import { GlobalChatDrawer } from "@/components/chat/global-chat-drawer";
 
 export default function DashboardLayout({
   children,
@@ -31,7 +32,10 @@ export default function DashboardLayout({
       <AppSidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         <DashboardHeader />
-        <main className="flex-1 overflow-auto p-6">{children}</main>
+        <div className="flex flex-1 overflow-hidden">
+          <main className="flex-1 overflow-auto p-6">{children}</main>
+          <GlobalChatDrawer />
+        </div>
       </div>
     </div>
   );
