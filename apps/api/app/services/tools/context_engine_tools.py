@@ -31,8 +31,13 @@ logger = logging.getLogger(__name__)
     requires_permission=("context_engine", "generate"),
     annotations={"display": "Generating context tree..."},
 )
-async def generate_context_tree(ctx: ToolContext) -> str:
-    """Trigger tree generation from chat."""
+async def generate_context_tree(ctx: ToolContext, sanitize: bool = False) -> str:
+    """Trigger tree generation from chat.
+
+    sanitize: Whether to run content sanitization via blueprint (default: False).
+              When True, the tree builder skips attaching original content and instead
+              sends all contexts through the blueprint LLM for cleanup first.
+    """
     from app.core.websocket import ws_manager
     from app.core.task_registry import task_registry
     from app.database import async_session
@@ -62,6 +67,7 @@ async def generate_context_tree(ctx: ToolContext) -> str:
             org_id=org_id,
             ws_manager=ws_manager,
             user_id=user_id,
+            sanitize=sanitize,
         )
 
     task_registry.create_task(
@@ -70,8 +76,9 @@ async def generate_context_tree(ctx: ToolContext) -> str:
         user_id=user_id,
     )
 
+    sanitize_note = " with content sanitization enabled" if sanitize else ""
     return (
-        f"Context tree generation started (run ID: {run_id}). "
+        f"Context tree generation started{sanitize_note} (run ID: {run_id}). "
         f"I'm collecting contexts from all sources (Databricks, Config APIs, Capillary) "
         f"and organizing them into a hierarchical tree. "
         f"You can track progress in the Context Engine page. "

@@ -4,9 +4,7 @@ These wrap the Capillary context API proxying logic (same as routers/contexts.py
 but return formatted strings suitable for LLM consumption.
 """
 import base64
-import json
 import logging
-import re
 from pathlib import Path
 
 import aiofiles
@@ -342,82 +340,10 @@ async def delete_context(ctx: ToolContext, context_name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Helpers: JSON parsing for refactoring output
+# Helpers: JSON parsing for refactoring output (shared module)
 # ---------------------------------------------------------------------------
 
-_NAME_REGEX = re.compile(r"^[a-zA-Z0-9 _:#()\-,]+$")
-
-
-def _parse_refactor_output(text: str) -> list[dict]:
-    """Parse LLM refactoring output — handles code fences, truncation, name sanitization.
-
-    Ported from the desktop app's parse-llm-response.ts for consistency.
-    """
-    text = text.strip()
-
-    # Strip code fences (```json ... ```)
-    if text.startswith("```"):
-        lines = text.split("\n")
-        start = 1
-        end = len(lines) - 1 if lines[-1].strip() == "```" else len(lines)
-        text = "\n".join(lines[start:end])
-
-    parsed = None
-
-    # Try 1: Direct JSON parse
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError:
-        # Try 2: Regex extraction of JSON array
-        match = re.search(r"\[[\s\S]*\]", text)
-        if match:
-            try:
-                parsed = json.loads(match.group(0))
-            except json.JSONDecodeError:
-                pass
-
-        # Try 3: Truncation recovery — salvage complete objects from a cut-off response
-        if parsed is None:
-            arr_start = text.find("[")
-            if arr_start != -1:
-                partial = text[arr_start:]
-                last_brace = partial.rfind("}")
-                if last_brace != -1:
-                    try:
-                        parsed = json.loads(partial[: last_brace + 1] + "]")
-                        logger.warning(
-                            "Refactor output was truncated — recovered %d partial documents",
-                            len(parsed) if isinstance(parsed, list) else 0,
-                        )
-                    except json.JSONDecodeError:
-                        pass
-
-    if not isinstance(parsed, list):
-        raise ValueError(
-            f"Could not parse LLM response as JSON array. Response starts with: {text[:200]}"
-        )
-
-    # Validate and sanitize each document
-    result: list[dict] = []
-    for item in parsed:
-        if not isinstance(item, dict):
-            continue
-        name = str(item.get("name", "")).strip()
-        content = str(item.get("content", "")).strip()
-        if not name or not content:
-            continue
-        # Enforce name constraints
-        if len(name) > 100:
-            name = name[:100]
-        if not _NAME_REGEX.match(name):
-            name = re.sub(r"[^a-zA-Z0-9 _:#()\-,]", "", name)
-        result.append({
-            "name": name,
-            "content": content,
-            "scope": item.get("scope", "org"),
-        })
-
-    return result
+from app.services.context_engine.parsing import parse_refactor_output as _parse_refactor_output  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

@@ -24,6 +24,8 @@ router = APIRouter(tags=["context-engine"])
 class GenerateRequest(BaseModel):
     provider: str = Field(default="anthropic", description="LLM provider")
     model: str = Field(default="claude-opus-4-6", description="LLM model")
+    sanitize: bool = Field(default=False, description="Run content sanitization via blueprint")
+    blueprint_text: str | None = Field(default=None, description="Custom blueprint text (optional)")
 
 
 class UpdateTreeRequest(BaseModel):
@@ -156,6 +158,8 @@ async def generate_tree(
             ws_manager=ws_manager,
             user_id=user_id,
             cancel_event=cancel_event,
+            sanitize=req.sanitize,
+            blueprint_text=req.blueprint_text,
         )
 
     task_registry.create_task(

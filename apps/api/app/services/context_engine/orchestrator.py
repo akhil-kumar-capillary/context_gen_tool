@@ -1,6 +1,7 @@
 """Tree Orchestrator — background task that runs the full tree generation pipeline.
 
-Pipeline: collect contexts → build tree via LLM → validate → save to DB.
+Pipeline: collect contexts → build tree via LLM → (optional) sanitize content
+          → enrich (secrets, conflicts, redundancy, health) → save to DB.
 Progress is streamed to the user via WebSocket.
 """
 import asyncio
@@ -106,8 +107,10 @@ async def run_tree_generation(
     ws_manager: WebSocketManager,
     user_id: int,
     cancel_event: asyncio.Event | None = None,
+    sanitize: bool = False,
+    blueprint_text: str | None = None,
 ):
-    """Background task: collect contexts -> build tree -> save results.
+    """Background task: collect contexts -> build tree -> (optionally sanitize) -> save results.
 
     Args:
         run_id: UUID string for this tree run.
@@ -116,6 +119,8 @@ async def run_tree_generation(
         ws_manager: WebSocket manager for progress events.
         user_id: User who triggered generation.
         cancel_event: Event to cancel the pipeline.
+        sanitize: If True, run content sanitization via blueprint after tree building.
+        blueprint_text: Custom blueprint text for sanitization (optional).
     """
     progress_entries: list[dict] = []
     emit = _make_progress_callback(ws_manager, user_id, run_id)
@@ -181,17 +186,57 @@ async def run_tree_generation(
             org_id=org_id,
             progress_cb=builder_progress,
             cancel_event=cancel_event,
+            skip_content_attach=sanitize,
         )
 
         await track("analyzing", "Tree structure generated successfully", "done")
 
-        # ─── Phase 3: Enriching ─────────────────────────────────
+        # ─── Phase 3: Sanitizing (optional) ──────────────────────
+        if sanitize:
+            await track("sanitizing", "Sanitizing context content via blueprint...", "running")
+
+            if cancel_event and cancel_event.is_set():
+                raise asyncio.CancelledError()
+
+            try:
+                from app.services.context_engine.sanitizer import sanitize_tree_content
+
+                sanitize_result = await sanitize_tree_content(
+                    tree=result["tree_data"],
+                    contexts=collected["sources"],
+                    progress_cb=track,
+                    cancel_event=cancel_event,
+                    blueprint_text=blueprint_text,
+                )
+
+                await track(
+                    "sanitizing",
+                    f"Sanitized {sanitize_result['sanitized_count']}/{sanitize_result['total_leaves']} "
+                    f"leaf nodes ({sanitize_result['fallback_count']} used original content)",
+                    "done",
+                )
+
+                # Accumulate token usage from the sanitization LLM call
+                if sanitize_result.get("token_usage"):
+                    result["token_usage"]["input_tokens"] += sanitize_result["token_usage"].get("input_tokens", 0)
+                    result["token_usage"]["output_tokens"] += sanitize_result["token_usage"].get("output_tokens", 0)
+
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.warning(f"Sanitization failed (non-fatal): {e}")
+                await track("sanitizing", f"Sanitization skipped: {e} — using original content", "done")
+                # Fallback: attach original content
+                from app.services.context_engine.tree_builder import _attach_full_content
+                _attach_full_content(result["tree_data"], collected["sources"])
+
+        # ─── Phase 4: Enriching ─────────────────────────────────
         await track("enriching", "Scanning for secrets...", "running")
 
         if cancel_event and cancel_event.is_set():
             raise asyncio.CancelledError()
 
-        # 3a: Secret scanning
+        # 4a: Secret scanning
         try:
             from app.services.context_engine.secret_scanner import scan_tree_secrets
             secret_count = scan_tree_secrets(result["tree_data"])
@@ -203,7 +248,7 @@ async def run_tree_generation(
             logger.warning(f"Secret scanning failed (non-fatal): {e}")
             await track("enriching", f"Secret scanning skipped: {e}", "done")
 
-        # 3b: Conflict detection
+        # 4b: Conflict detection
         if cancel_event and cancel_event.is_set():
             raise asyncio.CancelledError()
 
@@ -219,7 +264,7 @@ async def run_tree_generation(
             logger.warning(f"Conflict detection failed (non-fatal): {e}")
             await track("enriching", f"Conflict detection skipped: {e}", "done")
 
-        # 3c: Redundancy detection
+        # 4c: Redundancy detection
         if cancel_event and cancel_event.is_set():
             raise asyncio.CancelledError()
 
@@ -235,7 +280,7 @@ async def run_tree_generation(
             logger.warning(f"Redundancy detection failed (non-fatal): {e}")
             await track("enriching", f"Redundancy detection skipped: {e}", "done")
 
-        # 3d: Health scoring (runs last since it uses conflict/redundancy results)
+        # 4d: Health scoring (runs last since it uses conflict/redundancy results)
         await track("enriching", "Computing health scores...", "running")
         try:
             from app.services.context_engine.health_scorer import score_tree_health
@@ -245,7 +290,7 @@ async def run_tree_generation(
             logger.warning(f"Health scoring failed (non-fatal): {e}")
             await track("enriching", f"Health scoring skipped: {e}", "done")
 
-        # ─── Phase 4: Saving ──────────────────────────────────────
+        # ─── Phase 5: Saving ──────────────────────────────────────
         await track("saving", "Persisting tree to database...", "running")
 
         await _save_completion(
@@ -262,7 +307,7 @@ async def run_tree_generation(
 
         await track("saving", "Tree saved to database", "done")
 
-        # ─── Phase 4: Complete ────────────────────────────────────
+        # ─── Complete ────────────────────────────────────────────
         await track("complete", f"Tree generated with {summary['total']} contexts", "done")
 
         await ws_manager.send_to_user(user_id, {

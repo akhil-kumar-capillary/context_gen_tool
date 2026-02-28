@@ -401,6 +401,7 @@ async def build_tree(
     provider: str = "anthropic",
     model: str = "claude-opus-4-6",
     max_tokens: int = 16000,
+    skip_content_attach: bool = False,
 ) -> dict[str, Any]:
     """Ask LLM to organize contexts into a hierarchical tree.
 
@@ -416,6 +417,8 @@ async def build_tree(
         provider: LLM provider.
         model: LLM model.
         max_tokens: Max output tokens.
+        skip_content_attach: If True, skip attaching original content to leaves.
+            Used when the sanitizer will handle content attachment instead.
 
     Returns:
         {
@@ -518,10 +521,13 @@ async def build_tree(
     else:
         await emit("validating", "Tree structure validated", "done")
 
-    # Attach full original content to leaf nodes
-    await emit("validating", "Attaching full context content to leaves...", "running")
-    _attach_full_content(tree_data, contexts)
-    await emit("validating", "Full content attached", "done")
+    # Attach full original content to leaf nodes (unless sanitizer will handle it)
+    if not skip_content_attach:
+        await emit("validating", "Attaching full context content to leaves...", "running")
+        _attach_full_content(tree_data, contexts)
+        await emit("validating", "Full content attached", "done")
+    else:
+        await emit("validating", "Skipping content attach (sanitization will handle it)", "done")
 
     return {
         "tree_data": tree_data,
