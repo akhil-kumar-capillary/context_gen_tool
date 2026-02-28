@@ -4,10 +4,9 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAdminStore, type AdminUser } from "@/stores/admin-store";
 import {
   Loader2, RefreshCw, Shield, ShieldCheck, ShieldAlert, Search,
-  ChevronDown, ChevronUp, Plus, Minus, Crown, Save,
+  ChevronDown, ChevronUp, Crown, Save,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { GrantRoleDialog } from "./grant-role-dialog";
 
 /* ── Module definitions (matches seed_data.py) ─────────────────────── */
 
@@ -293,20 +292,14 @@ function ModuleAccessTree({
 export function UsersTable() {
   const {
     users, usersLoading, usersError, fetchUsers,
-    roles, fetchRoles,
+    fetchRoles,
     fetchPermissions,
-    toggleAdmin, revokeRole,
+    toggleAdmin, grantRole, revokeRole,
     actionLoading,
   } = useAdminStore();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedUser, setExpandedUser] = useState<number | null>(null);
-  const [grantRoleFor, setGrantRoleFor] = useState<AdminUser | null>(null);
-  const [confirmRevoke, setConfirmRevoke] = useState<{
-    type: "role";
-    email: string;
-    value: string;
-  } | null>(null);
   const [confirmAdminToggle, setConfirmAdminToggle] = useState<AdminUser | null>(null);
 
   useEffect(() => {
@@ -322,12 +315,17 @@ export function UsersTable() {
       (u.display_name || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleRevokeRole = async (email: string, roleName: string) => {
-    const ok = await revokeRole(email, roleName);
-    if (ok) {
-      await fetchUsers();
-      setConfirmRevoke(null);
+  const handleRoleChange = async (email: string, currentRole: string | undefined, newRole: string) => {
+    if (newRole === (currentRole || "")) return; // no change
+    let ok: boolean;
+    if (newRole === "") {
+      // Remove role
+      ok = currentRole ? await revokeRole(email, currentRole) : true;
+    } else {
+      // Set role (backend replaces existing)
+      ok = await grantRole(email, newRole);
     }
+    if (ok) await fetchUsers();
   };
 
   const handleToggleAdmin = async (user: AdminUser) => {
@@ -553,46 +551,24 @@ export function UsersTable() {
                     )}
                   </div>
 
-                  {/* Roles section */}
+                  {/* Role selector (hierarchical: admin > operator > viewer) */}
                   <div>
-                    <div className="mb-1.5 flex items-center justify-between">
-                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                        Roles
-                      </p>
-                      <button
-                        onClick={() => setGrantRoleFor(u)}
-                        className="flex items-center gap-1 rounded-md bg-violet-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-violet-700"
-                      >
-                        <Plus className="h-3 w-3" /> Grant Role
-                      </button>
-                    </div>
-                    {u.roles.length === 0 && (
-                      <p className="text-xs text-gray-400 italic">
-                        No roles assigned
-                      </p>
-                    )}
-                    <div className="flex flex-wrap gap-1.5">
-                      {u.roles.map((r) => (
-                        <span
-                          key={r}
-                          className="group inline-flex items-center gap-1 rounded-full bg-violet-100 px-2.5 py-1 text-xs font-medium text-violet-700"
-                        >
-                          {r}
-                          <button
-                            onClick={() =>
-                              setConfirmRevoke({
-                                type: "role",
-                                email: u.email,
-                                value: r,
-                              })
-                            }
-                            className="ml-0.5 rounded-full p-0.5 opacity-50 hover:bg-violet-200 hover:opacity-100"
-                          >
-                            <Minus className="h-2.5 w-2.5" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
+                    <p className="mb-1.5 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      Role
+                    </p>
+                    <select
+                      value={u.roles[0] || ""}
+                      onChange={(e) =>
+                        handleRoleChange(u.email, u.roles[0], e.target.value)
+                      }
+                      disabled={actionLoading}
+                      className="w-48 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100 disabled:opacity-50"
+                    >
+                      <option value="">No role</option>
+                      <option value="viewer">Viewer — read-only access</option>
+                      <option value="operator">Operator — full CRUD access</option>
+                      <option value="admin">Admin — full access + administration</option>
+                    </select>
                   </div>
 
                   {/* Module Access Tree — replaces old "Direct Permissions" */}
@@ -603,36 +579,6 @@ export function UsersTable() {
                     }}
                   />
 
-                  {/* Revoke confirm dialog */}
-                  {confirmRevoke && confirmRevoke.email === u.email && (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-                      <p className="text-sm text-amber-800">
-                        Revoke{" "}
-                        <strong>role &quot;{confirmRevoke.value}&quot;</strong>{" "}
-                        from <strong>{confirmRevoke.email}</strong>?
-                      </p>
-                      <div className="mt-2 flex gap-2">
-                        <button
-                          onClick={() =>
-                            handleRevokeRole(
-                              confirmRevoke.email,
-                              confirmRevoke.value
-                            )
-                          }
-                          disabled={actionLoading}
-                          className="rounded-md bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
-                        >
-                          {actionLoading ? "Revoking..." : "Confirm Revoke"}
-                        </button>
-                        <button
-                          onClick={() => setConfirmRevoke(null)}
-                          className="rounded-md border border-gray-200 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -640,18 +586,6 @@ export function UsersTable() {
         })}
       </div>
 
-      {/* Grant Role Dialog */}
-      {grantRoleFor && (
-        <GrantRoleDialog
-          user={grantRoleFor}
-          availableRoles={roles}
-          onClose={() => setGrantRoleFor(null)}
-          onGranted={async () => {
-            await fetchUsers();
-            setGrantRoleFor(null);
-          }}
-        />
-      )}
     </div>
   );
 }

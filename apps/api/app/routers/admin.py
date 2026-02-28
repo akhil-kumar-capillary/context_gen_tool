@@ -130,16 +130,17 @@ async def grant_role(
     if not role:
         raise HTTPException(404, f"Role '{req.role_name}' not found")
 
-    # Check if already granted
-    existing = await db.execute(
-        select(UserRole).where(UserRole.user_id == user.id, UserRole.role_id == role.id)
+    # Roles are hierarchical (admin > operator > viewer) — replace all existing
+    existing_roles = await db.execute(
+        select(UserRole).where(UserRole.user_id == user.id)
     )
-    if existing.scalar_one_or_none():
-        return {"message": f"Role '{req.role_name}' already granted to {req.user_email}"}
+    for ur in existing_roles.scalars().all():
+        await db.delete(ur)
+    await db.flush()
 
     db.add(UserRole(user_id=user.id, role_id=role.id, granted_by=current_user["user_id"]))
     await db.commit()
-    return {"message": f"Role '{req.role_name}' granted to {req.user_email}"}
+    return {"message": f"Role set to '{req.role_name}' for {req.user_email}"}
 
 
 @router.post("/users/revoke-role")
