@@ -734,7 +734,10 @@ class StorageService:
         async with async_session() as db:
             result = await db.execute(
                 select(ContextDoc)
-                .where(ContextDoc.source_run_id == uuid.UUID(analysis_id))
+                .where(
+                    ContextDoc.source_run_id == uuid.UUID(analysis_id),
+                    ContextDoc.status == "active",
+                )
                 .order_by(ContextDoc.doc_key)
             )
             docs = result.scalars().all()
@@ -748,10 +751,21 @@ class StorageService:
             doc = result.scalar_one_or_none()
             return self._doc_to_dict(doc) if doc else None
 
-    async def delete_context_doc(self, doc_id: int) -> None:
+    async def archive_context_doc(self, doc_id: int) -> None:
         async with async_session() as db:
             await db.execute(
-                delete(ContextDoc).where(ContextDoc.id == doc_id)
+                update(ContextDoc)
+                .where(ContextDoc.id == doc_id)
+                .values(status="archived")
+            )
+            await db.commit()
+
+    async def restore_context_doc(self, doc_id: int) -> None:
+        async with async_session() as db:
+            await db.execute(
+                update(ContextDoc)
+                .where(ContextDoc.id == doc_id)
+                .values(status="active")
             )
             await db.commit()
 

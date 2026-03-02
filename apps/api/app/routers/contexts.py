@@ -18,14 +18,19 @@ def _headers(user: dict, org_id: int) -> dict:
 @router.get("/list")
 async def list_contexts(
     org_id: int = Query(...),
+    is_active: bool | None = Query(None),
     current_user: dict = Depends(require_permission("context_management", "view")),
 ):
+    params: dict[str, str] = {}
+    if is_active is not None:
+        params["is_active"] = str(is_active).lower()
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(
             f"{current_user['base_url']}/ask-aira/context/list",
+            params=params,
             headers=_headers(current_user, org_id),
         )
-        if resp.status_code != 200:
+        if not resp.is_success:
             raise HTTPException(resp.status_code, "Failed to fetch contexts")
         return resp.json()
 
@@ -46,8 +51,9 @@ async def upload_context(
             },
             data={"name": req.name, "context": encoded, "scope": req.scope},
         )
-        if resp.status_code != 200:
-            raise HTTPException(resp.status_code, "Failed to upload context")
+        if not resp.is_success:
+            detail = resp.text[:500] if resp.text else "Failed to upload context"
+            raise HTTPException(resp.status_code, detail)
         return resp.json()
 
 
@@ -68,26 +74,43 @@ async def update_context(
             },
             data={"name": req.name, "context": encoded, "scope": req.scope},
         )
-        if resp.status_code != 200:
+        if not resp.is_success:
             raise HTTPException(resp.status_code, "Failed to update context")
         return resp.json()
 
 
-@router.delete("/delete")
-async def delete_context(
+@router.put("/archive")
+async def archive_context(
     context_id: str = Query(...),
     org_id: int = Query(...),
-    current_user: dict = Depends(require_permission("context_management", "delete")),
+    current_user: dict = Depends(require_permission("context_management", "edit")),
 ):
     async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.delete(
-            f"{current_user['base_url']}/ask-aira/context/delete_context",
+        resp = await client.put(
+            f"{current_user['base_url']}/ask-aira/context/archive_context",
             params={"context_id": context_id},
             headers=_headers(current_user, org_id),
         )
-        if resp.status_code != 200:
-            raise HTTPException(resp.status_code, "Failed to delete context")
-        return {"success": True}
+        if not resp.is_success:
+            raise HTTPException(resp.status_code, "Failed to archive context")
+        return resp.json()
+
+
+@router.put("/restore")
+async def restore_context(
+    context_id: str = Query(...),
+    org_id: int = Query(...),
+    current_user: dict = Depends(require_permission("context_management", "edit")),
+):
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.put(
+            f"{current_user['base_url']}/ask-aira/context/restore_context",
+            params={"context_id": context_id},
+            headers=_headers(current_user, org_id),
+        )
+        if not resp.is_success:
+            raise HTTPException(resp.status_code, "Failed to restore context")
+        return resp.json()
 
 
 @router.post("/bulk-upload")

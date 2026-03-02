@@ -310,6 +310,7 @@ class ConfigStorageService:
                 .where(
                     ContextDoc.source_run_id == uuid.UUID(analysis_id),
                     ContextDoc.source_type == "config_apis",
+                    ContextDoc.status == "active",
                 )
                 .order_by(ContextDoc.doc_key)
             )
@@ -324,10 +325,21 @@ class ConfigStorageService:
             r = result.scalar_one_or_none()
         return _context_doc_to_dict(r) if r else None
 
-    async def delete_context_doc(self, doc_id: int) -> None:
+    async def archive_context_doc(self, doc_id: int) -> None:
         async with async_session() as db:
             await db.execute(
-                delete(ContextDoc).where(ContextDoc.id == doc_id)
+                update(ContextDoc)
+                .where(ContextDoc.id == doc_id)
+                .values(status="archived")
+            )
+            await db.commit()
+
+    async def restore_context_doc(self, doc_id: int) -> None:
+        async with async_session() as db:
+            await db.execute(
+                update(ContextDoc)
+                .where(ContextDoc.id == doc_id)
+                .values(status="active")
             )
             await db.commit()
 

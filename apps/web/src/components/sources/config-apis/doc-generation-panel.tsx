@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
-  Loader2, Play, Square, Check, AlertCircle, Clock, FileText, Copy, Trash2,
+  Loader2, Play, Square, Check, AlertCircle, Clock, FileText, Copy, Archive, ArchiveRestore,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { apiClient } from "@/lib/api-client";
@@ -31,6 +31,7 @@ export function DocGenerationPanel() {
 
   const [expandedDoc, setExpandedDoc] = useState<number | null>(null);
   const [copied, setCopied] = useState<number | null>(null);
+  const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
 
   // Load docs: by analysis ID if selected, otherwise all org docs
   useEffect(() => {
@@ -118,15 +119,29 @@ export function DocGenerationPanel() {
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const handleDeleteDoc = async (docId: number) => {
-    if (!token) return;
-    if (!confirm("Delete this generated document? This cannot be undone.")) return;
+  const handleArchiveDoc = async (docId: number) => {
+    if (!token || actionLoadingId) return;
+    if (!confirm("Archive this document? It can be restored later.")) return;
+    setActionLoadingId(docId);
     try {
-      await apiClient.delete(`/api/sources/config-apis/llm/doc/${docId}`, { token });
+      await apiClient.put(`/api/sources/config-apis/llm/doc/${docId}/archive`, {}, { token });
       setContextDocs(contextDocs.filter((d) => d.id !== docId));
     } catch (err) {
-      console.error("Failed to delete doc:", err);
+      console.error("Failed to archive doc:", err);
     }
+    setActionLoadingId(null);
+  };
+
+  const handleRestoreDoc = async (docId: number) => {
+    if (!token || actionLoadingId) return;
+    setActionLoadingId(docId);
+    try {
+      await apiClient.put(`/api/sources/config-apis/llm/doc/${docId}/restore`, {}, { token });
+      setContextDocs(contextDocs.filter((d) => d.id !== docId));
+    } catch (err) {
+      console.error("Failed to restore doc:", err);
+    }
+    setActionLoadingId(null);
   };
 
   return (
@@ -241,12 +256,28 @@ export function DocGenerationPanel() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDeleteDoc(doc.id);
+                      if (doc.status === "archived") {
+                        handleRestoreDoc(doc.id);
+                      } else {
+                        handleArchiveDoc(doc.id);
+                      }
                     }}
-                    className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
-                    title="Delete document"
+                    disabled={actionLoadingId === doc.id}
+                    className={cn(
+                      "rounded p-1.5 transition-colors disabled:pointer-events-none",
+                      doc.status === "archived"
+                        ? "text-gray-400 hover:bg-green-50 hover:text-green-600"
+                        : "text-gray-400 hover:bg-amber-50 hover:text-amber-600"
+                    )}
+                    title={doc.status === "archived" ? "Restore document" : "Archive document"}
                   >
-                    <Trash2 className="h-4 w-4" />
+                    {actionLoadingId === doc.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : doc.status === "archived" ? (
+                      <ArchiveRestore className="h-4 w-4" />
+                    ) : (
+                      <Archive className="h-4 w-4" />
+                    )}
                   </button>
                 </div>
               </button>

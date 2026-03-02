@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
+import { X, Loader2 } from "lucide-react";
 import { cn, CONTEXT_NAME_REGEX, CONTEXT_NAME_ERROR } from "@/lib/utils";
 import { useContextStore } from "@/stores/context-store";
 import { MarkdownRenderer } from "@/components/chat/markdown-renderer";
@@ -157,9 +157,16 @@ export function NewContextDialog() {
           <button
             onClick={handleCreate}
             disabled={saving}
-            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
+            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-700 disabled:opacity-70 disabled:pointer-events-none"
           >
-            {saving ? "Creating..." : "Create"}
+            {saving ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Creating...
+              </span>
+            ) : (
+              "Create"
+            )}
           </button>
         </div>
       </div>

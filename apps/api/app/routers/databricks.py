@@ -569,18 +569,32 @@ async def get_doc(
     return doc
 
 
-@router.delete("/llm/doc/{doc_id}")
-async def delete_doc(
+@router.put("/llm/doc/{doc_id}/archive")
+async def archive_doc(
     doc_id: int,
     current_user: dict = Depends(require_permission("databricks", "extract")),
 ):
-    """Delete a generated context document."""
+    """Archive a generated context document (soft-delete)."""
     storage = StorageService()
     doc = await storage.get_context_doc(doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
-    await storage.delete_context_doc(doc_id)
-    return {"status": "deleted", "doc_id": doc_id}
+    await storage.archive_context_doc(doc_id)
+    return {"status": "archived", "doc_id": doc_id}
+
+
+@router.put("/llm/doc/{doc_id}/restore")
+async def restore_doc(
+    doc_id: int,
+    current_user: dict = Depends(require_permission("databricks", "extract")),
+):
+    """Restore an archived context document."""
+    storage = StorageService()
+    doc = await storage.get_context_doc(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    await storage.restore_context_doc(doc_id)
+    return {"status": "restored", "doc_id": doc_id}
 
 
 @router.get("/llm/docs")

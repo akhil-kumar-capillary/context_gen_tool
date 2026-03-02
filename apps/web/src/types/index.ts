@@ -26,6 +26,7 @@ export interface Context {
   scope: "org" | "private";
   updated_by?: string;
   can_edit?: boolean;
+  is_active?: boolean;
 }
 
 export interface AiGeneratedContext {

@@ -2,12 +2,19 @@
 
 import { useEffect } from "react";
 import { Plus, Loader2, RefreshCw, Download } from "lucide-react";
-import { useContextStore } from "@/stores/context-store";
+import { cn } from "@/lib/utils";
+import { useContextStore, type ContextStatusFilter } from "@/stores/context-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { downloadAllContexts } from "@/lib/utils";
 import { ContextRow } from "./context-row";
 import { NewContextDialog } from "./new-context-dialog";
 import { EditContextDialog } from "./edit-context-dialog";
+
+const STATUS_OPTIONS: { value: ContextStatusFilter; label: string }[] = [
+  { value: "active", label: "Active" },
+  { value: "archived", label: "Archived" },
+  { value: "all", label: "All" },
+];
 
 export function ContextTable() {
   const { orgName } = useAuthStore();
@@ -17,23 +24,48 @@ export function ContextTable() {
     error,
     editingContextId,
     isCreating,
+    statusFilter,
     fetchContexts,
     setIsCreating,
+    setStatusFilter,
   } = useContextStore();
 
+  // Refetch when the filter changes
   useEffect(() => {
     fetchContexts();
-  }, [fetchContexts]);
+  }, [fetchContexts, statusFilter]);
 
   const editingCtx = editingContextId
     ? contexts.find((c) => c.id === editingContextId)
     : null;
 
+  const handleFilterChange = (filter: ContextStatusFilter) => {
+    setStatusFilter(filter);
+  };
+
   return (
     <div>
       {/* Header row */}
       <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {/* Status filter pills */}
+          <div className="flex items-center gap-1 rounded-lg bg-gray-100 p-0.5">
+            {STATUS_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => handleFilterChange(opt.value)}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                  statusFilter === opt.value
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
           <span className="text-xs font-medium uppercase tracking-wider text-gray-400">
             {contexts.length} context{contexts.length !== 1 ? "s" : ""}
           </span>
@@ -101,10 +133,16 @@ export function ContextTable() {
         {/* Empty state */}
         {!isLoading && contexts.length === 0 && (
           <div className="py-12 text-center">
-            <p className="text-sm text-gray-400">No contexts found</p>
-            <p className="mt-1 text-xs text-gray-400">
-              Create your first context or use the chat to manage them.
+            <p className="text-sm text-gray-400">
+              {statusFilter === "archived"
+                ? "No archived contexts"
+                : "No contexts found"}
             </p>
+            {statusFilter === "active" && (
+              <p className="mt-1 text-xs text-gray-400">
+                Create your first context or use the chat to manage them.
+              </p>
+            )}
           </div>
         )}
 

@@ -218,7 +218,9 @@ async def run_extraction(
             sql_results: list[dict] = []
             notebook_data: list[dict] = []
             total_nb = len(notebooks)
-            log_interval = max(1, total_nb // 20)
+            log_interval = max(1, total_nb // 100)
+
+            await emit("extraction", 0, total_nb, "Parsing notebook cells and extracting SQL...")
 
             for nb_idx, nb in enumerate(notebooks, 1):
                 notebook_path = nb["path"]
@@ -298,12 +300,12 @@ async def run_extraction(
                     )
 
                 if nb_idx % log_interval == 0 or nb_idx == total_nb:
-                    pct = (nb_idx / total_nb) * 100
+                    valid_count = sum(1 for s in sql_results if s["IsValidSQL"])
                     await emit(
                         "extraction",
                         nb_idx,
                         total_nb,
-                        f"{len(sql_results)} cells extracted",
+                        f"Parsing {notebook_name} — {valid_count:,} valid / {len(sql_results):,} total SQLs",
                     )
 
             # --- Step 6: Add skipped notebooks to metadata ---

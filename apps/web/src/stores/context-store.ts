@@ -3,15 +3,19 @@ import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth-store";
 import type { Context, AiGeneratedContext, LLMUsage } from "@/types";
 
+export type ContextStatusFilter = "active" | "archived" | "all";
+
 interface ContextState {
   // Context list
   contexts: Context[];
   isLoading: boolean;
   error: string | null;
+  statusFilter: ContextStatusFilter;
 
   // UI state
   editingContextId: string | null;
-  confirmDeleteId: string | null;
+  confirmArchiveId: string | null;
+  actionLoadingId: string | null;
   isCreating: boolean;
 
   // AI Generated (sanitize results)
@@ -22,14 +26,16 @@ interface ContextState {
   fetchContexts: () => Promise<void>;
   createContext: (name: string, content: string, scope: string) => Promise<void>;
   updateContext: (contextId: string, name: string, content: string, scope: string) => Promise<void>;
-  deleteContext: (contextId: string) => Promise<void>;
+  archiveContext: (contextId: string) => Promise<void>;
+  restoreContext: (contextId: string) => Promise<void>;
   bulkUpload: () => Promise<void>;
 
   // UI setters
   setEditingContextId: (id: string | null) => void;
-  setConfirmDeleteId: (id: string | null) => void;
+  setConfirmArchiveId: (id: string | null) => void;
   setIsCreating: (creating: boolean) => void;
   setError: (error: string | null) => void;
+  setStatusFilter: (filter: ContextStatusFilter) => void;
 
   // Reset
   reset: () => void;
@@ -44,12 +50,23 @@ interface ContextState {
   dismissAiContexts: () => void;
 }
 
+function applyStatusFilter(
+  contexts: Context[],
+  filter: ContextStatusFilter
+): Context[] {
+  if (filter === "all") return contexts;
+  if (filter === "archived") return contexts.filter((c) => c.is_active === false);
+  return contexts.filter((c) => c.is_active !== false);
+}
+
 export const useContextStore = create<ContextState>((set, get) => ({
   contexts: [],
   isLoading: false,
   error: null,
+  statusFilter: "active",
   editingContextId: null,
-  confirmDeleteId: null,
+  confirmArchiveId: null,
+  actionLoadingId: null,
   isCreating: false,
   aiContexts: null,
   sanitizeUsage: null,
@@ -62,11 +79,15 @@ export const useContextStore = create<ContextState>((set, get) => ({
 
     set({ isLoading: true, error: null });
     try {
+      const { statusFilter } = get();
+      const params = new URLSearchParams({ org_id: String(orgId) });
+      if (statusFilter === "active") params.set("is_active", "true");
+      else if (statusFilter === "archived") params.set("is_active", "false");
+
       const data = await apiClient.get<Context[] | { contexts: Context[] }>(
-        `/api/contexts/list?org_id=${orgId}`,
+        `/api/contexts/list?${params}`,
         { token }
       );
-      // Capillary API wraps in { status, contexts: [...] }
       const list = Array.isArray(data) ? data : (data?.contexts ?? []);
       set({ contexts: list, isLoading: false });
     } catch (err) {
@@ -121,24 +142,68 @@ export const useContextStore = create<ContextState>((set, get) => ({
     }
   },
 
-  deleteContext: async (contextId) => {
+  archiveContext: async (contextId) => {
     const { token, orgId } = useAuthStore.getState();
-    if (!token || !orgId) return;
+    if (!token || !orgId || get().actionLoadingId) return;
 
-    set({ isLoading: true, error: null });
+    set({ actionLoadingId: contextId, error: null });
     try {
-      await apiClient.delete(
-        `/api/contexts/delete?context_id=${contextId}&org_id=${orgId}`,
+      await apiClient.put(
+        `/api/contexts/archive?context_id=${contextId}&org_id=${orgId}`,
+        {},
         { token }
       );
-      set({ confirmDeleteId: null });
-      await get().fetchContexts();
     } catch (err) {
       set({
-        error: err instanceof Error ? err.message : "Failed to delete context",
-        isLoading: false,
+        error: err instanceof Error ? err.message : "Failed to archive context",
+        actionLoadingId: null,
+        confirmArchiveId: null,
       });
+      return;
     }
+    // Optimistic local update, then background refetch
+    set((state) => ({
+      confirmArchiveId: null,
+      actionLoadingId: null,
+      contexts: applyStatusFilter(
+        state.contexts.map((c) =>
+          c.id === contextId ? { ...c, is_active: false } : c
+        ),
+        get().statusFilter
+      ),
+    }));
+    get().fetchContexts();
+  },
+
+  restoreContext: async (contextId) => {
+    const { token, orgId } = useAuthStore.getState();
+    if (!token || !orgId || get().actionLoadingId) return;
+
+    set({ actionLoadingId: contextId, error: null });
+    try {
+      await apiClient.put(
+        `/api/contexts/restore?context_id=${contextId}&org_id=${orgId}`,
+        {},
+        { token }
+      );
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err.message : "Failed to restore context",
+        actionLoadingId: null,
+      });
+      return;
+    }
+    // Optimistic local update, then background refetch
+    set((state) => ({
+      actionLoadingId: null,
+      contexts: applyStatusFilter(
+        state.contexts.map((c) =>
+          c.id === contextId ? { ...c, is_active: true } : c
+        ),
+        get().statusFilter
+      ),
+    }));
+    get().fetchContexts();
   },
 
   bulkUpload: async () => {
@@ -207,8 +272,10 @@ export const useContextStore = create<ContextState>((set, get) => ({
       contexts: [],
       isLoading: false,
       error: null,
+      statusFilter: "active",
       editingContextId: null,
-      confirmDeleteId: null,
+      confirmArchiveId: null,
+      actionLoadingId: null,
       isCreating: false,
       aiContexts: null,
       sanitizeUsage: null,
@@ -217,9 +284,10 @@ export const useContextStore = create<ContextState>((set, get) => ({
   // --- UI setters ---
 
   setEditingContextId: (editingContextId) => set({ editingContextId }),
-  setConfirmDeleteId: (confirmDeleteId) => set({ confirmDeleteId }),
+  setConfirmArchiveId: (confirmArchiveId) => set({ confirmArchiveId }),
   setIsCreating: (isCreating) => set({ isCreating }),
   setError: (error) => set({ error }),
+  setStatusFilter: (statusFilter) => set({ statusFilter }),
 
   // --- AI Generated ---
 

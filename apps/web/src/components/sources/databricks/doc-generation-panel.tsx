@@ -10,7 +10,8 @@ import {
   Sparkles,
   Copy,
   Check,
-  Trash2,
+  Archive,
+  ArchiveRestore,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api-client";
@@ -93,15 +94,30 @@ export function DocGenerationPanel() {
     setIsGenerating(false);
   }, [activeAnalysisId, token, setIsGenerating]);
 
-  const handleDeleteDoc = async (docId: number) => {
-    if (!confirm("Delete this generated document? This cannot be undone.")) return;
+  const handleArchiveDoc = async (docId: number) => {
+    if (!confirm("Archive this document? It can be restored later.")) return;
     try {
-      await apiClient.delete(`/api/sources/databricks/llm/doc/${docId}`, {
-        token: token || undefined,
-      });
+      await apiClient.put(
+        `/api/sources/databricks/llm/doc/${docId}/archive`,
+        {},
+        { token: token || undefined }
+      );
       setContextDocs(contextDocs.filter((d) => d.id !== docId));
     } catch (err) {
-      console.error("Failed to delete doc:", err);
+      console.error("Failed to archive doc:", err);
+    }
+  };
+
+  const handleRestoreDoc = async (docId: number) => {
+    try {
+      await apiClient.put(
+        `/api/sources/databricks/llm/doc/${docId}/restore`,
+        {},
+        { token: token || undefined }
+      );
+      setContextDocs(contextDocs.filter((d) => d.id !== docId));
+    } catch (err) {
+      console.error("Failed to restore doc:", err);
     }
   };
 
@@ -232,7 +248,7 @@ export function DocGenerationPanel() {
 
           <div className="space-y-2">
             {contextDocs.map((doc) => (
-              <DocCard key={doc.id} doc={doc} onDelete={handleDeleteDoc} />
+              <DocCard key={doc.id} doc={doc} onArchive={handleArchiveDoc} onRestore={handleRestoreDoc} />
             ))}
           </div>
         </div>
@@ -249,13 +265,17 @@ export function DocGenerationPanel() {
 
 function DocCard({
   doc,
-  onDelete,
+  onArchive,
+  onRestore,
 }: {
   doc: ContextDoc;
-  onDelete: (docId: number) => void;
+  onArchive: (docId: number) => Promise<void> | void;
+  onRestore: (docId: number) => Promise<void> | void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const isArchived = doc.status === "archived";
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -264,9 +284,19 @@ function DocCard({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleDelete = (e: React.MouseEvent) => {
+  const handleAction = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    onDelete(doc.id);
+    if (actionLoading) return;
+    setActionLoading(true);
+    try {
+      if (isArchived) {
+        await onRestore(doc.id);
+      } else {
+        await onArchive(doc.id);
+      }
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   return (
@@ -300,11 +330,23 @@ function DocCard({
             )}
           </button>
           <button
-            onClick={handleDelete}
-            className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
-            title="Delete document"
+            onClick={handleAction}
+            disabled={actionLoading}
+            className={cn(
+              "rounded p-1.5 transition-colors disabled:pointer-events-none",
+              isArchived
+                ? "text-gray-400 hover:bg-green-50 hover:text-green-600"
+                : "text-gray-400 hover:bg-amber-50 hover:text-amber-600"
+            )}
+            title={isArchived ? "Restore document" : "Archive document"}
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            {actionLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : isArchived ? (
+              <ArchiveRestore className="h-3.5 w-3.5" />
+            ) : (
+              <Archive className="h-3.5 w-3.5" />
+            )}
           </button>
         </div>
       </div>
@@ -317,4 +359,3 @@ function DocCard({
     </div>
   );
 }
-
