@@ -94,6 +94,27 @@ def _count_nodes(tree: dict) -> int:
     return count
 
 
+async def _get_run_for_org(run_id: str, org_id: int, require_tree: bool = False):
+    """Load a ContextTreeRun and verify it belongs to the given org.
+
+    Raises HTTPException(404) if not found or org mismatch.
+    """
+    async with async_session() as db:
+        result = await db.execute(
+            select(ContextTreeRun)
+            .where(
+                ContextTreeRun.id == uuid.UUID(run_id),
+                ContextTreeRun.org_id == org_id,
+            )
+        )
+        run = result.scalar_one_or_none()
+    if not run:
+        raise HTTPException(404, "Tree run not found")
+    if require_tree and not run.tree_data:
+        raise HTTPException(404, "Tree run has no tree data")
+    return run
+
+
 def _serialize_run(run) -> dict:
     """Serialize a ContextTreeRun to a dict (without tree_data for list views)."""
     return {
@@ -225,18 +246,11 @@ async def get_latest_run(
 @router.get("/runs/{run_id}")
 async def get_run(
     run_id: str,
+    org_id: int = Query(...),
     current_user: dict = Depends(require_permission("context_engine", "view")),
 ):
     """Get a specific tree run with full tree_data."""
-    async with async_session() as db:
-        result = await db.execute(
-            select(ContextTreeRun)
-            .where(ContextTreeRun.id == uuid.UUID(run_id))
-        )
-        run = result.scalar_one_or_none()
-
-    if not run:
-        raise HTTPException(404, "Tree run not found")
+    run = await _get_run_for_org(run_id, org_id)
     return _serialize_run_full(run)
 
 
@@ -244,21 +258,19 @@ async def get_run(
 async def update_tree(
     run_id: str,
     req: UpdateTreeRequest,
+    org_id: int = Query(...),
     current_user: dict = Depends(require_permission("context_engine", "edit")),
 ):
     """Update the tree structure (after user edits in the UI)."""
-    async with async_session() as db:
-        result = await db.execute(
-            select(ContextTreeRun)
-            .where(ContextTreeRun.id == uuid.UUID(run_id))
-        )
-        run = result.scalar_one_or_none()
-        if not run:
-            raise HTTPException(404, "Tree run not found")
+    await _get_run_for_org(run_id, org_id)
 
+    async with async_session() as db:
         await db.execute(
             update(ContextTreeRun)
-            .where(ContextTreeRun.id == uuid.UUID(run_id))
+            .where(
+                ContextTreeRun.id == uuid.UUID(run_id),
+                ContextTreeRun.org_id == org_id,
+            )
             .values(tree_data=req.tree_data)
         )
         await db.commit()
@@ -269,21 +281,19 @@ async def update_tree(
 @router.delete("/runs/{run_id}")
 async def delete_run(
     run_id: str,
+    org_id: int = Query(...),
     current_user: dict = Depends(require_permission("context_engine", "edit")),
 ):
     """Delete a tree run."""
-    async with async_session() as db:
-        result = await db.execute(
-            select(ContextTreeRun)
-            .where(ContextTreeRun.id == uuid.UUID(run_id))
-        )
-        run = result.scalar_one_or_none()
-        if not run:
-            raise HTTPException(404, "Tree run not found")
+    await _get_run_for_org(run_id, org_id)
 
+    async with async_session() as db:
         await db.execute(
             delete(ContextTreeRun)
-            .where(ContextTreeRun.id == uuid.UUID(run_id))
+            .where(
+                ContextTreeRun.id == uuid.UUID(run_id),
+                ContextTreeRun.org_id == org_id,
+            )
         )
         await db.commit()
 
@@ -294,45 +304,41 @@ async def delete_run(
 async def add_node(
     run_id: str,
     req: AddNodeRequest,
+    org_id: int = Query(...),
     current_user: dict = Depends(require_permission("context_engine", "edit")),
 ):
     """Add a new node to the tree."""
+    run = await _get_run_for_org(run_id, org_id, require_tree=True)
+
+    tree = run.tree_data
+    parent = _find_node(tree, req.parent_id)
+    if not parent:
+        raise HTTPException(404, f"Parent node '{req.parent_id}' not found in tree")
+
+    if "children" not in parent:
+        parent["children"] = []
+
+    new_node = {
+        "id": req.node.get("id", f"custom_{uuid.uuid4().hex[:8]}"),
+        "name": req.node.get("name", "New Node"),
+        "type": req.node.get("type", "leaf"),
+        "health": req.node.get("health", 80),
+        "visibility": req.node.get("visibility", "public"),
+        "desc": req.node.get("desc", ""),
+        "source": "manual",
+    }
+    if req.node.get("children"):
+        new_node["children"] = req.node["children"]
+
+    parent["children"].append(new_node)
+
     async with async_session() as db:
-        result = await db.execute(
-            select(ContextTreeRun)
-            .where(ContextTreeRun.id == uuid.UUID(run_id))
-        )
-        run = result.scalar_one_or_none()
-        if not run or not run.tree_data:
-            raise HTTPException(404, "Tree run not found or has no tree data")
-
-        tree = run.tree_data
-        parent = _find_node(tree, req.parent_id)
-        if not parent:
-            raise HTTPException(404, f"Parent node '{req.parent_id}' not found in tree")
-
-        # Ensure parent has children array
-        if "children" not in parent:
-            parent["children"] = []
-
-        # Build the new node
-        new_node = {
-            "id": req.node.get("id", f"custom_{uuid.uuid4().hex[:8]}"),
-            "name": req.node.get("name", "New Node"),
-            "type": req.node.get("type", "leaf"),
-            "health": req.node.get("health", 80),
-            "visibility": req.node.get("visibility", "public"),
-            "desc": req.node.get("desc", ""),
-            "source": "manual",
-        }
-        if req.node.get("children"):
-            new_node["children"] = req.node["children"]
-
-        parent["children"].append(new_node)
-
         await db.execute(
             update(ContextTreeRun)
-            .where(ContextTreeRun.id == uuid.UUID(run_id))
+            .where(
+                ContextTreeRun.id == uuid.UUID(run_id),
+                ContextTreeRun.org_id == org_id,
+            )
             .values(tree_data=tree)
         )
         await db.commit()
@@ -345,36 +351,33 @@ async def update_node(
     run_id: str,
     node_id: str,
     req: UpdateNodeRequest,
+    org_id: int = Query(...),
     current_user: dict = Depends(require_permission("context_engine", "edit")),
 ):
     """Update a specific node in the tree."""
+    run = await _get_run_for_org(run_id, org_id, require_tree=True)
+
+    tree = run.tree_data
+    node = _find_node(tree, node_id)
+    if not node:
+        raise HTTPException(404, f"Node '{node_id}' not found in tree")
+
+    if req.name is not None:
+        node["name"] = req.name
+    if req.desc is not None:
+        node["desc"] = req.desc
+    if req.visibility is not None:
+        node["visibility"] = req.visibility
+    if req.health is not None:
+        node["health"] = req.health
+
     async with async_session() as db:
-        result = await db.execute(
-            select(ContextTreeRun)
-            .where(ContextTreeRun.id == uuid.UUID(run_id))
-        )
-        run = result.scalar_one_or_none()
-        if not run or not run.tree_data:
-            raise HTTPException(404, "Tree run not found or has no tree data")
-
-        tree = run.tree_data
-        node = _find_node(tree, node_id)
-        if not node:
-            raise HTTPException(404, f"Node '{node_id}' not found in tree")
-
-        # Apply updates
-        if req.name is not None:
-            node["name"] = req.name
-        if req.desc is not None:
-            node["desc"] = req.desc
-        if req.visibility is not None:
-            node["visibility"] = req.visibility
-        if req.health is not None:
-            node["health"] = req.health
-
         await db.execute(
             update(ContextTreeRun)
-            .where(ContextTreeRun.id == uuid.UUID(run_id))
+            .where(
+                ContextTreeRun.id == uuid.UUID(run_id),
+                ContextTreeRun.org_id == org_id,
+            )
             .values(tree_data=tree)
         )
         await db.commit()
@@ -386,29 +389,27 @@ async def update_node(
 async def delete_node(
     run_id: str,
     node_id: str,
+    org_id: int = Query(...),
     current_user: dict = Depends(require_permission("context_engine", "edit")),
 ):
     """Remove a node from the tree."""
     if node_id == "root":
         raise HTTPException(400, "Cannot delete the root node")
 
+    run = await _get_run_for_org(run_id, org_id, require_tree=True)
+
+    tree = run.tree_data
+    removed = _remove_node(tree, node_id)
+    if not removed:
+        raise HTTPException(404, f"Node '{node_id}' not found in tree")
+
     async with async_session() as db:
-        result = await db.execute(
-            select(ContextTreeRun)
-            .where(ContextTreeRun.id == uuid.UUID(run_id))
-        )
-        run = result.scalar_one_or_none()
-        if not run or not run.tree_data:
-            raise HTTPException(404, "Tree run not found or has no tree data")
-
-        tree = run.tree_data
-        removed = _remove_node(tree, node_id)
-        if not removed:
-            raise HTTPException(404, f"Node '{node_id}' not found in tree")
-
         await db.execute(
             update(ContextTreeRun)
-            .where(ContextTreeRun.id == uuid.UUID(run_id))
+            .where(
+                ContextTreeRun.id == uuid.UUID(run_id),
+                ContextTreeRun.org_id == org_id,
+            )
             .values(tree_data=tree)
         )
         await db.commit()
@@ -426,15 +427,7 @@ async def sync_to_capillary(
     import base64
     import httpx
 
-    async with async_session() as db:
-        result = await db.execute(
-            select(ContextTreeRun)
-            .where(ContextTreeRun.id == uuid.UUID(run_id))
-        )
-        run = result.scalar_one_or_none()
-        if not run or not run.tree_data:
-            raise HTTPException(404, "Tree run not found or has no tree data")
-
+    run = await _get_run_for_org(run_id, org_id, require_tree=True)
     tree = run.tree_data
     token = current_user.get("capillary_token", "")
     base_url = current_user.get("base_url", "")
@@ -473,7 +466,7 @@ async def sync_to_capillary(
                         "scope": "org",
                     },
                 )
-                if resp.status_code == 200:
+                if resp.is_success:
                     results.append({"name": name, "status": "uploaded"})
                 else:
                     results.append({
@@ -503,6 +496,7 @@ def _collect_leaves(node: dict, leaves: list):
 async def restructure_tree(
     run_id: str,
     req: RestructureRequest,
+    org_id: int = Query(...),
     current_user: dict = Depends(require_permission("context_engine", "edit")),
 ):
     """Ask LLM to restructure part of the tree.
@@ -510,14 +504,7 @@ async def restructure_tree(
     Returns a proposal with before/after comparison and health impact.
     The proposal needs user approval before applying.
     """
-    async with async_session() as db:
-        result = await db.execute(
-            select(ContextTreeRun)
-            .where(ContextTreeRun.id == uuid.UUID(run_id))
-        )
-        run = result.scalar_one_or_none()
-        if not run or not run.tree_data:
-            raise HTTPException(404, "Tree run not found or has no tree data")
+    run = await _get_run_for_org(run_id, org_id, require_tree=True)
 
     from app.services.context_engine.restructure_proposer import propose_restructure
 
@@ -537,23 +524,194 @@ async def restructure_tree(
 async def apply_restructure(
     run_id: str,
     req: UpdateTreeRequest,
+    org_id: int = Query(...),
     current_user: dict = Depends(require_permission("context_engine", "edit")),
 ):
     """Apply a previously proposed restructure by saving the new tree."""
-    async with async_session() as db:
-        result = await db.execute(
-            select(ContextTreeRun)
-            .where(ContextTreeRun.id == uuid.UUID(run_id))
-        )
-        run = result.scalar_one_or_none()
-        if not run:
-            raise HTTPException(404, "Tree run not found")
+    await _get_run_for_org(run_id, org_id)
 
+    async with async_session() as db:
         await db.execute(
             update(ContextTreeRun)
-            .where(ContextTreeRun.id == uuid.UUID(run_id))
+            .where(
+                ContextTreeRun.id == uuid.UUID(run_id),
+                ContextTreeRun.org_id == org_id,
+            )
             .values(tree_data=req.tree_data)
         )
         await db.commit()
 
     return {"success": True, "tree_data": req.tree_data}
+
+
+# ── Checkpoint endpoints ─────────────────────────────────────────────
+
+
+class CheckpointRequest(BaseModel):
+    label: str = Field(default="", description="Label for the checkpoint")
+
+
+@router.post("/runs/{run_id}/checkpoint")
+async def create_checkpoint(
+    run_id: str,
+    req: CheckpointRequest = CheckpointRequest(),
+    org_id: int = Query(...),
+    current_user: dict = Depends(require_permission("context_engine", "edit")),
+):
+    """Create a user-defined checkpoint of the current tree state."""
+    from app.models.context_tree_checkpoint import ContextTreeCheckpoint
+
+    run = await _get_run_for_org(run_id, org_id, require_tree=True)
+
+    async with async_session() as db:
+        label = req.label
+        if not label:
+            count_result = await db.execute(
+                select(ContextTreeCheckpoint)
+                .where(
+                    ContextTreeCheckpoint.run_id == uuid.UUID(run_id),
+                    ContextTreeCheckpoint.org_id == org_id,
+                )
+            )
+            existing = len(count_result.scalars().all())
+            label = f"Checkpoint #{existing + 1}"
+
+        leaves: list[dict] = []
+        _collect_leaves(run.tree_data, leaves)
+
+        checkpoint = ContextTreeCheckpoint(
+            id=uuid.uuid4(),
+            run_id=uuid.UUID(run_id),
+            user_id=current_user["user_id"],
+            org_id=org_id,
+            label=label,
+            tree_data=run.tree_data,
+            node_count=_count_nodes(run.tree_data),
+            leaf_count=len(leaves),
+            health_score=run.tree_data.get("health", 0),
+        )
+        db.add(checkpoint)
+        await db.commit()
+        await db.refresh(checkpoint)
+
+    return {
+        "id": str(checkpoint.id),
+        "label": checkpoint.label,
+        "created_at": checkpoint.created_at.isoformat() if checkpoint.created_at else None,
+        "node_count": checkpoint.node_count,
+        "leaf_count": checkpoint.leaf_count,
+        "health_score": checkpoint.health_score,
+    }
+
+
+@router.get("/runs/{run_id}/checkpoints")
+async def list_checkpoints(
+    run_id: str,
+    org_id: int = Query(...),
+    current_user: dict = Depends(require_permission("context_engine", "view")),
+):
+    """List all checkpoints for a tree run."""
+    from app.models.context_tree_checkpoint import ContextTreeCheckpoint
+
+    await _get_run_for_org(run_id, org_id)
+
+    async with async_session() as db:
+        result = await db.execute(
+            select(ContextTreeCheckpoint)
+            .where(
+                ContextTreeCheckpoint.run_id == uuid.UUID(run_id),
+                ContextTreeCheckpoint.org_id == org_id,
+            )
+            .order_by(desc(ContextTreeCheckpoint.created_at))
+        )
+        checkpoints = result.scalars().all()
+
+    return {
+        "checkpoints": [
+            {
+                "id": str(cp.id),
+                "label": cp.label,
+                "created_at": cp.created_at.isoformat() if cp.created_at else None,
+                "node_count": cp.node_count,
+                "leaf_count": cp.leaf_count,
+                "health_score": cp.health_score,
+                "change_summary": cp.change_summary,
+            }
+            for cp in checkpoints
+        ]
+    }
+
+
+@router.post("/runs/{run_id}/checkpoint/{checkpoint_id}/restore")
+async def restore_checkpoint(
+    run_id: str,
+    checkpoint_id: str,
+    org_id: int = Query(...),
+    current_user: dict = Depends(require_permission("context_engine", "edit")),
+):
+    """Restore the tree to a previous checkpoint state."""
+    from app.models.context_tree_checkpoint import ContextTreeCheckpoint
+
+    await _get_run_for_org(run_id, org_id)
+
+    async with async_session() as db:
+        result = await db.execute(
+            select(ContextTreeCheckpoint)
+            .where(
+                ContextTreeCheckpoint.id == uuid.UUID(checkpoint_id),
+                ContextTreeCheckpoint.run_id == uuid.UUID(run_id),
+                ContextTreeCheckpoint.org_id == org_id,
+            )
+        )
+        checkpoint = result.scalar_one_or_none()
+        if not checkpoint:
+            raise HTTPException(404, "Checkpoint not found")
+
+        await db.execute(
+            update(ContextTreeRun)
+            .where(
+                ContextTreeRun.id == uuid.UUID(run_id),
+                ContextTreeRun.org_id == org_id,
+            )
+            .values(tree_data=checkpoint.tree_data)
+        )
+        await db.commit()
+
+    return {"success": True, "tree_data": checkpoint.tree_data, "label": checkpoint.label}
+
+
+@router.delete("/runs/{run_id}/checkpoint/{checkpoint_id}")
+async def delete_checkpoint(
+    run_id: str,
+    checkpoint_id: str,
+    org_id: int = Query(...),
+    current_user: dict = Depends(require_permission("context_engine", "edit")),
+):
+    """Delete a checkpoint."""
+    from app.models.context_tree_checkpoint import ContextTreeCheckpoint
+
+    await _get_run_for_org(run_id, org_id)
+
+    async with async_session() as db:
+        result = await db.execute(
+            select(ContextTreeCheckpoint)
+            .where(
+                ContextTreeCheckpoint.id == uuid.UUID(checkpoint_id),
+                ContextTreeCheckpoint.run_id == uuid.UUID(run_id),
+                ContextTreeCheckpoint.org_id == org_id,
+            )
+        )
+        checkpoint = result.scalar_one_or_none()
+        if not checkpoint:
+            raise HTTPException(404, "Checkpoint not found")
+
+        await db.execute(
+            delete(ContextTreeCheckpoint)
+            .where(
+                ContextTreeCheckpoint.id == uuid.UUID(checkpoint_id),
+                ContextTreeCheckpoint.org_id == org_id,
+            )
+        )
+        await db.commit()
+
+    return {"success": True}

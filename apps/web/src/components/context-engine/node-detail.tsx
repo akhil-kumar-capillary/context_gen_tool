@@ -48,7 +48,7 @@ function findNode(
 // ── NodeDetail ──
 
 export function NodeDetail() {
-  const { token } = useAuthStore();
+  const { token, orgId } = useAuthStore();
   const {
     treeData,
     selectedNodeId,
@@ -103,7 +103,7 @@ export function NodeDetail() {
     if (activeRunId && token) {
       try {
         await apiClient.put(
-          `/api/context-engine/runs/${activeRunId}/node/${node.id}`,
+          `/api/context-engine/runs/${activeRunId}/node/${node.id}?org_id=${orgId}`,
           { desc: editedDesc },
           { token }
         );

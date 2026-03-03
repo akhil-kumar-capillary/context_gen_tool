@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useChatStore } from "@/stores/chat-store";
 import { useContextStore } from "@/stores/context-store";
+import { useContextEngineStore } from "@/stores/context-engine-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import type { LLMUsage, AiGeneratedContext } from "@/types";
 
@@ -20,6 +21,9 @@ interface ChatWebSocketMessage {
   message?: string;
   // For ai_context_staged events
   context?: { name: string; content: string; scope: string };
+  // For context_tree_updated events
+  tree_data?: unknown;
+  run_id?: string;
 }
 
 export function useChatWebSocket() {
@@ -133,6 +137,13 @@ export function useChatWebSocket() {
 
           case "trigger_bulk_upload":
             useContextStore.getState().bulkUpload();
+            break;
+
+          case "context_tree_updated":
+            // Chat tool modified the tree — cross-update the context engine store
+            if (data.tree_data) {
+              useContextEngineStore.getState().setTreeData(data.tree_data as never);
+            }
             break;
 
           case "pong":

@@ -415,6 +415,7 @@ async def list_conversations(
 @router.get("/conversations/{conversation_id}")
 async def get_conversation(
     conversation_id: str,
+    org_id: int = Query(...),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -425,6 +426,7 @@ async def get_conversation(
         .where(
             ChatConversation.id == conversation_id,
             ChatConversation.user_id == current_user["user_id"],
+            ChatConversation.org_id == org_id,
         )
     )
     conversation = result.scalar_one_or_none()
@@ -456,6 +458,7 @@ async def get_conversation(
 @router.delete("/conversations/{conversation_id}")
 async def delete_conversation(
     conversation_id: str,
+    org_id: int = Query(...),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -464,6 +467,7 @@ async def delete_conversation(
         select(ChatConversation).where(
             ChatConversation.id == conversation_id,
             ChatConversation.user_id == current_user["user_id"],
+            ChatConversation.org_id == org_id,
         )
     )
     conversation = result.scalar_one_or_none()

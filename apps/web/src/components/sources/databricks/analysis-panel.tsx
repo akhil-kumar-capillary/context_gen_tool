@@ -127,7 +127,7 @@ export function AnalysisPanel() {
   const handleDeleteAnalysis = async (analysisId: string) => {
     if (!confirm("Delete this analysis run and all associated data?")) return;
     try {
-      await apiClient.delete(`/api/sources/databricks/analysis/${analysisId}`, {
+      await apiClient.delete(`/api/sources/databricks/analysis/${analysisId}?org_id=${currentOrgId}`, {
         token: token || undefined,
       });
       // Remove from local state

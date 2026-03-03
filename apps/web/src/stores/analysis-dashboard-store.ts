@@ -142,7 +142,7 @@ interface AnalysisDashboardState {
   setActiveTab: (tab: string) => void;
   setSelectedTable: (table: string | null) => void;
   setSelectedQueryId: (id: string | null) => void;
-  loadAnalysisData: (analysisId: string, token: string) => Promise<void>;
+  loadAnalysisData: (analysisId: string, token: string, orgId?: number | null) => Promise<void>;
   reset: () => void;
 }
 
@@ -171,7 +171,7 @@ export const useAnalysisDashboardStore = create<AnalysisDashboardState>(
     setSelectedTable: (table) => set({ selectedTable: table }),
     setSelectedQueryId: (id) => set({ selectedQueryId: id }),
 
-    loadAnalysisData: async (analysisId: string, token: string) => {
+    loadAnalysisData: async (analysisId: string, token: string, orgId?: number | null) => {
       if (get().isLoading) return;
       set({ isLoading: true, error: null });
 
@@ -187,7 +187,7 @@ export const useAnalysisDashboardStore = create<AnalysisDashboardState>(
             alias_conv: Record<string, [string, number][]>;
             total_weight: number;
             run_id: string;
-          }>(`/api/sources/databricks/analysis/${analysisId}`, { token }),
+          }>(`/api/sources/databricks/analysis/${analysisId}${orgId ? `?org_id=${orgId}` : ''}`, { token }),
           apiClient.get<{ fingerprints: Fingerprint[]; total: number }>(
             `/api/sources/databricks/analysis/${analysisId}/fingerprints?limit=500`,
             { token }

@@ -46,7 +46,7 @@ export function ReviewPanel() {
     setActiveStep,
   } = useConfigApisStore();
 
-  const { token } = useAuthStore();
+  const { token, orgId } = useAuthStore();
 
   const [activeTab, setActiveTab] = useState(DOC_TABS[0].key);
   const [controlMode, setControlMode] = useState<ControlMode>("inclusions");
@@ -65,8 +65,8 @@ export function ReviewPanel() {
         };
 
         const [clustersRes, countersRes, promptsRes] = await Promise.all([
-          fetch(`/api/sources/config-apis/review/clusters/${activeAnalysisId}`, { headers }),
-          fetch(`/api/sources/config-apis/review/counters/${activeAnalysisId}`, { headers }),
+          fetch(`/api/sources/config-apis/review/clusters/${activeAnalysisId}?org_id=${orgId}`, { headers }),
+          fetch(`/api/sources/config-apis/review/counters/${activeAnalysisId}?org_id=${orgId}`, { headers }),
           fetch(`/api/sources/config-apis/review/default-prompts`, { headers }),
         ]);
 

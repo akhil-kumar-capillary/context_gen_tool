@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useChatStore } from "@/stores/chat-store";
 import { ConversationSidebar } from "@/components/chat/conversation-sidebar";
@@ -10,13 +10,22 @@ export default function ChatPage() {
   const { token, orgId } = useAuthStore();
   const { setActiveConversation, setMessages } = useChatStore();
 
+  // Reset chat state when org changes
+  const prevOrgIdRef = useRef(orgId);
+  useEffect(() => {
+    if (prevOrgIdRef.current !== orgId) {
+      prevOrgIdRef.current = orgId;
+      useChatStore.getState().reset();
+    }
+  }, [orgId]);
+
   const handleSelectConversation = useCallback(
     async (id: string) => {
       setActiveConversation(id);
       // Load messages for this conversation
       try {
         const resp = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/chat/conversations/${id}`,
+          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/chat/conversations/${id}?org_id=${orgId}`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }

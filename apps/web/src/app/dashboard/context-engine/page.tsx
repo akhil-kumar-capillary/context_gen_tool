@@ -23,7 +23,7 @@ import {
   type TreeRun,
 } from "@/stores/context-engine-store";
 import { useContextEngineWebSocket } from "@/hooks/use-context-engine-websocket";
-import { TreeView, NodeDetail, SecretDetail } from "@/components/context-engine";
+import { TreeView, NodeDetail, SecretDetail, VersionHistory } from "@/components/context-engine";
 import { ModuleGuard } from "@/components/layout/module-guard";
 import { useSettingsStore } from "@/stores/settings-store";
 
@@ -53,6 +53,9 @@ export default function ContextEnginePage() {
     setSyncResults,
     selectNode,
     setIsEditing,
+    setCheckpoints,
+    setIsLoadingCheckpoints,
+    setIsSavingCheckpoint,
   } = useContextEngineStore();
 
   // Reset context engine state when org changes
@@ -69,6 +72,9 @@ export default function ContextEnginePage() {
       setIsEditing(false);
       setIsSyncing(false);
       setIsGenerating(false);
+      setCheckpoints([]);
+      setIsLoadingCheckpoints(false);
+      setIsSavingCheckpoint(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId]);
@@ -111,7 +117,7 @@ export default function ContextEnginePage() {
       setIsLoadingTree(true);
       try {
         const data = await apiClient.get<{ tree_data: unknown }>(
-          `/api/context-engine/runs/${runId}`,
+          `/api/context-engine/runs/${runId}?org_id=${orgId}`,
           { token }
         );
         if (data.tree_data) {
@@ -224,7 +230,7 @@ export default function ContextEnginePage() {
     if (!token) return;
     if (!confirm("Delete this tree run and all associated data?")) return;
     try {
-      await apiClient.delete(`/api/context-engine/runs/${runId}`, { token });
+      await apiClient.delete(`/api/context-engine/runs/${runId}?org_id=${orgId}`, { token });
       // Remove from local state
       setTreeRuns(treeRuns.filter((r) => r.id !== runId));
       // If we deleted the active run, clear the tree
@@ -375,6 +381,9 @@ export default function ContextEnginePage() {
             </div>
           </div>
         )}
+
+        {/* Version History (checkpoints) */}
+        {activeRunId && treeData && <VersionHistory />}
 
         {/* Run history */}
         <div className="flex-1 p-4">

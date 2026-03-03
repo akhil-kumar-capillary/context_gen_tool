@@ -210,6 +210,10 @@ class Settings(BaseSettings):
     chat_history_window: int = 20
     max_tool_rounds: int = 5
 
+    # Tree modification
+    tree_modify_max_output_tokens: int = 8192
+    tree_modify_max_compact_chars: int = 50000
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

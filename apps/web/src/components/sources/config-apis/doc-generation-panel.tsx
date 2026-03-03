@@ -124,7 +124,7 @@ export function DocGenerationPanel() {
     if (!confirm("Archive this document? It can be restored later.")) return;
     setActionLoadingId(docId);
     try {
-      await apiClient.put(`/api/sources/config-apis/llm/doc/${docId}/archive`, {}, { token });
+      await apiClient.put(`/api/sources/config-apis/llm/doc/${docId}/archive?org_id=${orgId}`, {}, { token });
       setContextDocs(contextDocs.filter((d) => d.id !== docId));
     } catch (err) {
       console.error("Failed to archive doc:", err);
@@ -136,7 +136,7 @@ export function DocGenerationPanel() {
     if (!token || actionLoadingId) return;
     setActionLoadingId(docId);
     try {
-      await apiClient.put(`/api/sources/config-apis/llm/doc/${docId}/restore`, {}, { token });
+      await apiClient.put(`/api/sources/config-apis/llm/doc/${docId}/restore?org_id=${orgId}`, {}, { token });
       setContextDocs(contextDocs.filter((d) => d.id !== docId));
     } catch (err) {
       console.error("Failed to restore doc:", err);

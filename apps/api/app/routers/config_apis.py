@@ -384,6 +384,7 @@ async def delete_analysis(
 @router.get("/review/fingerprints/{analysis_id}")
 async def get_fingerprints(
     analysis_id: str,
+    org_id: int = Query(...),
     entity_type: Optional[str] = Query(default=None, description="Filter by entity type"),
     limit: int = Query(default=500, ge=1, le=5000),
     current_user: dict = Depends(require_permission("config_apis", "view")),
@@ -396,7 +397,8 @@ async def get_fingerprints(
     async with async_session() as db:
         result = await db.execute(
             select(ConfigAnalysisRun).where(
-                ConfigAnalysisRun.id == uuid.UUID(analysis_id)
+                ConfigAnalysisRun.id == uuid.UUID(analysis_id),
+                ConfigAnalysisRun.org_id == org_id,
             )
         )
         row = result.scalar_one_or_none()
@@ -421,6 +423,7 @@ async def get_fingerprints(
 @router.get("/review/counters/{analysis_id}")
 async def get_counters(
     analysis_id: str,
+    org_id: int = Query(...),
     current_user: dict = Depends(require_permission("config_apis", "view")),
 ):
     """Get frequency counters from an analysis run."""
@@ -431,7 +434,8 @@ async def get_counters(
     async with async_session() as db:
         result = await db.execute(
             select(ConfigAnalysisRun).where(
-                ConfigAnalysisRun.id == uuid.UUID(analysis_id)
+                ConfigAnalysisRun.id == uuid.UUID(analysis_id),
+                ConfigAnalysisRun.org_id == org_id,
             )
         )
         row = result.scalar_one_or_none()
@@ -448,6 +452,7 @@ async def get_counters(
 @router.get("/review/clusters/{analysis_id}")
 async def get_clusters(
     analysis_id: str,
+    org_id: int = Query(...),
     current_user: dict = Depends(require_permission("config_apis", "view")),
 ):
     """Get clusters with top-5 templates from an analysis run."""
@@ -458,7 +463,8 @@ async def get_clusters(
     async with async_session() as db:
         result = await db.execute(
             select(ConfigAnalysisRun).where(
-                ConfigAnalysisRun.id == uuid.UUID(analysis_id)
+                ConfigAnalysisRun.id == uuid.UUID(analysis_id),
+                ConfigAnalysisRun.org_id == org_id,
             )
         )
         row = result.scalar_one_or_none()
@@ -489,7 +495,7 @@ async def preview_payload(
     async with async_session() as db:
         result = await db.execute(
             select(ConfigAnalysisRun).where(
-                ConfigAnalysisRun.id == uuid.UUID(req.analysis_id)
+                ConfigAnalysisRun.id == uuid.UUID(req.analysis_id),
             )
         )
         row = result.scalar_one_or_none()
@@ -622,6 +628,7 @@ async def get_generated_docs(
 @router.get("/llm/doc/{doc_id}")
 async def get_generated_doc(
     doc_id: int,
+    org_id: int = Query(...),
     current_user: dict = Depends(require_permission("config_apis", "view")),
 ):
     """Get a single generated context document."""
@@ -629,18 +636,23 @@ async def get_generated_doc(
     doc = await storage.get_context_doc(doc_id)
     if not doc:
         raise HTTPException(404, "Document not found")
+    if str(doc.get("org_id", "")) != str(org_id):
+        raise HTTPException(404, "Document not found")
     return doc
 
 
 @router.put("/llm/doc/{doc_id}/archive")
 async def archive_generated_doc(
     doc_id: int,
+    org_id: int = Query(...),
     current_user: dict = Depends(require_permission("config_apis", "extract")),
 ):
     """Archive a generated context document (soft-delete)."""
     storage = ConfigStorageService()
     doc = await storage.get_context_doc(doc_id)
     if not doc:
+        raise HTTPException(404, "Document not found")
+    if str(doc.get("org_id", "")) != str(org_id):
         raise HTTPException(404, "Document not found")
     await storage.archive_context_doc(doc_id)
     return {"status": "archived", "doc_id": doc_id}
@@ -649,12 +661,15 @@ async def archive_generated_doc(
 @router.put("/llm/doc/{doc_id}/restore")
 async def restore_generated_doc(
     doc_id: int,
+    org_id: int = Query(...),
     current_user: dict = Depends(require_permission("config_apis", "extract")),
 ):
     """Restore an archived context document."""
     storage = ConfigStorageService()
     doc = await storage.get_context_doc(doc_id)
     if not doc:
+        raise HTTPException(404, "Document not found")
+    if str(doc.get("org_id", "")) != str(org_id):
         raise HTTPException(404, "Document not found")
     await storage.restore_context_doc(doc_id)
     return {"status": "restored", "doc_id": doc_id}

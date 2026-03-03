@@ -62,7 +62,7 @@ export function ConversationSidebar({
     e.stopPropagation();
     try {
       const resp = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/chat/conversations/${id}`,
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/chat/conversations/${id}?org_id=${orgId}`,
         {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },

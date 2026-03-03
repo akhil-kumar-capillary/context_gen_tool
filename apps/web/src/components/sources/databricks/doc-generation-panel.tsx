@@ -98,7 +98,7 @@ export function DocGenerationPanel() {
     if (!confirm("Archive this document? It can be restored later.")) return;
     try {
       await apiClient.put(
-        `/api/sources/databricks/llm/doc/${docId}/archive`,
+        `/api/sources/databricks/llm/doc/${docId}/archive?org_id=${orgId}`,
         {},
         { token: token || undefined }
       );
@@ -111,7 +111,7 @@ export function DocGenerationPanel() {
   const handleRestoreDoc = async (docId: number) => {
     try {
       await apiClient.put(
-        `/api/sources/databricks/llm/doc/${docId}/restore`,
+        `/api/sources/databricks/llm/doc/${docId}/restore?org_id=${orgId}`,
         {},
         { token: token || undefined }
       );

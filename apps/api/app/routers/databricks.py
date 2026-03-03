@@ -402,12 +402,15 @@ async def analysis_history_for_run(
 @router.get("/analysis/{analysis_id}")
 async def get_analysis(
     analysis_id: str,
+    org_id: int = Query(...),
     current_user: dict = Depends(require_permission("databricks", "view")),
 ):
     """Get full details of a specific analysis run."""
     storage = StorageService()
     analysis = await storage.get_analysis_run(analysis_id)
     if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis run not found")
+    if str(analysis.get("org_id", "")) != str(org_id):
         raise HTTPException(status_code=404, detail="Analysis run not found")
     return analysis
 
@@ -439,12 +442,15 @@ async def get_analysis_notebooks(
 @router.delete("/analysis/{analysis_id}")
 async def delete_analysis(
     analysis_id: str,
+    org_id: int = Query(...),
     current_user: dict = Depends(require_permission("databricks", "analyze")),
 ):
     """Delete an analysis run and all associated data."""
     storage = StorageService()
     analysis = await storage.get_analysis_run(analysis_id)
     if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis run not found")
+    if str(analysis.get("org_id", "")) != str(org_id):
         raise HTTPException(status_code=404, detail="Analysis run not found")
     await storage.delete_analysis_run(analysis_id)
     return {"status": "deleted", "analysis_id": analysis_id}
@@ -559,6 +565,7 @@ async def list_docs(
 @router.get("/llm/doc/{doc_id}")
 async def get_doc(
     doc_id: int,
+    org_id: int = Query(...),
     current_user: dict = Depends(require_permission("databricks", "view")),
 ):
     """Get a single context document by ID."""
@@ -566,18 +573,23 @@ async def get_doc(
     doc = await storage.get_context_doc(doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+    if str(doc.get("org_id", "")) != str(org_id):
+        raise HTTPException(status_code=404, detail="Document not found")
     return doc
 
 
 @router.put("/llm/doc/{doc_id}/archive")
 async def archive_doc(
     doc_id: int,
+    org_id: int = Query(...),
     current_user: dict = Depends(require_permission("databricks", "extract")),
 ):
     """Archive a generated context document (soft-delete)."""
     storage = StorageService()
     doc = await storage.get_context_doc(doc_id)
     if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if str(doc.get("org_id", "")) != str(org_id):
         raise HTTPException(status_code=404, detail="Document not found")
     await storage.archive_context_doc(doc_id)
     return {"status": "archived", "doc_id": doc_id}
@@ -586,12 +598,15 @@ async def archive_doc(
 @router.put("/llm/doc/{doc_id}/restore")
 async def restore_doc(
     doc_id: int,
+    org_id: int = Query(...),
     current_user: dict = Depends(require_permission("databricks", "extract")),
 ):
     """Restore an archived context document."""
     storage = StorageService()
     doc = await storage.get_context_doc(doc_id)
     if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if str(doc.get("org_id", "")) != str(org_id):
         raise HTTPException(status_code=404, detail="Document not found")
     await storage.restore_context_doc(doc_id)
     return {"status": "restored", "doc_id": doc_id}

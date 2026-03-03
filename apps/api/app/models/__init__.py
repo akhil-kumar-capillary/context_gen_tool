@@ -8,6 +8,7 @@ from app.models.config_pipeline import ConfigExtractionRun, ConfigAnalysisRun
 from app.models.audit_log import AuditLog
 from app.models.chat import ChatConversation, ChatMessage
 from app.models.context_tree import ContextTreeRun
+from app.models.context_tree_checkpoint import ContextTreeCheckpoint
 
 __all__ = [
     "User", "Role", "Permission", "UserRole", "UserPermission",
@@ -21,4 +22,5 @@ __all__ = [
     "AuditLog",
     "ChatConversation", "ChatMessage",
     "ContextTreeRun",
+    "ContextTreeCheckpoint",
 ]

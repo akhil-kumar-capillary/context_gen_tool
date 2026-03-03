@@ -14,7 +14,7 @@ import {
 import { AnalysisDashboard } from "./analysis-dashboard";
 
 export function AnalysisPanel() {
-  const { token } = useAuthStore();
+  const { token, orgId } = useAuthStore();
   const {
     activeExtractionId,
     extractionRuns,
@@ -135,11 +135,11 @@ export function AnalysisPanel() {
       try {
         const [clustersData, countersData] = await Promise.all([
           apiClient.get<{ clusters: unknown[] }>(
-            `/api/sources/config-apis/review/clusters/${activeAnalysisId}`,
+            `/api/sources/config-apis/review/clusters/${activeAnalysisId}?org_id=${orgId}`,
             { token }
           ),
           apiClient.get<{ counters: Record<string, unknown>; entity_type_counts: Record<string, number> }>(
-            `/api/sources/config-apis/review/counters/${activeAnalysisId}`,
+            `/api/sources/config-apis/review/counters/${activeAnalysisId}?org_id=${orgId}`,
             { token }
           ),
         ]);

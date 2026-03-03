@@ -72,6 +72,16 @@ export interface SyncResult {
   reason?: string;
 }
 
+export interface CheckpointItem {
+  id: string;
+  label: string;
+  created_at: string | null;
+  node_count: number;
+  leaf_count: number;
+  health_score: number;
+  change_summary?: string;
+}
+
 // ── Store ──
 
 interface ContextEngineState {
@@ -92,6 +102,11 @@ interface ContextEngineState {
   // Sync
   isSyncing: boolean;
   syncResults: SyncResult[] | null;
+
+  // Checkpoints (versioning)
+  checkpoints: CheckpointItem[];
+  isLoadingCheckpoints: boolean;
+  isSavingCheckpoint: boolean;
 
   // Loading
   isLoadingRuns: boolean;
@@ -116,6 +131,11 @@ interface ContextEngineState {
   setSyncResults: (results: SyncResult[] | null) => void;
   setIsLoadingRuns: (v: boolean) => void;
   setIsLoadingTree: (v: boolean) => void;
+  setCheckpoints: (checkpoints: CheckpointItem[]) => void;
+  addCheckpoint: (checkpoint: CheckpointItem) => void;
+  removeCheckpoint: (id: string) => void;
+  setIsLoadingCheckpoints: (v: boolean) => void;
+  setIsSavingCheckpoint: (v: boolean) => void;
   reset: () => void;
 }
 
@@ -164,6 +184,9 @@ const initialState = {
   isEditing: false,
   isSyncing: false,
   syncResults: null as SyncResult[] | null,
+  checkpoints: [] as CheckpointItem[],
+  isLoadingCheckpoints: false,
+  isSavingCheckpoint: false,
   isLoadingRuns: false,
   isLoadingTree: false,
 };
@@ -290,6 +313,14 @@ export const useContextEngineStore = create<ContextEngineState>((set, get) => ({
   setSyncResults: (results) => set({ syncResults: results }),
   setIsLoadingRuns: (v) => set({ isLoadingRuns: v }),
   setIsLoadingTree: (v) => set({ isLoadingTree: v }),
+
+  setCheckpoints: (checkpoints) => set({ checkpoints }),
+  addCheckpoint: (checkpoint) =>
+    set((s) => ({ checkpoints: [checkpoint, ...s.checkpoints] })),
+  removeCheckpoint: (id) =>
+    set((s) => ({ checkpoints: s.checkpoints.filter((c) => c.id !== id) })),
+  setIsLoadingCheckpoints: (v) => set({ isLoadingCheckpoints: v }),
+  setIsSavingCheckpoint: (v) => set({ isSavingCheckpoint: v }),
 
   reset: () => set(initialState),
 }));

@@ -72,6 +72,46 @@ Use the databricks_* tools when the user asks about their Databricks extraction 
 SQL analysis results, fingerprints, or generated context documents from the Databricks source.
 """
 
+    # Context Engine (tree modification) tools guidance
+    context_engine_tools = [n for n in tool_names if n in (
+        "modify_context_tree", "read_context_tree", "remove_from_context_tree",
+        "save_tree_checkpoint", "sync_tree_to_capillary",
+        "generate_context_tree", "restructure_tree",
+    )]
+    if context_engine_tools:
+        tools_section += """
+### Context Tree Modification Tools
+You can intelligently modify the organization's context tree. The user describes
+what context to add or change, and you decide WHERE and HOW to integrate it.
+
+**Modification Workflow:**
+1. Use `read_context_tree` first to understand the current tree structure
+2. Use `modify_context_tree` with the user's request and the content to add/modify
+3. The tool checks for conflicts, duplicates, and finds the best placement
+4. If conflicts or duplicates are found, present them to the user and ask for confirmation
+5. After modification, the tool auto-validates zero information loss
+
+**Critical Rules:**
+- NEVER lose information. When modifying, APPEND to existing content, don't replace.
+- If the tool detects conflicts, ALWAYS present them to the user before proceeding.
+- If the tool detects duplicates, inform the user and suggest alternatives.
+- Maintain consistent tone — context tree content should be instructional/reference-style.
+- Always use cross-references when the new content relates to existing nodes.
+- Use `save_tree_checkpoint` when the user asks to save, checkpoint, or version the tree.
+- Use `sync_tree_to_capillary` ONLY when the user explicitly asks to push/sync to Capillary.
+- Use `remove_from_context_tree` ONLY when the user explicitly asks to delete. Always confirm first.
+- Use `read_context_tree` to look up nodes before modifying — don't guess node IDs.
+
+**Tool Reference:**
+- `read_context_tree`: Read tree structure (compact overview or specific node with full content)
+- `modify_context_tree`: Add/modify content intelligently (conflict/duplicate checks, auto-placement)
+- `remove_from_context_tree`: Remove a node (requires explicit user confirmation)
+- `save_tree_checkpoint`: Save current tree state as a restorable checkpoint
+- `sync_tree_to_capillary`: Upload all public leaf nodes to Capillary
+- `generate_context_tree`: Regenerate the entire tree from all sources
+- `restructure_tree`: Reorganize/merge/split parts of the tree
+"""
+
     # Confluence tools guidance
     confluence_tools = [n for n in tool_names if n.startswith("confluence_")]
     if confluence_tools:

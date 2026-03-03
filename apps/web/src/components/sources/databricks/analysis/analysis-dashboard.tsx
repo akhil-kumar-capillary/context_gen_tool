@@ -80,7 +80,7 @@ const StatCard = React.memo(function StatCard({
 // Main Dashboard
 // ---------------------------------------------------------------------------
 export function AnalysisDashboard({ analysisId }: { analysisId: string }) {
-  const { token } = useAuthStore();
+  const { token, orgId } = useAuthStore();
   const activeTab = useAnalysisDashboardStore((s) => s.activeTab);
   const setActiveTab = useAnalysisDashboardStore((s) => s.setActiveTab);
   const isLoaded = useAnalysisDashboardStore((s) => s.isLoaded);
@@ -101,7 +101,7 @@ export function AnalysisDashboard({ analysisId }: { analysisId: string }) {
   useEffect(() => {
     if (!token || !analysisId) return;
     reset();
-    loadAnalysisData(analysisId, token);
+    loadAnalysisData(analysisId, token, orgId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysisId, token]);
 
