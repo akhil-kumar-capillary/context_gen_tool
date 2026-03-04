@@ -85,7 +85,7 @@ explanation, no text before or after the JSON. Start with { and end with }.
 """
 
 
-def _build_user_message(contexts: list[dict], org_id: int) -> str:
+def build_user_message(contexts: list[dict], org_id: int) -> str:
     """Build the user message from collected contexts."""
     parts = [
         f"Here are {len(contexts)} context documents for organization {org_id}.\n"
@@ -112,7 +112,7 @@ def _build_user_message(contexts: list[dict], org_id: int) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _attach_full_content(tree: dict, contexts: list[dict]):
+def attach_full_content(tree: dict, contexts: list[dict]):
     """Replace LLM summaries with original full content in leaf nodes.
 
     The LLM only writes short summaries in desc — we match each leaf back
@@ -161,7 +161,7 @@ def _walk_and_attach(node: dict, content_map: dict[str, str]) -> int:
 # ---------------------------------------------------------------------------
 
 
-def _parse_tree_output(text: str) -> dict:
+def parse_tree_output(text: str) -> dict:
     """Parse LLM tree output — handles code fences, truncation, etc.
 
     Reuses the robust parsing strategy from context_tools._parse_refactor_output
@@ -333,7 +333,7 @@ def _try_bracket_completion(text: str) -> dict | None:
     return None
 
 
-def _validate_tree(tree: dict) -> dict:
+def validate_tree(tree: dict) -> dict:
     """Basic validation and normalization of the tree structure."""
     # Ensure required fields on root
     tree.setdefault("id", "root")
@@ -435,7 +435,7 @@ async def build_tree(
 
     await emit("analyzing", f"Sending {len(contexts)} contexts to LLM...", "running")
 
-    user_message = _build_user_message(contexts, org_id)
+    user_message = build_user_message(contexts, org_id)
     messages = [{"role": "user", "content": user_message}]
 
     # Stream LLM response (collect full output) — with retry on transient errors
@@ -508,13 +508,13 @@ async def build_tree(
     await emit("validating", "Parsing tree structure...", "running")
 
     try:
-        tree_data = _parse_tree_output(full_output)
+        tree_data = parse_tree_output(full_output)
     except ValueError:
         logger.error("Failed to parse tree output: %s", full_output[:500])
         raise
 
     # Validate and normalize
-    tree_data = _validate_tree(tree_data)
+    tree_data = validate_tree(tree_data)
 
     if was_truncated:
         await emit("validating", "Tree recovered from truncated response (some nodes may be missing)", "done")
@@ -524,7 +524,7 @@ async def build_tree(
     # Attach full original content to leaf nodes (unless sanitizer will handle it)
     if not skip_content_attach:
         await emit("validating", "Attaching full context content to leaves...", "running")
-        _attach_full_content(tree_data, contexts)
+        attach_full_content(tree_data, contexts)
         await emit("validating", "Full content attached", "done")
     else:
         await emit("validating", "Skipping content attach (sanitization will handle it)", "done")

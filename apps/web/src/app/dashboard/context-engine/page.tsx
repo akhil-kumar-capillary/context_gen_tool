@@ -31,6 +31,7 @@ export default function ContextEnginePage() {
   const { token, orgId } = useAuthStore();
   const { blueprintText } = useSettingsStore();
   const [sanitizeEnabled, setSanitizeEnabled] = useState(false);
+  const generatingLockRef = useRef(false);
   const {
     treeRuns,
     activeRunId,
@@ -79,6 +80,13 @@ export default function ContextEnginePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId]);
 
+  // Release generation lock when isGenerating becomes false (e.g. via WebSocket failure/cancel)
+  useEffect(() => {
+    if (!isGenerating) {
+      generatingLockRef.current = false;
+    }
+  }, [isGenerating]);
+
   // Connect WebSocket
   useContextEngineWebSocket();
 
@@ -113,23 +121,22 @@ export default function ContextEnginePage() {
   // Reusable tree loader
   const loadTreeData = useCallback(
     async (runId: string) => {
-      if (!token) return;
+      if (!token || !orgId) return;
       setIsLoadingTree(true);
       try {
         const data = await apiClient.get<{ tree_data: unknown }>(
           `/api/context-engine/runs/${runId}?org_id=${orgId}`,
           { token }
         );
-        if (data.tree_data) {
-          setTreeData(data.tree_data as never);
-        }
+        setTreeData(data.tree_data ? (data.tree_data as never) : null);
       } catch (e) {
         console.error("Failed to load tree data:", e);
+        setTreeData(null);
       }
       setIsLoadingTree(false);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [token]
+    [token, orgId]
   );
 
   // Load tree data when active run changes
@@ -168,6 +175,7 @@ export default function ContextEnginePage() {
         // ignore
       }
       setIsGenerating(false);
+      generatingLockRef.current = false;
     };
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -176,12 +184,13 @@ export default function ContextEnginePage() {
   // ── Handlers ──
 
   const handleGenerate = async () => {
-    if (!token || !orgId) return;
+    if (!token || !orgId || generatingLockRef.current || isGenerating) return;
+    generatingLockRef.current = true;
     clearProgress();
     setIsGenerating(true);
 
     try {
-      const data = await apiClient.post<{ run_id: string }>(
+      const data = await apiClient.post<{ run_id: string; status: string }>(
         `/api/context-engine/generate?org_id=${orgId}`,
         {
           sanitize: sanitizeEnabled,
@@ -190,9 +199,15 @@ export default function ContextEnginePage() {
         { token }
       );
       setActiveRunId(data.run_id);
+
+      // If backend says a run was already in progress, just track it
+      if (data.status === "already_running") {
+        console.info("Generation already in progress, tracking existing run:", data.run_id);
+      }
     } catch (e) {
       console.error("Failed to start generation:", e);
       setIsGenerating(false);
+      generatingLockRef.current = false;
     }
   };
 
@@ -285,7 +300,8 @@ export default function ContextEnginePage() {
           {!isGenerating ? (
             <button
               onClick={handleGenerate}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-violet-700 transition-colors"
+              disabled={generatingLockRef.current}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-violet-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Play className="h-4 w-4" />
               Generate Tree

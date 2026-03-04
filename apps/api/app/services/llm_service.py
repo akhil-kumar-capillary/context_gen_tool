@@ -12,6 +12,7 @@ import logging
 from typing import AsyncGenerator
 
 from app.config import settings
+from app.services.llm_exceptions import LLMOverloadedError, LLMTransientError
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,52 @@ async def _next_or_cancel(
             return False, await iterator.__anext__()
     except StopAsyncIteration:
         return True, None
+
+
+# ---------------------------------------------------------------------------
+# Retry helpers
+# ---------------------------------------------------------------------------
+
+
+def _classify_anthropic_error(exc: Exception) -> Exception:
+    """Convert Anthropic SDK exceptions to custom LLM exceptions.
+
+    Returns the original exception if it's not a transient/retryable error.
+    """
+    import anthropic
+
+    if isinstance(exc, anthropic.APIStatusError):
+        msg = str(exc).lower()
+        if "overloaded" in msg or exc.status_code == 529:
+            return LLMOverloadedError(f"Anthropic overloaded (HTTP {exc.status_code})")
+        if exc.status_code == 429:
+            return LLMTransientError(f"Anthropic rate limited (HTTP 429)")
+        if exc.status_code >= 500:
+            return LLMTransientError(f"Anthropic server error (HTTP {exc.status_code})")
+    elif isinstance(exc, anthropic.APIConnectionError):
+        return LLMTransientError(f"Anthropic connection failed: {exc}")
+    # Non-transient (400, 401, etc.) — return original
+    return exc
+
+
+def _classify_openai_error(exc: Exception) -> Exception:
+    """Convert OpenAI SDK exceptions to custom LLM exceptions."""
+    import openai
+
+    if isinstance(exc, openai.RateLimitError):
+        return LLMTransientError(f"OpenAI rate limited: {exc}")
+    elif isinstance(exc, openai.APIConnectionError):
+        return LLMTransientError(f"OpenAI connection failed: {exc}")
+    elif isinstance(exc, openai.InternalServerError):
+        return LLMTransientError(f"OpenAI server error: {exc}")
+    elif isinstance(exc, openai.APIStatusError) and exc.status_code >= 500:
+        return LLMTransientError(f"OpenAI server error (HTTP {exc.status_code})")
+    return exc
+
+
+def _is_retryable(exc: Exception) -> bool:
+    """Check if an exception should trigger a retry."""
+    return isinstance(exc, (LLMOverloadedError, LLMTransientError))
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +182,15 @@ async def stream_anthropic(
     api_key: str | None = None,
     cancel_event: asyncio.Event | None = None,
 ) -> AsyncGenerator[dict, None]:
-    """Stream from Anthropic Claude API with optional tool_use support."""
+    """Stream from Anthropic Claude API with optional tool_use support.
+
+    Retries on transient errors (overloaded, 429, 5xx) if no events have been
+    yielded yet. Once streaming has started, errors propagate as custom
+    LLM exceptions for the orchestrator to handle at round level.
+    """
+    max_retries = settings.llm_max_retries
+    base_delay = settings.llm_retry_base_delay
+
     async with _streaming_semaphore:
         client = _get_anthropic_client(api_key, streaming=True)
 
@@ -148,80 +203,114 @@ async def stream_anthropic(
         if tools:
             kwargs["tools"] = tools
 
-        cancelled = False
-        async with client.messages.stream(**kwargs) as stream:
-            # Track tool_use blocks being assembled
-            current_tool_id = None
-            current_tool_name = None
-            current_tool_input_json = ""
+        last_error: Exception | None = None
 
-            # Manual iteration — race __anext__ against cancel event so
-            # cancel_event.set() interrupts mid-await instead of blocking.
-            iterator = stream.__aiter__()
-            while True:
-                should_break, event = await _next_or_cancel(
-                    iterator, cancel_event, "Anthropic",
+        for attempt in range(max_retries + 1):
+            if attempt > 0:
+                delay = base_delay * (2 ** (attempt - 1))
+                logger.warning(
+                    "Anthropic stream retry %d/%d after %.1fs (error: %s)",
+                    attempt, max_retries, delay, last_error,
                 )
-                if should_break:
-                    cancelled = cancel_event.is_set() if cancel_event else False
-                    break
+                await asyncio.sleep(delay)
+                # Check cancellation during retry wait
+                if cancel_event and cancel_event.is_set():
+                    yield {"type": "end", "usage": {"input_tokens": 0, "output_tokens": 0}, "stop_reason": "cancelled"}
+                    return
 
-                # --- Process event ---
-                if event.type == "content_block_start":
-                    block = event.content_block
-                    if block.type == "text":
-                        if block.text:
-                            yield {"type": "chunk", "text": block.text}
-                    elif block.type == "tool_use":
-                        current_tool_id = block.id
-                        current_tool_name = block.name
-                        current_tool_input_json = ""
-                        yield {"type": "tool_use_start", "id": block.id, "name": block.name}
+            has_yielded = False
+            cancelled = False
 
-                elif event.type == "content_block_delta":
-                    delta = event.delta
-                    if delta.type == "text_delta":
-                        yield {"type": "chunk", "text": delta.text}
-                    elif delta.type == "input_json_delta":
-                        current_tool_input_json += delta.partial_json
+            try:
+                async with client.messages.stream(**kwargs) as stream:
+                    # Track tool_use blocks being assembled
+                    current_tool_id = None
+                    current_tool_name = None
+                    current_tool_input_json = ""
 
-                elif event.type == "content_block_stop":
-                    if current_tool_id and current_tool_name:
+                    # Manual iteration — race __anext__ against cancel event so
+                    # cancel_event.set() interrupts mid-await instead of blocking.
+                    iterator = stream.__aiter__()
+                    while True:
+                        should_break, event = await _next_or_cancel(
+                            iterator, cancel_event, "Anthropic",
+                        )
+                        if should_break:
+                            cancelled = cancel_event.is_set() if cancel_event else False
+                            break
+
+                        # --- Process event ---
+                        if event.type == "content_block_start":
+                            block = event.content_block
+                            if block.type == "text":
+                                if block.text:
+                                    has_yielded = True
+                                    yield {"type": "chunk", "text": block.text}
+                            elif block.type == "tool_use":
+                                current_tool_id = block.id
+                                current_tool_name = block.name
+                                current_tool_input_json = ""
+                                has_yielded = True
+                                yield {"type": "tool_use_start", "id": block.id, "name": block.name}
+
+                        elif event.type == "content_block_delta":
+                            delta = event.delta
+                            if delta.type == "text_delta":
+                                has_yielded = True
+                                yield {"type": "chunk", "text": delta.text}
+                            elif delta.type == "input_json_delta":
+                                current_tool_input_json += delta.partial_json
+
+                        elif event.type == "content_block_stop":
+                            if current_tool_id and current_tool_name:
+                                try:
+                                    tool_input = json.loads(current_tool_input_json) if current_tool_input_json else {}
+                                except json.JSONDecodeError:
+                                    tool_input = {"_raw": current_tool_input_json}
+                                has_yielded = True
+                                yield {
+                                    "type": "tool_use",
+                                    "id": current_tool_id,
+                                    "name": current_tool_name,
+                                    "input": tool_input,
+                                }
+                                current_tool_id = None
+                                current_tool_name = None
+                                current_tool_input_json = ""
+
+                    # get_final_message() must be called inside the async with block.
+                    # Only call it if stream completed naturally — it waits for the
+                    # full response which would block cancellation.
+                    if not cancelled:
                         try:
-                            tool_input = json.loads(current_tool_input_json) if current_tool_input_json else {}
-                        except json.JSONDecodeError:
-                            tool_input = {"_raw": current_tool_input_json}
-                        yield {
-                            "type": "tool_use",
-                            "id": current_tool_id,
-                            "name": current_tool_name,
-                            "input": tool_input,
-                        }
-                        current_tool_id = None
-                        current_tool_name = None
-                        current_tool_input_json = ""
+                            final = await stream.get_final_message()
+                            yield {
+                                "type": "end",
+                                "usage": {
+                                    "input_tokens": final.usage.input_tokens,
+                                    "output_tokens": final.usage.output_tokens,
+                                },
+                                "stop_reason": final.stop_reason,
+                                "warning": "Response was truncated" if final.stop_reason == "max_tokens" else None,
+                            }
+                        except Exception:
+                            yield {"type": "end", "usage": {"input_tokens": 0, "output_tokens": 0}, "stop_reason": "error"}
 
-            # get_final_message() must be called inside the async with block.
-            # Only call it if stream completed naturally — it waits for the
-            # full response which would block cancellation.
-            if not cancelled:
-                try:
-                    final = await stream.get_final_message()
-                    yield {
-                        "type": "end",
-                        "usage": {
-                            "input_tokens": final.usage.input_tokens,
-                            "output_tokens": final.usage.output_tokens,
-                        },
-                        "stop_reason": final.stop_reason,
-                        "warning": "Response was truncated" if final.stop_reason == "max_tokens" else None,
-                    }
-                except Exception:
-                    yield {"type": "end", "usage": {"input_tokens": 0, "output_tokens": 0}, "stop_reason": "error"}
+                # If cancelled, yield end event after the context manager has closed the HTTP connection
+                if cancelled:
+                    yield {"type": "end", "usage": {"input_tokens": 0, "output_tokens": 0}, "stop_reason": "cancelled"}
 
-        # If cancelled, yield end event after the context manager has closed the HTTP connection
-        if cancelled:
-            yield {"type": "end", "usage": {"input_tokens": 0, "output_tokens": 0}, "stop_reason": "cancelled"}
+                return  # Success — exit retry loop
+
+            except Exception as exc:
+                classified = _classify_anthropic_error(exc)
+                if _is_retryable(classified) and not has_yielded and attempt < max_retries:
+                    last_error = classified
+                    continue  # retry
+                # Either non-retryable, or already yielded events, or last attempt
+                if _is_retryable(classified):
+                    raise classified from exc
+                raise
 
 
 async def call_anthropic(
@@ -234,8 +323,12 @@ async def call_anthropic(
 ) -> dict:
     """Non-streaming Anthropic call — used for fast tool-call rounds.
 
+    Retries on transient errors with exponential backoff.
     Returns: {"content": [...blocks...], "usage": {...}, "stop_reason": "..."}
     """
+    max_retries = settings.llm_max_retries
+    base_delay = settings.llm_retry_base_delay
+
     async with _batch_semaphore:
         client = _get_anthropic_client(api_key, streaming=False)
 
@@ -248,28 +341,52 @@ async def call_anthropic(
         if tools:
             kwargs["tools"] = tools
 
-        response = await client.messages.create(**kwargs)
+        last_error: Exception | None = None
 
-        result_blocks = []
-        for block in response.content:
-            if block.type == "text":
-                result_blocks.append({"type": "text", "text": block.text})
-            elif block.type == "tool_use":
-                result_blocks.append({
-                    "type": "tool_use",
-                    "id": block.id,
-                    "name": block.name,
-                    "input": block.input,
-                })
+        for attempt in range(max_retries + 1):
+            if attempt > 0:
+                delay = base_delay * (2 ** (attempt - 1))
+                logger.warning(
+                    "Anthropic batch retry %d/%d after %.1fs (error: %s)",
+                    attempt, max_retries, delay, last_error,
+                )
+                await asyncio.sleep(delay)
 
-        return {
-            "content": result_blocks,
-            "usage": {
-                "input_tokens": response.usage.input_tokens,
-                "output_tokens": response.usage.output_tokens,
-            },
-            "stop_reason": response.stop_reason,
-        }
+            try:
+                response = await client.messages.create(**kwargs)
+
+                result_blocks = []
+                for block in response.content:
+                    if block.type == "text":
+                        result_blocks.append({"type": "text", "text": block.text})
+                    elif block.type == "tool_use":
+                        result_blocks.append({
+                            "type": "tool_use",
+                            "id": block.id,
+                            "name": block.name,
+                            "input": block.input,
+                        })
+
+                return {
+                    "content": result_blocks,
+                    "usage": {
+                        "input_tokens": response.usage.input_tokens,
+                        "output_tokens": response.usage.output_tokens,
+                    },
+                    "stop_reason": response.stop_reason,
+                }
+
+            except Exception as exc:
+                classified = _classify_anthropic_error(exc)
+                if _is_retryable(classified) and attempt < max_retries:
+                    last_error = classified
+                    continue
+                if _is_retryable(classified):
+                    raise classified from exc
+                raise
+
+    # Should not reach here, but satisfy type checker
+    raise LLMTransientError("All retry attempts exhausted")  # pragma: no cover
 
 
 # ---------------------------------------------------------------------------
@@ -286,7 +403,13 @@ async def stream_openai(
     api_key: str | None = None,
     cancel_event: asyncio.Event | None = None,
 ) -> AsyncGenerator[dict, None]:
-    """Stream from OpenAI GPT API with optional function-calling support."""
+    """Stream from OpenAI GPT API with optional function-calling support.
+
+    Retries on transient errors if no events have been yielded yet.
+    """
+    max_retries = settings.llm_max_retries
+    base_delay = settings.llm_retry_base_delay
+
     async with _streaming_semaphore:
         client = _get_openai_client(api_key, streaming=True)
 
@@ -302,88 +425,118 @@ async def stream_openai(
         if tools:
             kwargs["tools"] = tools
 
-        stream = await client.chat.completions.create(**kwargs)
+        last_error: Exception | None = None
 
-        input_tokens = 0
-        output_tokens = 0
-        finish_reason = None
-        cancelled = False
+        for attempt in range(max_retries + 1):
+            if attempt > 0:
+                delay = base_delay * (2 ** (attempt - 1))
+                logger.warning(
+                    "OpenAI stream retry %d/%d after %.1fs (error: %s)",
+                    attempt, max_retries, delay, last_error,
+                )
+                await asyncio.sleep(delay)
+                if cancel_event and cancel_event.is_set():
+                    yield {"type": "end", "usage": {"input_tokens": 0, "output_tokens": 0}, "stop_reason": "cancelled"}
+                    return
 
-        # Accumulate tool calls across streamed chunks
-        tool_calls_acc: dict[int, dict] = {}  # index -> {id, name, arguments}
+            has_yielded = False
 
-        # Manual iteration — race __anext__ against cancel event
-        async def _close_stream():
             try:
-                await stream.close()
-            except Exception:
-                pass
+                stream = await client.chat.completions.create(**kwargs)
 
-        iterator = stream.__aiter__()
-        while True:
-            should_break, chunk = await _next_or_cancel(
-                iterator, cancel_event, "OpenAI", on_cancel=_close_stream,
-            )
-            if should_break:
-                cancelled = cancel_event.is_set() if cancel_event else False
-                break
+                input_tokens = 0
+                output_tokens = 0
+                finish_reason = None
+                cancelled = False
 
-            if chunk.choices:
-                delta = chunk.choices[0].delta
-                if delta.content:
-                    yield {"type": "chunk", "text": delta.content}
+                # Accumulate tool calls across streamed chunks
+                tool_calls_acc: dict[int, dict] = {}  # index -> {id, name, arguments}
 
-                # Accumulate tool_calls
-                if delta.tool_calls:
-                    for tc in delta.tool_calls:
-                        idx = tc.index
-                        if idx not in tool_calls_acc:
-                            tool_calls_acc[idx] = {
-                                "id": tc.id or "",
-                                "name": tc.function.name or "" if tc.function else "",
-                                "arguments": "",
-                            }
-                            tool_name = tc.function.name if tc.function else ""
-                            if tool_name:
-                                yield {"type": "tool_use_start", "id": tc.id or "", "name": tool_name}
-                        if tc.id:
-                            tool_calls_acc[idx]["id"] = tc.id
-                        if tc.function:
-                            if tc.function.name:
-                                tool_calls_acc[idx]["name"] = tc.function.name
-                            if tc.function.arguments:
-                                tool_calls_acc[idx]["arguments"] += tc.function.arguments
+                # Manual iteration — race __anext__ against cancel event
+                async def _close_stream():
+                    try:
+                        await stream.close()
+                    except Exception:
+                        pass
 
-                if chunk.choices[0].finish_reason:
-                    finish_reason = chunk.choices[0].finish_reason
+                iterator = stream.__aiter__()
+                while True:
+                    should_break, chunk = await _next_or_cancel(
+                        iterator, cancel_event, "OpenAI", on_cancel=_close_stream,
+                    )
+                    if should_break:
+                        cancelled = cancel_event.is_set() if cancel_event else False
+                        break
 
-            if chunk.usage:
-                input_tokens = chunk.usage.prompt_tokens
-                output_tokens = chunk.usage.completion_tokens
+                    if chunk.choices:
+                        delta = chunk.choices[0].delta
+                        if delta.content:
+                            has_yielded = True
+                            yield {"type": "chunk", "text": delta.content}
 
-        if not cancelled:
-            # Emit accumulated tool calls
-            for _idx, tc_data in sorted(tool_calls_acc.items()):
-                try:
-                    tool_input = json.loads(tc_data["arguments"]) if tc_data["arguments"] else {}
-                except json.JSONDecodeError:
-                    tool_input = {"_raw": tc_data["arguments"]}
+                        # Accumulate tool_calls
+                        if delta.tool_calls:
+                            for tc in delta.tool_calls:
+                                idx = tc.index
+                                if idx not in tool_calls_acc:
+                                    tool_calls_acc[idx] = {
+                                        "id": tc.id or "",
+                                        "name": tc.function.name or "" if tc.function else "",
+                                        "arguments": "",
+                                    }
+                                    tool_name = tc.function.name if tc.function else ""
+                                    if tool_name:
+                                        has_yielded = True
+                                        yield {"type": "tool_use_start", "id": tc.id or "", "name": tool_name}
+                                if tc.id:
+                                    tool_calls_acc[idx]["id"] = tc.id
+                                if tc.function:
+                                    if tc.function.name:
+                                        tool_calls_acc[idx]["name"] = tc.function.name
+                                    if tc.function.arguments:
+                                        tool_calls_acc[idx]["arguments"] += tc.function.arguments
+
+                        if chunk.choices[0].finish_reason:
+                            finish_reason = chunk.choices[0].finish_reason
+
+                    if chunk.usage:
+                        input_tokens = chunk.usage.prompt_tokens
+                        output_tokens = chunk.usage.completion_tokens
+
+                if not cancelled:
+                    # Emit accumulated tool calls
+                    for _idx, tc_data in sorted(tool_calls_acc.items()):
+                        try:
+                            tool_input = json.loads(tc_data["arguments"]) if tc_data["arguments"] else {}
+                        except json.JSONDecodeError:
+                            tool_input = {"_raw": tc_data["arguments"]}
+                        yield {
+                            "type": "tool_use",
+                            "id": tc_data["id"],
+                            "name": tc_data["name"],
+                            "input": tool_input,
+                        }
+
                 yield {
-                    "type": "tool_use",
-                    "id": tc_data["id"],
-                    "name": tc_data["name"],
-                    "input": tool_input,
+                    "type": "end",
+                    "usage": {
+                        "input_tokens": input_tokens,
+                        "output_tokens": output_tokens,
+                    },
+                    "stop_reason": "cancelled" if cancelled else finish_reason,
+                    "warning": "Response was truncated" if finish_reason == "length" else None,
                 }
 
-        yield {
-            "type": "end",
-            "usage": {
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-            },
-            "stop_reason": "cancelled" if cancelled else finish_reason,
-            "warning": "Response was truncated" if finish_reason == "length" else None,
-        }
+                return  # Success — exit retry loop
+
+            except Exception as exc:
+                classified = _classify_openai_error(exc)
+                if _is_retryable(classified) and not has_yielded and attempt < max_retries:
+                    last_error = classified
+                    continue
+                if _is_retryable(classified):
+                    raise classified from exc
+                raise
 
 
 async def call_openai(
@@ -396,8 +549,12 @@ async def call_openai(
 ) -> dict:
     """Non-streaming OpenAI call — used for fast tool-call rounds.
 
+    Retries on transient errors with exponential backoff.
     Returns: {"content": [...blocks...], "usage": {...}, "stop_reason": "..."}
     """
+    max_retries = settings.llm_max_retries
+    base_delay = settings.llm_retry_base_delay
+
     async with _batch_semaphore:
         client = _get_openai_client(api_key, streaming=False)
 
@@ -411,34 +568,57 @@ async def call_openai(
         if tools:
             kwargs["tools"] = tools
 
-        response = await client.chat.completions.create(**kwargs)
-        choice = response.choices[0]
+        last_error: Exception | None = None
 
-        result_blocks = []
-        if choice.message.content:
-            result_blocks.append({"type": "text", "text": choice.message.content})
+        for attempt in range(max_retries + 1):
+            if attempt > 0:
+                delay = base_delay * (2 ** (attempt - 1))
+                logger.warning(
+                    "OpenAI batch retry %d/%d after %.1fs (error: %s)",
+                    attempt, max_retries, delay, last_error,
+                )
+                await asyncio.sleep(delay)
 
-        if choice.message.tool_calls:
-            for tc in choice.message.tool_calls:
-                try:
-                    tool_input = json.loads(tc.function.arguments) if tc.function.arguments else {}
-                except json.JSONDecodeError:
-                    tool_input = {"_raw": tc.function.arguments}
-                result_blocks.append({
-                    "type": "tool_use",
-                    "id": tc.id,
-                    "name": tc.function.name,
-                    "input": tool_input,
-                })
+            try:
+                response = await client.chat.completions.create(**kwargs)
+                choice = response.choices[0]
 
-        return {
-            "content": result_blocks,
-            "usage": {
-                "input_tokens": response.usage.prompt_tokens if response.usage else 0,
-                "output_tokens": response.usage.completion_tokens if response.usage else 0,
-            },
-            "stop_reason": choice.finish_reason,
-        }
+                result_blocks = []
+                if choice.message.content:
+                    result_blocks.append({"type": "text", "text": choice.message.content})
+
+                if choice.message.tool_calls:
+                    for tc in choice.message.tool_calls:
+                        try:
+                            tool_input = json.loads(tc.function.arguments) if tc.function.arguments else {}
+                        except json.JSONDecodeError:
+                            tool_input = {"_raw": tc.function.arguments}
+                        result_blocks.append({
+                            "type": "tool_use",
+                            "id": tc.id,
+                            "name": tc.function.name,
+                            "input": tool_input,
+                        })
+
+                return {
+                    "content": result_blocks,
+                    "usage": {
+                        "input_tokens": response.usage.prompt_tokens if response.usage else 0,
+                        "output_tokens": response.usage.completion_tokens if response.usage else 0,
+                    },
+                    "stop_reason": choice.finish_reason,
+                }
+
+            except Exception as exc:
+                classified = _classify_openai_error(exc)
+                if _is_retryable(classified) and attempt < max_retries:
+                    last_error = classified
+                    continue
+                if _is_retryable(classified):
+                    raise classified from exc
+                raise
+
+    raise LLMTransientError("All retry attempts exhausted")  # pragma: no cover
 
 
 # ---------------------------------------------------------------------------

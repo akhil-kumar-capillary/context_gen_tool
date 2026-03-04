@@ -1,19 +1,23 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select, union
 from sqlalchemy.ext.asyncio import AsyncSession
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.database import get_db
 from app.core.auth import login_to_capillary, create_session_token, get_current_user
-from app.models.user import User, Role, UserRole, UserPermission, RolePermission, Permission
+from app.models.user import User, Role, UserRole, UserPermission, RolePermission, Permission, UserOrg
 from app.schemas.auth import LoginRequest, LoginResponse, UserResponse, OrgResponse
 from app.config import settings
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def login(request: Request, req: LoginRequest, db: AsyncSession = Depends(get_db)):
     # Authenticate via Capillary Intouch
     cap_result = await login_to_capillary(req.username, req.password, req.cluster)
 
@@ -49,6 +53,27 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
         user.last_login_at = datetime.now(timezone.utc)
         if cap_result["display_name"]:
             user.display_name = cap_result["display_name"]
+
+    # Sync org associations from Capillary → user_orgs table
+    existing_orgs = await db.execute(
+        select(UserOrg).where(UserOrg.user_id == user.id)
+    )
+    existing_org_ids = {uo.org_id for uo in existing_orgs.scalars().all()}
+    capillary_org_ids = {o["id"] for o in cap_result["orgs"]}
+
+    # Add new orgs
+    for org in cap_result["orgs"]:
+        if org["id"] not in existing_org_ids:
+            db.add(UserOrg(user_id=user.id, org_id=org["id"], org_name=org["name"]))
+
+    # Remove orgs the user no longer has access to
+    for org_id in existing_org_ids - capillary_org_ids:
+        stale = await db.execute(
+            select(UserOrg).where(UserOrg.user_id == user.id, UserOrg.org_id == org_id)
+        )
+        stale_org = stale.scalar_one_or_none()
+        if stale_org:
+            await db.delete(stale_org)
 
     await db.commit()
     await db.refresh(user)

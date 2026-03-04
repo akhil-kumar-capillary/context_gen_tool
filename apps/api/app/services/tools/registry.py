@@ -23,6 +23,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Awaitable, get_type_hints
 
+from app.config import settings
 from app.services.tools.tool_context import ToolContext
 
 logger = logging.getLogger(__name__)
@@ -44,20 +45,16 @@ _TYPE_MAP: dict[type, dict] = {
 
 def _python_type_to_json_schema(tp: type) -> dict:
     """Convert a Python type hint to JSON Schema."""
-    # Handle Optional[X] → {type: X} (we don't mark nullable — LLM should always provide)
+    import typing
+
+    # Handle NoneType directly
+    if tp is type(None):
+        return {"type": "string"}
+
     origin = getattr(tp, "__origin__", None)
-
-    # typing.Union (Optional is Union[X, None])
-    if origin is type(None):
-        return {"type": "string"}
-
-    # Handle Union / Optional
     args = getattr(tp, "__args__", None)
-    if origin is type(None):
-        return {"type": "string"}
 
     # Optional[X] = Union[X, None]
-    import typing
     if origin is typing.Union:
         non_none = [a for a in args if a is not type(None)]
         if len(non_none) == 1:
@@ -322,7 +319,24 @@ class ToolRegistry:
 
         try:
             result = await tool_def.handler(ctx, **arguments)
-            return str(result)
+            result_str = str(result)
+
+            # Truncate oversized tool output to prevent context window overflow
+            limit = settings.tool_output_limit
+            if len(result_str) > limit:
+                original_len = len(result_str)
+                result_str = result_str[:limit] + (
+                    f"\n\n...output truncated (showing first {limit:,} "
+                    f"of {original_len:,} chars). "
+                    f"Use grep_context_tree or read_tree_node_content "
+                    f"for targeted content access."
+                )
+                logger.info(
+                    "Tool '%s' output truncated: %d -> %d chars",
+                    name, original_len, limit,
+                )
+
+            return result_str
         except Exception as e:
             logger.exception(f"Tool '{name}' execution failed")
             return f"Error executing '{name}': {str(e)}"

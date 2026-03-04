@@ -5,6 +5,7 @@ def build_system_prompt(
     user_email: str,
     org_id: int,
     tool_names: list[str],
+    current_module: str | None = None,
 ) -> str:
     """Build a system prompt that instructs the LLM on how to behave in chat.
 
@@ -12,6 +13,8 @@ def build_system_prompt(
         user_email: The authenticated user's email
         org_id: The current organization ID
         tool_names: Names of tools available to this user
+        current_module: The frontend page/module the user is currently on
+            (e.g. "context_engine", "context_management", "config_apis")
     """
     tools_section = ""
     if tool_names:
@@ -77,6 +80,7 @@ SQL analysis results, fingerprints, or generated context documents from the Data
         "modify_context_tree", "read_context_tree", "remove_from_context_tree",
         "save_tree_checkpoint", "sync_tree_to_capillary",
         "generate_context_tree", "restructure_tree",
+        "grep_context_tree", "read_tree_node_content",
     )]
     if context_engine_tools:
         tools_section += """
@@ -84,15 +88,34 @@ SQL analysis results, fingerprints, or generated context documents from the Data
 You can intelligently modify the organization's context tree. The user describes
 what context to add or change, and you decide WHERE and HOW to integrate it.
 
-**Modification Workflow:**
-1. Use `read_context_tree` first to understand the current tree structure
-2. Use `modify_context_tree` with the user's request and the content to add/modify
-3. The tool checks for conflicts, duplicates, and finds the best placement
-4. If conflicts or duplicates are found, present them to the user and ask for confirmation
-5. After modification, the tool auto-validates zero information loss
+**Workflow for Modifying Existing Nodes (CRITICAL — always follow this):**
+When the user wants to edit, modify, remove content from, or update an existing node:
+1. `read_context_tree` — Understand the tree structure and find the node ID
+2. `grep_context_tree` — Search for the specific section/text within the node
+3. `modify_context_tree(user_request="...", target_node_id="the_node_id")` — \
+Pass the node ID so the planner can see the full content and make surgical edits
+This workflow enables **surgical line-based edits** instead of error-prone full rewrites.
+The system will use precise edit operations (delete lines, replace lines, insert lines) \
+that only touch the specific sections the user asked to change.
+
+**Workflow for Adding New Content:**
+1. Use `read_context_tree` to understand the tree structure
+2. Use `modify_context_tree(user_request="...", content="...")` — \
+target_node_id is optional for new content; the planner will choose optimal placement
+
+**Tool Disambiguation (CRITICAL):**
+- `modify_context_tree` → Changes content IN THE TREE (tree nodes). \
+For existing node edits, ALWAYS pass `target_node_id`.
+- `update_context` → Changes Capillary context DOCUMENTS (not tree nodes)
+- `restructure_tree` → Reorganizes tree STRUCTURE only (merge/split categories)
+- `grep_context_tree` → Search within tree node content (regex + context lines)
+- `read_tree_node_content` → Read specific line range from a node
+- Do NOT use `update_context` when the user is talking about tree content
+- Do NOT use `restructure_tree` for content edits — only for structural reorganization
 
 **Critical Rules:**
 - NEVER lose information. When modifying, APPEND to existing content, don't replace.
+- When editing existing nodes, ALWAYS pass target_node_id to modify_context_tree.
 - If the tool detects conflicts, ALWAYS present them to the user before proceeding.
 - If the tool detects duplicates, inform the user and suggest alternatives.
 - Maintain consistent tone — context tree content should be instructional/reference-style.
@@ -102,14 +125,27 @@ what context to add or change, and you decide WHERE and HOW to integrate it.
 - Use `remove_from_context_tree` ONLY when the user explicitly asks to delete. Always confirm first.
 - Use `read_context_tree` to look up nodes before modifying — don't guess node IDs.
 
+**Efficiency Rules (CRITICAL):**
+- If `grep_context_tree` returns "No matches", do NOT retry with different patterns. \
+Use `read_tree_node_content` to view the node content directly instead.
+- NEVER call `grep_context_tree` more than 2 times in a single conversation turn. \
+If the first grep misses, try ONE broader pattern. If that also misses, switch to \
+`read_tree_node_content` or `read_context_tree` with include_content=true.
+- For adding new content, you don't need to grep first — read the tree structure \
+and go directly to modification.
+- Minimize tool rounds — each round adds latency for the user. Plan your approach \
+before calling tools.
+
 **Tool Reference:**
 - `read_context_tree`: Read tree structure (compact overview or specific node with full content)
-- `modify_context_tree`: Add/modify content intelligently (conflict/duplicate checks, auto-placement)
+- `grep_context_tree`: Search within node content using regex patterns with context lines
+- `read_tree_node_content`: Read specific line range from a node with line numbers
+- `modify_context_tree`: Add/modify content (pass target_node_id for surgical edits on existing nodes)
 - `remove_from_context_tree`: Remove a node (requires explicit user confirmation)
 - `save_tree_checkpoint`: Save current tree state as a restorable checkpoint
 - `sync_tree_to_capillary`: Upload all public leaf nodes to Capillary
 - `generate_context_tree`: Regenerate the entire tree from all sources
-- `restructure_tree`: Reorganize/merge/split parts of the tree
+- `restructure_tree`: Reorganize/merge/split parts of the tree (NOT for content edits)
 """
 
     # Confluence tools guidance
@@ -119,6 +155,48 @@ what context to add or change, and you decide WHERE and HOW to integrate it.
 ### Confluence Tools
 Use the confluence_* tools when the user asks about Confluence pages, spaces, or
 wants to extract content from Confluence for context generation.
+"""
+
+    # Module-aware routing guidance — helps the LLM prioritize the right tools
+    # based on the page the user is currently viewing
+    if current_module == "context_engine":
+        tools_section += """
+### Current Module: Context Engine (Tree View)
+The user is currently on the **Context Engine** page, viewing/editing the context TREE.
+When they ask to add, update, modify, or refactor content — they are referring to
+the **context tree**, not individual Capillary context documents.
+- PREFER tree tools: `modify_context_tree`, `read_context_tree`, `restructure_tree`
+- Use `update_context` / `create_context` ONLY if the user explicitly mentions
+  "Capillary context", "original document", or "context management".
+"""
+    elif current_module == "context_management":
+        tools_section += """
+### Current Module: Context Management
+The user is currently on the **Context Management** page, managing individual context documents.
+When they ask to update, create, or refactor — they are referring to **individual
+Capillary context documents**, not the tree.
+- PREFER CRUD tools: `list_contexts`, `update_context`, `create_context`, `refactor_all_contexts`
+- Use tree tools ONLY if the user explicitly mentions "tree", "context tree", or "context engine".
+"""
+    elif current_module == "config_apis":
+        tools_section += """
+### Current Module: Config APIs
+The user is currently on the **Config APIs** page, exploring Capillary platform configuration.
+- PREFER config tools: `config_api_discover`, `config_get_loyalty_programs`, etc.
+- For questions about how configurations relate to context documents, you can combine
+  config tools with context tools.
+"""
+    elif current_module == "databricks":
+        tools_section += """
+### Current Module: Databricks
+The user is currently on the **Databricks** source page.
+- PREFER databricks tools for extraction-related queries.
+"""
+    elif current_module == "confluence":
+        tools_section += """
+### Current Module: Confluence
+The user is currently on the **Confluence** source page.
+- PREFER confluence tools for page/space-related queries.
 """
 
     return f"""You are aiRA, an AI assistant for context document management at Capillary.

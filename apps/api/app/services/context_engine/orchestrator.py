@@ -12,6 +12,7 @@ from typing import Any, Callable, Awaitable
 
 from sqlalchemy import select, update
 
+from app.config import settings
 from app.core.websocket import WebSocketManager
 from app.database import async_session
 from app.models.context_tree import ContextTreeRun
@@ -173,62 +174,66 @@ async def run_tree_generation(
             return
 
         # ─── Phase 2: Analyzing (LLM tree building) ───────────────
-        await track("analyzing", f"Sending {summary['total']} contexts to LLM...", "running")
-
         if cancel_event and cancel_event.is_set():
             raise asyncio.CancelledError()
 
         async def builder_progress(phase: str, detail: str, status: str):
             await track(phase, detail, status)
 
-        result = await build_tree(
-            contexts=collected["sources"],
-            org_id=org_id,
-            progress_cb=builder_progress,
-            cancel_event=cancel_event,
-            skip_content_attach=sanitize,
-        )
-
-        await track("analyzing", "Tree structure generated successfully", "done")
-
-        # ─── Phase 3: Sanitizing (optional) ──────────────────────
         if sanitize:
-            await track("sanitizing", "Sanitizing context content via blueprint...", "running")
-
-            if cancel_event and cancel_event.is_set():
-                raise asyncio.CancelledError()
+            # Unified approach: blueprint restructuring + tree building in one LLM call.
+            # The LLM has full liberty to merge, deduplicate, and optimize contexts.
+            await track("analyzing", f"Optimizing {summary['total']} contexts via blueprint + tree building...", "running")
 
             try:
-                from app.services.context_engine.sanitizer import sanitize_tree_content
+                from app.services.context_engine.optimized_builder import build_optimized_tree
 
-                sanitize_result = await sanitize_tree_content(
-                    tree=result["tree_data"],
+                result = await build_optimized_tree(
                     contexts=collected["sources"],
-                    progress_cb=track,
+                    org_id=org_id,
+                    progress_cb=builder_progress,
                     cancel_event=cancel_event,
                     blueprint_text=blueprint_text,
+                    max_tokens=settings.sanitize_max_output_tokens,
                 )
 
-                await track(
-                    "sanitizing",
-                    f"Sanitized {sanitize_result['sanitized_count']}/{sanitize_result['total_leaves']} "
-                    f"leaf nodes ({sanitize_result['fallback_count']} used original content)",
-                    "done",
-                )
-
-                # Accumulate token usage from the sanitization LLM call
-                if sanitize_result.get("token_usage"):
-                    result["token_usage"]["input_tokens"] += sanitize_result["token_usage"].get("input_tokens", 0)
-                    result["token_usage"]["output_tokens"] += sanitize_result["token_usage"].get("output_tokens", 0)
+                await track("analyzing", "Optimized tree generated successfully", "done")
 
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                logger.warning(f"Sanitization failed (non-fatal): {e}")
-                await track("sanitizing", f"Sanitization skipped: {e} — using original content", "done")
-                # Fallback: attach original content
-                from app.services.context_engine.tree_builder import _attach_full_content
-                _attach_full_content(result["tree_data"], collected["sources"])
+                # Fallback: use standard two-stage flow if unified builder fails
+                logger.warning(f"Optimized builder failed, falling back to standard flow: {e}")
+                await track(
+                    "analyzing",
+                    f"Optimized build failed — falling back to standard tree building...",
+                    "running",
+                )
+
+                result = await build_tree(
+                    contexts=collected["sources"],
+                    org_id=org_id,
+                    progress_cb=builder_progress,
+                    cancel_event=cancel_event,
+                )
+
+                await track("analyzing", "Tree structure generated successfully (fallback)", "done")
+        else:
+            # Standard flow: tree structure only, attach original content
+            await track("analyzing", f"Sending {summary['total']} contexts to LLM...", "running")
+
+            result = await build_tree(
+                contexts=collected["sources"],
+                org_id=org_id,
+                progress_cb=builder_progress,
+                cancel_event=cancel_event,
+            )
+
+            await track("analyzing", "Tree structure generated successfully", "done")
+
+        # ─── Phase 3: Sanitizing (handled during Phase 2 for optimized flow) ──
+        if sanitize:
+            await track("sanitizing", "Content optimization completed during tree building", "done")
 
         # ─── Phase 4: Enriching ─────────────────────────────────
         await track("enriching", "Scanning for secrets...", "running")

@@ -1,7 +1,11 @@
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from app.config import settings
 from app.core.websocket import websocket_endpoint
@@ -10,11 +14,18 @@ from app.routers import auth, contexts, databricks, confluence, config_apis, llm
 
 logger = logging.getLogger(__name__)
 
+# Rate limiter — keyed by remote IP address
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+
 app = FastAPI(
     title="aiRA Context Management API",
     description="Backend API for aiRA Context Management Tool",
     version="1.0.0",
 )
+
+# Attach limiter to app state (required by slowapi)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Startup info
 _db_host = settings.database_url.split("@")[1].split("/")[0] if "@" in settings.database_url else "default"
@@ -25,8 +36,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
 
 # Routers

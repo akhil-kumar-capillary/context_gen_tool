@@ -214,6 +214,13 @@ class Settings(BaseSettings):
     tree_modify_max_output_tokens: int = 8192
     tree_modify_max_compact_chars: int = 50000
 
+    # LLM retry settings
+    llm_max_retries: int = 3
+    llm_retry_base_delay: float = 2.0  # seconds (exponential: 2, 4, 8)
+
+    # Tool output limits
+    tool_output_limit: int = 20000
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

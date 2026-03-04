@@ -99,7 +99,7 @@ async def propose_restructure(
             model=model,
             system=system,
             messages=[{"role": "user", "content": user_msg}],
-            max_tokens=4000,
+            max_tokens=16000,
         )
 
         response_text = ""

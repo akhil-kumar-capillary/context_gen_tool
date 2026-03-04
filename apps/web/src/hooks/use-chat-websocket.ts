@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useRef, useCallback } from "react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useChatStore } from "@/stores/chat-store";
 import { useContextStore } from "@/stores/context-store";
 import { useContextEngineStore } from "@/stores/context-engine-store";
 import { useSettingsStore } from "@/stores/settings-store";
+import { useWebSocket } from "./use-websocket";
 import type { LLMUsage, AiGeneratedContext } from "@/types";
 
 interface ChatWebSocketMessage {
@@ -27,12 +28,9 @@ interface ChatWebSocketMessage {
 }
 
 export function useChatWebSocket() {
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectRef = useRef<ReturnType<typeof setTimeout>>();
-  const reconnectAttempts = useRef(0);
   const cancelledRef = useRef(false);
 
-  const { token, orgId } = useAuthStore();
+  const { orgId } = useAuthStore();
   const { provider, model } = useSettingsStore();
   const {
     startStreaming,
@@ -44,146 +42,128 @@ export function useChatWebSocket() {
     addMessage,
   } = useChatStore();
 
-  // Connect WebSocket
-  const connect = useCallback(() => {
-    if (!token) return;
+  const onMessage = useCallback(
+    (raw: Record<string, unknown>) => {
+      const data = raw as unknown as ChatWebSocketMessage;
 
-    const wsBase = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000";
-    const url = `${wsBase}/api/chat/ws/chat?token=${token}`;
+      switch (data.type) {
+        case "chat_chunk":
+          if (data.text && !cancelledRef.current) {
+            appendChunk(data.text);
+          }
+          break;
 
-    const ws = new WebSocket(url);
-    wsRef.current = ws;
+        case "tool_preparing":
+          addToolCall({
+            name: data.tool || "",
+            id: data.tool_id || crypto.randomUUID(),
+            status: "preparing",
+            display: data.display,
+          });
+          break;
 
-    ws.onopen = () => {
-      reconnectAttempts.current = 0;
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data: ChatWebSocketMessage = JSON.parse(event.data);
-
-        switch (data.type) {
-          case "chat_chunk":
-            if (data.text && !cancelledRef.current) {
-              appendChunk(data.text);
-            }
-            break;
-
-          case "tool_preparing":
+        case "tool_start": {
+          const toolId = data.tool_id || crypto.randomUUID();
+          const { activeToolCalls } = useChatStore.getState();
+          const existing = activeToolCalls.find((tc) => tc.id === toolId);
+          if (existing) {
+            updateToolCallStatus(toolId, "running", data.display);
+          } else {
             addToolCall({
               name: data.tool || "",
-              id: data.tool_id || crypto.randomUUID(),
-              status: "preparing",
+              id: toolId,
+              status: "running",
               display: data.display,
             });
-            break;
-
-          case "tool_start": {
-            const toolId = data.tool_id || crypto.randomUUID();
-            const { activeToolCalls } = useChatStore.getState();
-            const existing = activeToolCalls.find((tc) => tc.id === toolId);
-            if (existing) {
-              updateToolCallStatus(toolId, "running", data.display);
-            } else {
-              addToolCall({
-                name: data.tool || "",
-                id: toolId,
-                status: "running",
-                display: data.display,
-              });
-            }
-            break;
           }
+          break;
+        }
 
-          case "tool_end":
-            completeToolCall(data.tool_id || "", data.summary || "Done");
-            break;
+        case "tool_end":
+          completeToolCall(data.tool_id || "", data.summary || "Done");
+          break;
 
-          case "chat_end": {
-            cancelledRef.current = false;
-            const { activeToolCalls: currentCalls } = useChatStore.getState();
-            const mergedCalls = currentCalls.length > 0
+        case "chat_end": {
+          cancelledRef.current = false;
+          const { activeToolCalls: currentCalls } = useChatStore.getState();
+          const mergedCalls =
+            currentCalls.length > 0
               ? currentCalls.map((tc) => ({ ...tc, status: "done" as const }))
               : data.tool_calls?.map((tc) => ({
                   name: tc.name,
                   id: tc.id,
                   status: "done" as const,
                 }));
-            finishStreaming(
-              data.conversation_id || "",
-              data.usage,
-              mergedCalls
-            );
-            break;
-          }
-
-          case "error":
-            finishStreaming("", undefined, undefined, data.message || "An unknown error occurred");
-            break;
-
-          case "ai_context_staged":
-            if (data.context) {
-              const { setAiContexts, aiContexts: currentAi } = useContextStore.getState();
-              const newCtx: AiGeneratedContext = {
-                id: crypto.randomUUID(),
-                name: data.context.name,
-                content: data.context.content,
-                scope: (data.context.scope as "org" | "private") || "org",
-                uploadStatus: "pending",
-              };
-              setAiContexts([...(currentAi || []), newCtx]);
-            }
-            break;
-
-          case "trigger_bulk_upload":
-            useContextStore.getState().bulkUpload();
-            break;
-
-          case "context_tree_updated":
-            // Chat tool modified the tree — cross-update the context engine store
-            if (data.tree_data) {
-              useContextEngineStore.getState().setTreeData(data.tree_data as never);
-            }
-            break;
-
-          case "pong":
-            break;
+          finishStreaming(
+            data.conversation_id || "",
+            data.usage,
+            mergedCalls,
+          );
+          break;
         }
-      } catch {
-        // Ignore non-JSON messages
-      }
-    };
 
-    ws.onclose = () => {
-      wsRef.current = null;
-      if (reconnectAttempts.current < 5) {
-        reconnectAttempts.current++;
-        const delay = Math.min(1000 * 2 ** reconnectAttempts.current, 30000);
-        reconnectRef.current = setTimeout(connect, delay);
-      }
-    };
+        case "error":
+          finishStreaming(
+            "",
+            undefined,
+            undefined,
+            data.message || "An unknown error occurred",
+          );
+          break;
 
-    ws.onerror = () => {
-      ws.close();
-    };
-  }, [token, appendChunk, addToolCall, updateToolCallStatus, completeToolCall, finishStreaming]);
+        case "ai_context_staged":
+          if (data.context) {
+            const { setAiContexts, aiContexts: currentAi } =
+              useContextStore.getState();
+            const newCtx: AiGeneratedContext = {
+              id: crypto.randomUUID(),
+              name: data.context.name,
+              content: data.context.content,
+              scope: (data.context.scope as "org" | "private") || "org",
+              uploadStatus: "pending",
+            };
+            setAiContexts([...(currentAi || []), newCtx]);
+          }
+          break;
 
-  // Auto-connect on mount
-  useEffect(() => {
-    connect();
-    return () => {
-      clearTimeout(reconnectRef.current);
-      if (wsRef.current) {
-        wsRef.current.onclose = null; // Prevent reconnect on unmount
-        wsRef.current.close();
+        case "trigger_bulk_upload":
+          useContextStore.getState().bulkUpload();
+          break;
+
+        case "context_tree_updated":
+          if (data.tree_data) {
+            useContextEngineStore
+              .getState()
+              .setTreeData(data.tree_data as never);
+          }
+          break;
+
+        case "pong":
+          break;
       }
-    };
-  }, [connect]);
+    },
+    [
+      appendChunk,
+      addToolCall,
+      updateToolCallStatus,
+      completeToolCall,
+      finishStreaming,
+    ],
+  );
+
+  const { send, isConnected } = useWebSocket({
+    endpoint: "/api/chat/ws/chat",
+    onMessage,
+  });
 
   // Send chat message
   const sendMessage = useCallback(
-    (content: string, conversationId?: string | null) => {
-      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+    (
+      content: string,
+      conversationId?: string | null,
+      currentModule?: string | null,
+    ) => {
+      if (!isConnected) {
         addMessage({
           id: crypto.randomUUID(),
           conversationId: conversationId || "",
@@ -196,7 +176,7 @@ export function useChatWebSocket() {
           "",
           undefined,
           undefined,
-          "Not connected to server. Please check that the backend is running and refresh the page."
+          "Not connected to server. Please check that the backend is running and refresh the page.",
         );
         return;
       }
@@ -205,39 +185,35 @@ export function useChatWebSocket() {
       cancelledRef.current = false;
 
       // Add user message to store immediately
-      const userMessage = {
+      addMessage({
         id: crypto.randomUUID(),
         conversationId: conversationId || "",
-        role: "user" as const,
+        role: "user",
         content,
         createdAt: new Date().toISOString(),
-      };
-      addMessage(userMessage);
+      });
 
       // Start streaming state
       startStreaming();
 
       // Send to server
-      wsRef.current.send(
-        JSON.stringify({
-          type: "chat_message",
-          content,
-          conversation_id: conversationId,
-          provider,
-          model,
-          org_id: orgId,
-        })
-      );
+      send({
+        type: "chat_message",
+        content,
+        conversation_id: conversationId,
+        provider,
+        model,
+        org_id: orgId,
+        current_module: currentModule || undefined,
+      });
     },
-    [provider, model, orgId, addMessage, startStreaming, finishStreaming]
+    [isConnected, provider, model, orgId, addMessage, startStreaming, finishStreaming, send],
   );
 
   // Cancel current chat/tool execution
   const cancelChat = useCallback(() => {
     cancelledRef.current = true;
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: "cancel" }));
-    }
+    send({ type: "cancel" });
     // Safety timeout in case backend doesn't respond with chat_end
     setTimeout(() => {
       const { isStreaming: stillStreaming } = useChatStore.getState();
@@ -245,9 +221,7 @@ export function useChatWebSocket() {
         finishStreaming("", undefined, undefined, "Cancelled by user");
       }
     }, 3000);
-  }, [finishStreaming]);
-
-  const isConnected = wsRef.current?.readyState === WebSocket.OPEN;
+  }, [send, finishStreaming]);
 
   return { sendMessage, cancelChat, isConnected };
 }

@@ -40,6 +40,7 @@ async def list_contexts(ctx: ToolContext) -> str:
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(
             f"{ctx.base_url}/ask-aira/context/list",
+            params={"is_active": "true"},
             headers=ctx.capillary_headers(),
         )
         if resp.status_code != 200:
@@ -85,10 +86,11 @@ async def get_context_content(ctx: ToolContext, context_name: str) -> str:
 
     context_name: Name of the context document to retrieve
     """
-    # First, list contexts to find the matching one
+    # First, list active contexts to find the matching one
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(
             f"{ctx.base_url}/ask-aira/context/list",
+            params={"is_active": "true"},
             headers=ctx.capillary_headers(),
         )
         if resp.status_code != 200:
@@ -230,10 +232,11 @@ async def update_context(
     context_name: Name of the context document to update
     new_content: The new content in markdown format
     """
-    # First, find the context ID by name
+    # First, find the context ID by name (active contexts only)
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(
             f"{ctx.base_url}/ask-aira/context/list",
+            params={"is_active": "true"},
             headers=ctx.capillary_headers(),
         )
         if resp.status_code != 200:
@@ -300,10 +303,11 @@ async def delete_context(ctx: ToolContext, context_name: str) -> str:
 
     context_name: Name of the context document to delete
     """
-    # Find context ID by name
+    # Find context ID by name (active contexts only)
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(
             f"{ctx.base_url}/ask-aira/context/list",
+            params={"is_active": "true"},
             headers=ctx.capillary_headers(),
         )
         if resp.status_code != 200:
@@ -372,10 +376,11 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
     """
     from app.services.llm_service import stream_llm
 
-    # 1. Fetch all contexts
+    # 1. Fetch all active contexts (exclude archived)
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(
             f"{ctx.base_url}/ask-aira/context/list",
+            params={"is_active": "true"},
             headers=ctx.capillary_headers(),
         )
         if resp.status_code != 200:

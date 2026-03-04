@@ -25,8 +25,9 @@ class WebSocketManager:
         self._lock = asyncio.Lock()           # protects connection map mutations
         self._send_locks: Dict[str, asyncio.Lock] = {}  # per-connection send serialization
 
-    async def connect(self, websocket: WebSocket, connection_id: str, user_id: int | None = None):
-        await websocket.accept()
+    async def connect(self, websocket: WebSocket, connection_id: str, user_id: int | None = None, *, already_accepted: bool = False):
+        if not already_accepted:
+            await websocket.accept()
         async with self._lock:
             self.active_connections[connection_id] = websocket
             self._send_locks[connection_id] = asyncio.Lock()
@@ -78,18 +79,37 @@ async def websocket_endpoint(websocket: WebSocket):
     import uuid
     connection_id = str(uuid.uuid4())
 
-    # Extract user_id from query params if available
+    # Accept connection first, then authenticate via first message.
+    # Also supports legacy query-parameter auth for backward compatibility.
+    await websocket.accept()
+
     token = websocket.query_params.get("token")
     user_id = None
+
     if token:
+        # Legacy query-param auth
         from app.core.auth import decode_session_token
         try:
             payload = decode_session_token(token)
             user_id = payload.get("user_id")
         except Exception:
             pass
+    else:
+        # Message-based auth — first message must be {type: "auth", token: "..."}
+        try:
+            raw_auth = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
+            auth_msg = json.loads(raw_auth)
+            if auth_msg.get("type") == "auth" and auth_msg.get("token"):
+                from app.core.auth import decode_session_token
+                try:
+                    payload = decode_session_token(auth_msg["token"])
+                    user_id = payload.get("user_id")
+                except Exception:
+                    pass
+        except (asyncio.TimeoutError, json.JSONDecodeError, Exception):
+            pass
 
-    await ws_manager.connect(websocket, connection_id, user_id)
+    await ws_manager.connect(websocket, connection_id, user_id, already_accepted=True)
     try:
         while True:
             data = await websocket.receive_text()

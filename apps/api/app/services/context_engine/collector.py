@@ -58,6 +58,7 @@ async def _fetch_capillary_contexts(
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(
                 f"{base_url}/ask-aira/context/list",
+                params={"is_active": "true"},
                 headers=headers,
             )
             if resp.status_code != 200:
@@ -70,6 +71,12 @@ async def _fetch_capillary_contexts(
         return []
 
     raw_list = data if isinstance(data, list) else data.get("data", data.get("contexts", []))
+
+    # Safety filter: only include active contexts (exclude archived)
+    raw_list = [
+        item for item in raw_list
+        if item.get("is_active") is not False
+    ]
 
     docs = []
     for item in raw_list:

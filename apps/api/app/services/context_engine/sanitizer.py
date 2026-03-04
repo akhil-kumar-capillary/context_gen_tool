@@ -129,7 +129,7 @@ def _attach_sanitized_content(
         if name:
             sanitized_map[name] = doc["content"]
 
-    # Build original content map (same logic as tree_builder._attach_full_content)
+    # Build original content map (same logic as tree_builder.attach_full_content)
     original_map: dict[str, str] = {}
     for ctx in contexts:
         content = ctx.get("content", "")

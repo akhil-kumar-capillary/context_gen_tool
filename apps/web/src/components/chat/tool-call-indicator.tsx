@@ -9,21 +9,43 @@ interface ToolCallIndicatorProps {
 }
 
 const TOOL_LABELS: Record<string, string> = {
+  // Context Management
   list_contexts: "Listing contexts",
   get_context_content: "Reading context",
   create_context: "Creating context",
   update_context: "Updating context",
   delete_context: "Deleting context",
   refactor_all_contexts: "Refactoring contexts",
+  // Context Engine
+  read_context_tree: "Reading tree structure",
+  modify_context_tree: "Modifying context tree",
+  remove_from_context_tree: "Removing from tree",
+  save_tree_checkpoint: "Saving checkpoint",
+  sync_tree_to_capillary: "Syncing to Capillary",
+  generate_context_tree: "Generating context tree",
+  restructure_tree: "Restructuring tree",
+  grep_context_tree: "Searching tree content",
+  read_tree_node_content: "Reading node content",
 };
 
 const TOOL_PREPARING_LABELS: Record<string, string> = {
+  // Context Management
   list_contexts: "Preparing to list contexts...",
   get_context_content: "Preparing to read context...",
   create_context: "Generating context document...",
   update_context: "Preparing context update...",
   delete_context: "Preparing to delete context...",
   refactor_all_contexts: "Preparing to refactor contexts...",
+  // Context Engine
+  read_context_tree: "Loading tree structure...",
+  modify_context_tree: "Analyzing tree for modification...",
+  remove_from_context_tree: "Preparing removal...",
+  save_tree_checkpoint: "Saving tree checkpoint...",
+  sync_tree_to_capillary: "Preparing sync to Capillary...",
+  generate_context_tree: "Starting tree generation...",
+  restructure_tree: "Planning restructure...",
+  grep_context_tree: "Searching tree content...",
+  read_tree_node_content: "Loading node content...",
 };
 
 export function ToolCallIndicator({ toolCall }: ToolCallIndicatorProps) {

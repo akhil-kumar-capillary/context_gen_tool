@@ -5,9 +5,11 @@ enabling chat-driven tree operations with intelligent placement and
 zero information loss validation.
 """
 import base64
+import bisect
 import copy
 import json
 import logging
+import re
 import uuid
 
 import httpx
@@ -155,9 +157,10 @@ async def generate_context_tree(ctx: ToolContext, sanitize: bool = False) -> str
     name="read_context_tree",
     description=(
         "Read the full context tree structure or a specific node. "
-        "Returns a compact view with node names, types, health scores, and content previews. "
-        "Use include_content=true for full content of a specific node. "
-        "Call this to understand the tree BEFORE making modifications."
+        "Returns a compact view with node names, types, health scores, and content previews (200 chars). "
+        "Use include_content=true for full content of a SPECIFIC node (can be large). "
+        "For targeted searches within content, use grep_context_tree instead. "
+        "Call this to understand the tree structure BEFORE making modifications."
     ),
     module="context_engine",
     requires_permission=("context_engine", "view"),
@@ -243,11 +246,14 @@ async def read_context_tree(
 @registry.tool(
     name="modify_context_tree",
     description=(
-        "Intelligently add, modify, or update content in the context tree. "
+        "Intelligently add, modify, or update content in the context TREE (not Capillary context documents). "
         "Analyzes the tree, checks for conflicts and duplicates, decides optimal "
         "placement, and validates zero information loss. "
-        "Call this when the user wants to add a rule, update existing context, "
-        "or make any content change to the tree."
+        "IMPORTANT: For modify/edit/remove operations on existing nodes, ALWAYS set "
+        "target_node_id to the node's ID. Use grep_context_tree or read_context_tree "
+        "to find the node ID first. This gives the planner full content visibility "
+        "for precise surgical edits instead of error-prone full-document rewrites. "
+        "For adding new content, target_node_id is optional (the planner will choose placement)."
     ),
     module="context_engine",
     requires_permission=("context_engine", "edit"),
@@ -257,11 +263,14 @@ async def modify_context_tree(
     ctx: ToolContext,
     user_request: str,
     content: str = "",
+    target_node_id: str = "",
 ) -> str:
     """Intelligently modify the context tree.
 
     user_request: What the user wants to do (e.g. "add a rule that says always use UTC")
     content: The specific context content to add or modify (optional — LLM infers if empty)
+    target_node_id: ID of the node to modify (optional — provides full content visibility
+        to the planner for surgical edits). ALWAYS set this for edit/modify/remove operations.
     """
     from app.services.context_engine.tree_modifier import modify_tree
 
@@ -275,6 +284,7 @@ async def modify_context_tree(
         tree=tree,
         user_request=user_request,
         content=content,
+        target_node_id_hint=target_node_id or None,
     )
 
     if not result.success:
@@ -520,8 +530,9 @@ async def sync_tree_to_capillary(ctx: ToolContext) -> str:
     name="restructure_tree",
     description=(
         "Ask LLM to restructure part of the context tree. "
-        "Use this when the user wants to merge, split, reorganize, "
-        "or optimize parts of the tree."
+        "Use this for STRUCTURAL changes: merge, split, reorganize, or optimize tree categories. "
+        "NOT for content edits — use modify_context_tree for content changes. "
+        "Note: works best with trees under 20 nodes; for larger trees, specify the section."
     ),
     module="context_engine",
     requires_permission=("context_engine", "edit"),
@@ -558,6 +569,229 @@ async def restructure_tree(ctx: ToolContext, instruction: str) -> str:
         f"({proposal['health_impact']})\n\n"
         f"This proposal needs your approval. Go to the Context Engine page to review and apply it."
     )
+
+
+# ---------------------------------------------------------------------------
+# Tool: grep_context_tree
+# ---------------------------------------------------------------------------
+
+TREE_TOOL_OUTPUT_LIMIT = 15000
+
+
+def _grep_in_content(
+    text: str,
+    pattern: str,
+    n_lines_before: int = 3,
+    n_lines_after: int = 3,
+) -> str:
+    """Grep within a text string, returning matching lines with context.
+
+    Uses bisect for O(log n) line lookups — same algorithm as cap-ai-readiness.
+    Returns formatted output with line numbers, or empty string if no matches.
+    """
+    lines = text.splitlines()
+    if not lines:
+        return ""
+
+    # Build index of line start positions for O(log n) line lookup
+    line_starts = [0]
+    for i, c in enumerate(text):
+        if c == "\n":
+            line_starts.append(i + 1)
+
+    hit_lines: set[int] = set()
+    try:
+        for m in re.finditer(pattern, text, re.IGNORECASE):
+            line_idx = bisect.bisect_right(line_starts, m.start()) - 1
+            for offset in range(-n_lines_before, n_lines_after + 1):
+                idx = line_idx + offset
+                if 0 <= idx < len(lines):
+                    hit_lines.add(idx)
+    except re.error as e:
+        return f"Invalid regex pattern: {e}"
+
+    if not hit_lines:
+        return ""
+
+    # Format with line numbers — add separators between non-contiguous blocks
+    result_lines: list[str] = []
+    sorted_hits = sorted(hit_lines)
+    prev_idx = -2
+    for idx in sorted_hits:
+        if idx > prev_idx + 1 and result_lines:
+            result_lines.append("  ---")
+        result_lines.append(f"{idx + 1:4d} | {lines[idx]}")
+        prev_idx = idx
+
+    return "\n".join(result_lines)
+
+
+@registry.tool(
+    name="grep_context_tree",
+    description=(
+        "Search within context tree node content using a regex pattern. "
+        "Returns matching lines with surrounding context (like grep -C). "
+        "Use this to find specific sections, rules, or patterns within large nodes "
+        "BEFORE modifying them. If node_id is empty, searches ALL leaf nodes."
+    ),
+    module="context_engine",
+    requires_permission=("context_engine", "view"),
+    annotations={"display": "Searching tree content..."},
+)
+async def grep_context_tree(
+    ctx: ToolContext,
+    pattern: str,
+    node_id: str = "",
+    context_lines: int = 3,
+) -> str:
+    """Search within tree content using regex.
+
+    pattern: Regex pattern to search for (case-insensitive)
+    node_id: Node to search in (empty = search all leaf nodes)
+    context_lines: Number of context lines before/after each match (default 3)
+    """
+    from app.services.context_engine.tree_modifier import find_node
+
+    try:
+        _run, tree = await _load_latest_tree(ctx)
+    except ValueError as e:
+        return str(e)
+
+    results: list[str] = []
+    total_len = 0
+
+    if node_id:
+        # Search specific node
+        node = find_node(tree, node_id)
+        if not node:
+            names = _list_node_names(tree)
+            return (
+                f"Node '{node_id}' not found. "
+                f"Available nodes: {', '.join(names[:20])}"
+            )
+        content = node.get("desc", "")
+        if not content:
+            return f"Node '{node_id}' has no content."
+
+        grep_output = _grep_in_content(content, pattern, context_lines, context_lines)
+        if not grep_output:
+            return f"No matches for `{pattern}` in node '{node_id}'."
+
+        results.append(
+            f"**{node.get('name', '?')}** (id: {node_id})\n{grep_output}"
+        )
+    else:
+        # Search all leaf nodes
+        leaves: list[dict] = []
+        _collect_leaves(tree, leaves)
+
+        for leaf in leaves:
+            content = leaf.get("desc", "")
+            if not content:
+                continue
+
+            grep_output = _grep_in_content(content, pattern, context_lines, context_lines)
+            if not grep_output:
+                continue
+
+            block = (
+                f"**{leaf.get('name', '?')}** (id: {leaf.get('id', '?')})\n"
+                f"{grep_output}"
+            )
+            total_len += len(block)
+            results.append(block)
+
+            if total_len > TREE_TOOL_OUTPUT_LIMIT:
+                results.append(
+                    f"\n...output truncated. Searched {len(leaves)} leaves. "
+                    f"Use node_id parameter to search a specific node."
+                )
+                break
+
+    if not results:
+        return f"No matches for `{pattern}` in any tree node."
+
+    return "\n\n".join(results)
+
+
+# ---------------------------------------------------------------------------
+# Tool: read_tree_node_content
+# ---------------------------------------------------------------------------
+
+
+@registry.tool(
+    name="read_tree_node_content",
+    description=(
+        "Read the content of a specific tree node with line numbers. "
+        "Supports reading a specific line range (start_line to end_line). "
+        "Use this after grep_context_tree to read the full context around a match. "
+        "Output is capped at 15000 chars — use line ranges for large nodes."
+    ),
+    module="context_engine",
+    requires_permission=("context_engine", "view"),
+    annotations={"display": "Reading node content..."},
+)
+async def read_tree_node_content(
+    ctx: ToolContext,
+    node_id: str,
+    start_line: int = 1,
+    end_line: int = -1,
+) -> str:
+    """Read node content with line numbers.
+
+    node_id: ID of the node to read
+    start_line: First line to include (1-based, default: 1)
+    end_line: Last line to include (-1 = end of content)
+    """
+    from app.services.context_engine.tree_modifier import find_node
+
+    try:
+        _run, tree = await _load_latest_tree(ctx)
+    except ValueError as e:
+        return str(e)
+
+    node = find_node(tree, node_id)
+    if not node:
+        names = _list_node_names(tree)
+        return (
+            f"Node '{node_id}' not found. "
+            f"Available nodes: {', '.join(names[:20])}"
+        )
+
+    content = node.get("desc", "")
+    if not content:
+        return f"Node '{node_id}' has no content."
+
+    lines = content.splitlines()
+    total_lines = len(lines)
+
+    # Normalize range (1-based → 0-based)
+    start_idx = max(0, start_line - 1)
+    end_idx = total_lines if end_line == -1 else min(end_line, total_lines)
+
+    if start_idx >= total_lines:
+        return f"start_line {start_line} is beyond content ({total_lines} lines)."
+
+    selected = lines[start_idx:end_idx]
+
+    # Format with line numbers
+    output_lines: list[str] = [
+        f"**{node.get('name', '?')}** (lines {start_idx + 1}\u2013{start_idx + len(selected)} of {total_lines})"
+    ]
+    total_len = len(output_lines[0])
+
+    for i, line in enumerate(selected):
+        numbered = f"{start_idx + i + 1:4d} | {line}"
+        total_len += len(numbered) + 1
+        if total_len > TREE_TOOL_OUTPUT_LIMIT:
+            output_lines.append(
+                f"\n...output truncated at line {start_idx + i + 1}. "
+                f"Use start_line/end_line to read specific ranges."
+            )
+            break
+        output_lines.append(numbered)
+
+    return "\n".join(output_lines)
 
 
 # ---------------------------------------------------------------------------

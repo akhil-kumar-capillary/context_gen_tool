@@ -14,6 +14,7 @@ from app.core.auth import get_current_user, decode_session_token
 from app.core.websocket import ws_manager
 from app.database import get_db
 from app.models.chat import ChatConversation, ChatMessage
+from app.models.user import UserOrg
 from app.services.chat_orchestrator import ChatOrchestrator
 from app.services.tools.tool_context import ToolContext
 
@@ -50,11 +51,23 @@ async def chat_websocket(websocket: WebSocket):
         {type: "chat_end", conversation_id: "...", usage: {...}, tool_calls: [...]}
         {type: "error", message: "..."}
     """
-    # Authenticate via query parameter
+    # Authenticate — accept connection first, then authenticate via first message.
+    # Also supports legacy query-parameter auth for backward compatibility.
     token = websocket.query_params.get("token")
+    await websocket.accept()
+
     if not token:
-        await websocket.close(4001, "Missing token")
-        return
+        # Wait for auth message as first message
+        try:
+            raw_auth = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
+            auth_msg = json.loads(raw_auth)
+            if auth_msg.get("type") != "auth" or not auth_msg.get("token"):
+                await websocket.close(4001, "First message must be {type: 'auth', token: '...'}")
+                return
+            token = auth_msg["token"]
+        except (asyncio.TimeoutError, json.JSONDecodeError, Exception):
+            await websocket.close(4001, "Auth timeout or invalid auth message")
+            return
 
     try:
         user = decode_session_token(token)
@@ -65,7 +78,7 @@ async def chat_websocket(websocket: WebSocket):
     connection_id = str(uuid.uuid4())
     user_id = user.get("user_id")
 
-    await ws_manager.connect(websocket, connection_id, user_id)
+    await ws_manager.connect(websocket, connection_id, user_id, already_accepted=True)
 
     # Per-connection cancel event — set when client sends {"type": "cancel"}
     cancel_event = asyncio.Event()
@@ -171,6 +184,7 @@ async def _handle_chat_message(
     provider = msg.get("provider", "anthropic")
     model = msg.get("model", "claude-opus-4-6")
     org_id = msg.get("org_id")
+    current_module = msg.get("current_module")  # e.g. "context_engine", "context_management"
 
     if not org_id:
         await ws_manager.send_to_connection(
@@ -179,6 +193,21 @@ async def _handle_chat_message(
         return
 
     try:
+        # ── Org membership check — prevent cross-org access ──
+        async with async_session() as db:
+            membership = await db.execute(
+                select(UserOrg).where(
+                    UserOrg.user_id == user["user_id"],
+                    UserOrg.org_id == int(org_id),
+                )
+            )
+            if not membership.scalar_one_or_none():
+                await ws_manager.send_to_connection(
+                    connection_id,
+                    {"type": "error", "message": "Unauthorized: you do not belong to this organization"},
+                )
+                return
+
         # ── Phase 1: Load conversation + save user message (short DB session) ──
         conv_id = None
         llm_messages: list[dict] = []
@@ -242,6 +271,7 @@ async def _handle_chat_message(
             provider=provider,
             model=model,
             tool_context=tool_ctx,
+            current_module=current_module,
         )
 
         async def _on_text_chunk(text):
@@ -380,26 +410,24 @@ async def list_conversations(
     db: AsyncSession = Depends(get_db),
 ):
     """List all conversations for the current user in the given org."""
+    # Single query with message count (avoids N+1)
     result = await db.execute(
-        select(ChatConversation)
+        select(
+            ChatConversation,
+            func.count(ChatMessage.id).label("message_count"),
+        )
+        .outerjoin(ChatMessage, ChatMessage.conversation_id == ChatConversation.id)
         .where(
             ChatConversation.user_id == current_user["user_id"],
             ChatConversation.org_id == org_id,
         )
+        .group_by(ChatConversation.id)
         .order_by(desc(ChatConversation.updated_at))
     )
-    conversations = result.scalars().all()
+    rows = result.all()
 
-    # Get message counts
-    response = []
-    for conv in conversations:
-        count_result = await db.execute(
-            select(func.count(ChatMessage.id)).where(
-                ChatMessage.conversation_id == conv.id
-            )
-        )
-        msg_count = count_result.scalar()
-        response.append({
+    return [
+        {
             "id": str(conv.id),
             "title": conv.title,
             "provider": conv.provider,
@@ -407,9 +435,9 @@ async def list_conversations(
             "created_at": conv.created_at.isoformat(),
             "updated_at": conv.updated_at.isoformat(),
             "message_count": msg_count,
-        })
-
-    return response
+        }
+        for conv, msg_count in rows
+    ]
 
 
 @router.get("/conversations/{conversation_id}")

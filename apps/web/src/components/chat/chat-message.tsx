@@ -113,19 +113,19 @@ export function StreamingMessage({ text, toolCalls }: StreamingMessageProps) {
           </div>
         )}
 
-        {/* Streaming text */}
+        {/* Streaming text or thinking indicator */}
         {text ? (
           <MarkdownRenderer
             content={text}
             className="prose-sm max-w-none text-gray-800"
           />
-        ) : toolCalls.length === 0 ? (
+        ) : (
           <div className="flex items-center gap-1.5">
             <div className="h-2 w-2 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.3s]" />
             <div className="h-2 w-2 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.15s]" />
             <div className="h-2 w-2 animate-bounce rounded-full bg-violet-400" />
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   );

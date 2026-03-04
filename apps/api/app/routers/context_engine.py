@@ -152,8 +152,23 @@ async def generate_tree(
 
     Collects all contexts, sends them to LLM, and builds a tree.
     Returns immediately with a run_id; progress is pushed via WebSocket.
+    Rejects duplicate requests if a run is already in progress for this org.
     """
     user_id = current_user["user_id"]
+
+    # Guard: reject if a run is already in progress for this org
+    async with async_session() as db:
+        existing = await db.execute(
+            select(ContextTreeRun.id)
+            .where(
+                ContextTreeRun.org_id == org_id,
+                ContextTreeRun.status == "running",
+            )
+            .limit(1)
+        )
+        running_row = existing.scalar_one_or_none()
+        if running_row:
+            return {"run_id": str(running_row), "status": "already_running"}
 
     # Create the run record
     run_id = str(uuid.uuid4())

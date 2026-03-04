@@ -3,19 +3,10 @@
 import { memo } from "react";
 import { Pencil, Archive, ArchiveRestore, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { truncateHtml } from "@/lib/text-utils";
 import { useContextStore } from "@/stores/context-store";
 import { ScopeBadge } from "./scope-badge";
 import type { Context } from "@/types";
-
-function stripHtml(text: string): string {
-  return text.replace(/<[^>]+>/g, "");
-}
-
-function truncate(text: string, maxLen: number): string {
-  const clean = stripHtml(text);
-  if (clean.length <= maxLen) return clean;
-  return clean.slice(0, maxLen) + "...";
-}
 
 interface ContextRowProps {
   ctx: Context;
@@ -52,7 +43,7 @@ export const ContextRow = memo(function ContextRow({ ctx }: ContextRowProps) {
             )}
           </div>
           <p className="mt-0.5 truncate text-xs text-gray-400">
-            {truncate(ctx.context || "", 80)}
+            {truncateHtml(ctx.context || "", 80)}
           </p>
         </div>
 

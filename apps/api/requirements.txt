@@ -36,6 +36,9 @@ pydantic-settings>=2.5.0
 # Async I/O
 aiofiles>=24.1.0
 
+# Rate Limiting
+slowapi>=0.1.9
+
 # Utilities
 python-dotenv>=1.0.0
 

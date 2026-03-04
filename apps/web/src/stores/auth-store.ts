@@ -44,7 +44,17 @@ export const useAuthStore = create<AuthState>()(
 
       setOrgs: (orgs) => set({ orgs }),
 
-      selectOrg: (orgId, orgName) => set({ orgId, orgName }),
+      selectOrg: (orgId, orgName) => {
+        const prevOrgId = get().orgId;
+        set({ orgId, orgName });
+        // Reset org-scoped stores when switching organizations
+        if (prevOrgId !== null && prevOrgId !== orgId) {
+          // Dynamic import to avoid circular dependency
+          import("@/stores/chat-store").then(({ useChatStore }) =>
+            useChatStore.getState().reset(),
+          );
+        }
+      },
 
       setAllowedModules: (modules) =>
         set((state) => ({

@@ -3,14 +3,10 @@
 import { memo } from "react";
 import { Upload, Pencil, X, Check, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { truncate } from "@/lib/text-utils";
 import { useContextStore } from "@/stores/context-store";
 import { ScopeBadge } from "./scope-badge";
 import type { AiGeneratedContext } from "@/types";
-
-function truncate(text: string, maxLen: number): string {
-  if (text.length <= maxLen) return text;
-  return text.slice(0, maxLen) + "...";
-}
 
 interface AiContextRowProps {
   ctx: AiGeneratedContext;

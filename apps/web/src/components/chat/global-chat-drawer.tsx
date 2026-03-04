@@ -9,6 +9,24 @@ import { useChatStore } from "@/stores/chat-store";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { ChatInput } from "@/components/chat/chat-input";
 
+/* ── Module detection ──────────────────────────────────────────────── */
+
+/** Map pathname prefixes to module identifiers sent to the backend. */
+const PATHNAME_TO_MODULE: Record<string, string> = {
+  "/dashboard/context-engine": "context_engine",
+  "/dashboard/contexts": "context_management",
+  "/dashboard/sources/config-apis": "config_apis",
+  "/dashboard/sources/databricks": "databricks",
+  "/dashboard/sources/confluence": "confluence",
+};
+
+function resolveCurrentModule(pathname: string): string | null {
+  const match = Object.entries(PATHNAME_TO_MODULE).find(([prefix]) =>
+    pathname.startsWith(prefix)
+  );
+  return match ? match[1] : null;
+}
+
 /* ── Per-module suggestion sets ─────────────────────────────────────── */
 
 interface SuggestionSet {
@@ -104,6 +122,9 @@ export function GlobalChatDrawer() {
   // Don't render on excluded routes
   const isExcluded = EXCLUDED_ROUTES.some((r) => pathname.startsWith(r));
 
+  // Resolve the current module for the chat backend
+  const currentModule = useMemo(() => resolveCurrentModule(pathname), [pathname]);
+
   // Resolve suggestions for the current route
   const suggestions = useMemo(() => {
     const match = Object.entries(MODULE_SUGGESTIONS).find(([path]) =>
@@ -115,23 +136,23 @@ export function GlobalChatDrawer() {
   // Dispatch pending messages (e.g. from ContextPanel "Sanitize All")
   useEffect(() => {
     if (pendingMessage) {
-      sendMessage(pendingMessage, activeConversationId);
+      sendMessage(pendingMessage, activeConversationId, currentModule);
       clearPendingMessage();
     }
-  }, [pendingMessage, sendMessage, activeConversationId, clearPendingMessage]);
+  }, [pendingMessage, sendMessage, activeConversationId, clearPendingMessage, currentModule]);
 
   const handleSend = useCallback(
     (content: string) => {
-      sendMessage(content, activeConversationId);
+      sendMessage(content, activeConversationId, currentModule);
     },
-    [sendMessage, activeConversationId]
+    [sendMessage, activeConversationId, currentModule]
   );
 
   const handleSuggestion = useCallback(
     (suggestion: string) => {
-      sendMessage(suggestion, activeConversationId);
+      sendMessage(suggestion, activeConversationId, currentModule);
     },
-    [sendMessage, activeConversationId]
+    [sendMessage, activeConversationId, currentModule]
   );
 
   if (isExcluded) return null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback } from "react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useChatStore } from "@/stores/chat-store";
 import { ConversationSidebar } from "@/components/chat/conversation-sidebar";
@@ -10,14 +10,7 @@ export default function ChatPage() {
   const { token, orgId } = useAuthStore();
   const { setActiveConversation, setMessages } = useChatStore();
 
-  // Reset chat state when org changes
-  const prevOrgIdRef = useRef(orgId);
-  useEffect(() => {
-    if (prevOrgIdRef.current !== orgId) {
-      prevOrgIdRef.current = orgId;
-      useChatStore.getState().reset();
-    }
-  }, [orgId]);
+  // Chat reset on org change is handled centrally in auth-store.selectOrg()
 
   const handleSelectConversation = useCallback(
     async (id: string) => {

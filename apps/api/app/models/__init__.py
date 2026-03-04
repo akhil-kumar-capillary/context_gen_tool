@@ -2,7 +2,6 @@ from app.models.user import User, Role, Permission, UserRole, UserPermission, Ro
 from app.models.extraction import ExtractionRun, ExtractedSQL, NotebookMetadata
 from app.models.analysis import AnalysisRun, AnalysisFingerprint, AnalysisNotebook
 from app.models.context_doc import ContextDoc
-from app.models.context import ManagedContext, RefactoringRun
 from app.models.source_run import ConfluenceExtraction, ConfigApiExtraction
 from app.models.config_pipeline import ConfigExtractionRun, ConfigAnalysisRun
 from app.models.audit_log import AuditLog
@@ -16,7 +15,6 @@ __all__ = [
     "ExtractionRun", "ExtractedSQL", "NotebookMetadata",
     "AnalysisRun", "AnalysisFingerprint", "AnalysisNotebook",
     "ContextDoc",
-    "ManagedContext", "RefactoringRun",
     "ConfluenceExtraction", "ConfigApiExtraction",
     "ConfigExtractionRun", "ConfigAnalysisRun",
     "AuditLog",

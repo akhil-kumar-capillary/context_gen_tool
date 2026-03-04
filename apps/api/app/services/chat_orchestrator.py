@@ -29,11 +29,13 @@ class ChatOrchestrator:
         model: str,
         tool_context: ToolContext,
         max_tool_rounds: int | None = None,
+        current_module: str | None = None,
     ):
         self.provider = provider
         self.model = model
         self.ctx = tool_context
         self.max_tool_rounds = max_tool_rounds or settings.max_tool_rounds
+        self.current_module = current_module
 
     async def run(
         self,
@@ -72,9 +74,12 @@ class ChatOrchestrator:
         else:
             tool_defs = registry.get_tools_for_openai(permitted_tools) if permitted_tools else None
 
-        # Build system prompt
+        # Build system prompt (include current module for tool routing)
         tool_names = [t.name for t in permitted_tools]
-        system = build_system_prompt(self.ctx.email, self.ctx.org_id, tool_names)
+        system = build_system_prompt(
+            self.ctx.email, self.ctx.org_id, tool_names,
+            current_module=self.current_module,
+        )
 
         # Track aggregate state
         all_text = ""
@@ -192,8 +197,11 @@ class ChatOrchestrator:
         }
 
     # -----------------------------------------------------------------
-    # Internal: streaming round
+    # Internal: streaming round (with retry for transient LLM errors)
     # -----------------------------------------------------------------
+
+    _ROUND_MAX_RETRIES = 2
+    _ROUND_RETRY_DELAY = 5.0  # seconds — longer cooldown at round level
 
     async def _stream_round(
         self,
@@ -204,7 +212,61 @@ class ChatOrchestrator:
         on_tool_detected: Callable[[str, str, str], Awaitable[None]],
         cancel_event: Optional[asyncio.Event] = None,
     ) -> tuple[str, list[dict], dict]:
-        """Execute a streaming round. Returns (text, tool_calls, usage)."""
+        """Execute a streaming round with retry for transient LLM failures.
+
+        If the LLM service is temporarily unavailable (after llm_service
+        exhausts its own retries), this retries the round up to 2 more times
+        with a 5-second cooldown. On final failure, returns a friendly error
+        message as text instead of raising.
+        """
+        from app.services.llm_exceptions import LLMOverloadedError, LLMTransientError
+
+        last_error: Exception | None = None
+
+        for attempt in range(self._ROUND_MAX_RETRIES + 1):
+            if attempt > 0:
+                logger.warning(
+                    "Chat round retry %d/%d after %.1fs (error: %s)",
+                    attempt, self._ROUND_MAX_RETRIES,
+                    self._ROUND_RETRY_DELAY, last_error,
+                )
+                await on_text_chunk(
+                    f"\n\n*Retrying due to temporary API issue (attempt {attempt + 1})...*\n\n"
+                )
+                await asyncio.sleep(self._ROUND_RETRY_DELAY)
+
+                # Check cancellation during wait
+                if cancel_event and cancel_event.is_set():
+                    return "", [], {}
+
+            try:
+                return await self._stream_round_inner(
+                    system, messages, tools, on_text_chunk,
+                    on_tool_detected, cancel_event,
+                )
+            except (LLMOverloadedError, LLMTransientError) as exc:
+                last_error = exc
+                if attempt == self._ROUND_MAX_RETRIES:
+                    # Final failure — return friendly error as text
+                    error_msg = (
+                        "I'm having trouble reaching the AI service right now. "
+                        "Please try again in a moment."
+                    )
+                    await on_text_chunk(error_msg)
+                    return error_msg, [], {}
+
+        return "", [], {}  # Should not reach here
+
+    async def _stream_round_inner(
+        self,
+        system: str,
+        messages: list[dict],
+        tools: list[dict] | None,
+        on_text_chunk: Callable[[str], Awaitable[None]],
+        on_tool_detected: Callable[[str, str, str], Awaitable[None]],
+        cancel_event: Optional[asyncio.Event] = None,
+    ) -> tuple[str, list[dict], dict]:
+        """Execute a single streaming round. Returns (text, tool_calls, usage)."""
         text = ""
         tool_calls: list[dict] = []
         usage: dict = {}
