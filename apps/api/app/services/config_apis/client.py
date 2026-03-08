@@ -300,6 +300,8 @@ class CouponAPI:
         program_id: Optional[int] = None,
         owned_by: Optional[Literal["LOYALTY"]] = None,
         include_unclaimed: Optional[bool] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> Dict[str, Any]:
         params: Dict[str, Any] = {}
         params["ownedBy"] = owned_by if owned_by is not None else "NONE"
@@ -307,6 +309,10 @@ class CouponAPI:
             params["ownerId"] = program_id
         if include_unclaimed is True:
             params["includeUnclaimed"] = "true"
+        if limit is not None:
+            params["limit"] = limit
+        if offset is not None:
+            params["offset"] = offset
         return await self.client._get(
             f"{self.base_path}/config", params=params or None
         )
@@ -513,10 +519,12 @@ class CampaignAPI:
             return {"X-CAP-API-AUTH-ORG-ID": str(self.client.org_id)}
         return None
 
-    async def get_audiences(self, search: str = "") -> Dict[str, Any]:
+    async def get_audiences(
+        self, search: str = "", limit: int = 10, offset: int = 0
+    ) -> Dict[str, Any]:
         return await self.client._get(
             f"{self.base_path}/audience",
-            params={"limit": 10, "offset": 0, "search": search},
+            params={"limit": limit, "offset": offset, "search": search},
             headers=self._org_headers(),
         )
 
@@ -527,11 +535,11 @@ class CampaignAPI:
         )
 
     async def list_campaigns(
-        self, campaign_name: str = "", limit: int = 10
+        self, campaign_name: str = "", limit: int = 10, offset: int = 0
     ) -> Dict[str, Any]:
         return await self.client._post(
             f"{self.base_path}/campaigns/filter",
-            json={"limit": limit, "search": campaign_name},
+            json={"limit": limit, "offset": offset, "search": campaign_name},
             headers=self._org_headers(),
         )
 
@@ -733,6 +741,10 @@ class PromotionAPI:
         active: Optional[bool] = None,
         campaign_id: Optional[int] = None,
         unclaimed_only: Optional[bool] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        sort_on: Optional[str] = None,
+        order: Optional[str] = None,
     ) -> Dict[str, Any]:
         params: Dict[str, Any] = {}
         if name:
@@ -747,6 +759,14 @@ class PromotionAPI:
             params["campaignId"] = campaign_id
         if unclaimed_only is not None:
             params["unclaimedOnly"] = "true" if unclaimed_only else "false"
+        if limit is not None:
+            params["limit"] = limit
+        if offset is not None:
+            params["offset"] = offset
+        if sort_on is not None:
+            params["sortOn"] = sort_on
+        if order is not None:
+            params["order"] = order
         return await self.client._get(
             f"{self.base_path}/promotions/filters",
             params=params or None,
@@ -893,11 +913,14 @@ class OrgSettingsAPI:
         )
 
     async def get_all_target_groups(
-        self, name: Optional[str] = None
+        self,
+        name: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> Dict[str, Any]:
         params: Dict[str, Any] = {
-            "limit": 10000,
-            "offset": 0,
+            "limit": limit if limit is not None else 10000,
+            "offset": offset if offset is not None else 0,
             "type": "DEFAULT~UNIFIED~STREAKS~NON_CONTINUOUS_STREAKS",
         }
         if name:
@@ -1086,10 +1109,11 @@ class MySQLAPI:
 
     async def get_events(
         self,
-        event_type: Literal["promotions", "voucher_series", "target_groups"],
+        event_type: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         limit: Optional[int] = None,
+        offset: Optional[int] = None,
         sort: Optional[str] = None,
         shard: Optional[str] = None,
     ) -> Dict[str, Any]:
@@ -1100,6 +1124,8 @@ class MySQLAPI:
             params["end_date"] = end_date
         if limit:
             params["limit"] = limit
+        if offset is not None:
+            params["offset"] = offset
         if sort:
             params["sort"] = sort
         if shard:

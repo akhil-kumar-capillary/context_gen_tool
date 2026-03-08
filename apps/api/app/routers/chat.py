@@ -1,6 +1,7 @@
 """Chat router — WebSocket endpoint for streaming chat + REST for conversation CRUD."""
 import asyncio
 import json
+import jwt
 import logging
 import uuid
 
@@ -71,14 +72,24 @@ async def chat_websocket(websocket: WebSocket):
 
     try:
         user = decode_session_token(token)
-    except Exception:
+    except jwt.ExpiredSignatureError:
+        logger.warning("WebSocket auth failed: token expired")
+        await websocket.close(4001, "Token expired")
+        return
+    except jwt.InvalidTokenError as e:
+        logger.warning(f"WebSocket auth failed: invalid token — {e}")
         await websocket.close(4001, "Invalid token")
+        return
+    except Exception as e:
+        logger.exception(f"WebSocket auth failed: unexpected error — {e}")
+        await websocket.close(4001, "Auth error")
         return
 
     connection_id = str(uuid.uuid4())
     user_id = user.get("user_id")
 
     await ws_manager.connect(websocket, connection_id, user_id, already_accepted=True)
+    await ws_manager.send_to_connection(connection_id, {"type": "auth_ok"})
 
     # Per-connection cancel event — set when client sends {"type": "cancel"}
     cancel_event = asyncio.Event()
@@ -138,23 +149,19 @@ async def chat_websocket(websocket: WebSocket):
                 )
 
     except WebSocketDisconnect:
-        cancel_event.set()  # Cancel any in-flight processing
-        if active_chat_task and not active_chat_task.done():
-            active_chat_task.cancel()
-        await ws_manager.disconnect(connection_id, user_id)
+        pass
     except RuntimeError:
         # Starlette raises RuntimeError when WS is already closed
         logger.info(f"Chat WebSocket closed (connection={connection_id})")
-        cancel_event.set()
-        if active_chat_task and not active_chat_task.done():
-            active_chat_task.cancel()
-        await ws_manager.disconnect(connection_id, user_id)
-    except Exception as e:
+    except Exception:
         logger.exception("Chat WebSocket error")
+    finally:
+        # Guarantee cleanup on any exit path
         cancel_event.set()
         if active_chat_task and not active_chat_task.done():
             active_chat_task.cancel()
-        await ws_manager.disconnect(connection_id, user_id)
+        if connection_id in ws_manager.active_connections:
+            await ws_manager.disconnect(connection_id, user_id)
 
 
 async def _handle_chat_message(

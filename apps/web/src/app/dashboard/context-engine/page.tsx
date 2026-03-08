@@ -59,11 +59,10 @@ export default function ContextEnginePage() {
     setIsSavingCheckpoint,
   } = useContextEngineStore();
 
-  // Reset context engine state when org changes
+  // Reset context engine state when org changes (skip hydration: null → number)
   const prevOrgIdRef = useRef(orgId);
   useEffect(() => {
-    if (prevOrgIdRef.current !== orgId) {
-      prevOrgIdRef.current = orgId;
+    if (prevOrgIdRef.current !== orgId && prevOrgIdRef.current !== null && orgId !== null) {
       setTreeRuns([]);
       setActiveRunId(null);
       setTreeData(null);
@@ -77,6 +76,7 @@ export default function ContextEnginePage() {
       setIsLoadingCheckpoints(false);
       setIsSavingCheckpoint(false);
     }
+    prevOrgIdRef.current = orgId;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId]);
 

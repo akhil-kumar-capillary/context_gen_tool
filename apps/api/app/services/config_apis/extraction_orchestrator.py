@@ -50,7 +50,7 @@ def _count_response_items(data: Any) -> int:
             return 0
         for key in ("data", "entity", "entities", "programs", "tiers",
                      "strategies", "promotions", "campaigns", "audiences",
-                     "results", "items", "records", "config"):
+                     "result", "results", "items", "records", "config"):
             val = data.get(key)
             if isinstance(val, list):
                 return len(val)
@@ -68,13 +68,36 @@ def _extract_items_local(data: Any) -> list:
             return []
         for key in ("data", "entity", "entities", "programs", "tiers",
                      "strategies", "promotions", "campaigns", "audiences",
-                     "results", "items", "records", "config"):
+                     "result", "results", "items", "records", "config"):
             val = data.get(key)
             if isinstance(val, list):
                 return val
             if isinstance(val, dict) and "data" in val and isinstance(val["data"], list):
                 return val["data"]
     return []
+
+
+def _extract_target_items(resp: Any) -> list:
+    """Extract target groups from API response (nests under ``targets`` key)."""
+    if isinstance(resp, dict):
+        targets = resp.get("targets", [])
+        if isinstance(targets, list):
+            return targets
+    return _extract_items_local(resp)
+
+
+def _deduplicate_target_groups(raw_tgs: list) -> list:
+    """Deduplicate target groups by ``targetGroupId`` (baseline pattern)."""
+    seen: set = set()
+    unique: list = []
+    for tg in raw_tgs:
+        gid = tg.get("targetGroupId") if isinstance(tg, dict) else None
+        if gid is not None and gid not in seen:
+            seen.add(gid)
+            unique.append(tg)
+        elif gid is None:
+            unique.append(tg)
+    return unique
 
 
 async def _tracked_call(fn, name: str) -> Tuple[Any, APICallResult]:
@@ -147,18 +170,14 @@ CATEGORIES: Dict[str, Dict[str, Any]] = {
         "label": "Campaigns",
         "description": "List campaigns, campaign details, messages, templates",
         "params_schema": [
-            {"key": "limit", "label": "Max campaigns", "type": "number", "required": False,
-             "default": 50, "help": "Maximum number of campaigns to fetch"},
             {"key": "search", "label": "Search filter", "type": "text", "required": False,
-             "help": "Filter campaigns by name"},
+             "help": "Filter campaigns by name (leave empty for all)"},
         ],
     },
     "promotions": {
         "label": "Promotions",
         "description": "Loyalty promotions, cart promotions",
         "params_schema": [
-            {"key": "limit", "label": "Max promotions", "type": "number", "required": False,
-             "default": 50, "help": "Maximum number of promotions to fetch"},
             {"key": "active_only", "label": "Active only", "type": "boolean", "required": False,
              "default": False, "help": "Only fetch active promotions"},
         ],
@@ -203,6 +222,78 @@ def get_available_categories() -> List[Dict[str, Any]]:
             "params_schema": cat["params_schema"],
         })
     return result
+
+
+# ---------------------------------------------------------------------------
+# Helper: paginate through an API endpoint collecting all items
+# ---------------------------------------------------------------------------
+
+async def _paginate_all(
+    label: str,
+    fetch_page: Callable[[int, int], Awaitable[Any]],
+    extract_items: Callable[[Any], list],
+    page_size: int,
+    emit: ProgressCallback,
+    phase: str,
+    max_items: Optional[int] = None,
+) -> Tuple[list, List[APICallResult]]:
+    """Paginate through an API endpoint and collect all items.
+
+    Works like the reference project's ``paginate_all()`` but async,
+    with per-page tracking via ``_tracked_call``.
+
+    Args:
+        label: Human-readable name for progress messages.
+        fetch_page: async fn(offset, limit) → raw API response.
+        extract_items: fn(raw_response) → list of items from that page.
+        page_size: Items per page (also the API's max limit).
+        emit: Progress callback.
+        phase: Phase name for progress messages.
+        max_items: Optional cap on total items collected (e.g. 500).
+
+    Returns:
+        (all_items, call_results) — accumulated items and per-page call logs.
+    """
+    all_items: list = []
+    call_results: List[APICallResult] = []
+    offset = 0
+    page = 1
+
+    while True:
+        data, call_result = await _tracked_call(
+            lambda o=offset, ps=page_size: fetch_page(o, ps),
+            f"{label}_page{page}",
+        )
+        call_results.append(call_result)
+
+        if call_result["status"] != "success":
+            err = call_result.get("error_message", "unknown")[:80]
+            await emit(phase, 0, 0, f"  ✗ {label} page {page}: {err}")
+            break
+
+        items = extract_items(data)
+        if not items:
+            break
+
+        all_items.extend(items)
+
+        # Cap at max_items if specified (mirrors baseline MAX_EXPORT_ITEMS=500)
+        if max_items is not None and len(all_items) >= max_items:
+            all_items = all_items[:max_items]
+            await emit(phase, 0, 0,
+                       f"  {label}: page {page} → +{len(items)} (total: {len(all_items)}, capped at {max_items})")
+            break
+
+        await emit(phase, 0, 0, f"  {label}: page {page} → +{len(items)} (total: {len(all_items)})")
+
+        if len(items) < page_size:
+            break
+
+        offset += page_size
+        page += 1
+
+    await emit(phase, 0, 0, f"  ✓ {label}: {len(all_items)} total items ({page} pages)")
+    return all_items, call_results
 
 
 # ---------------------------------------------------------------------------
@@ -375,41 +466,48 @@ async def _extract_campaigns(
     params: Dict[str, Any],
     emit: ProgressCallback,
 ) -> Tuple[Dict[str, Any], List[APICallResult]]:
-    """Fetch campaign configurations."""
-    limit = int(params.get("limit", 50))
+    """Fetch campaign configurations with proper pagination.
+
+    Capillary ``campaigns/filter`` API has a max limit of 10 per page.
+    We paginate through all pages to collect every campaign.
+    """
     search = params.get("search", "")
 
     data: Dict[str, Any] = {}
     all_calls: List[APICallResult] = []
 
-    # Phase 1: List campaigns
-    await emit("campaigns", 0, 3, "Listing campaigns...")
-    campaigns_list, list_call = await _tracked_call(
-        lambda: client.campaigns.list_campaigns(campaign_name=search, limit=limit),
-        "campaigns_list",
+    # Phase 1: Paginate through all campaigns (API max limit = 10)
+    await emit("campaigns", 0, 3, "Listing campaigns (paginated, max 10/page)...")
+
+    def _extract_campaign_items(resp: Any) -> list:
+        """Extract campaign list from the filter API response."""
+        if not isinstance(resp, dict):
+            return []
+        # Response shape: {data: {campaignsResponses: [...]}} or {campaignsResponses: [...]}
+        inner = resp.get("data", resp)
+        if isinstance(inner, dict):
+            return inner.get("campaignsResponses", inner.get("campaigns", []))
+        return []
+
+    campaigns, page_calls = await _paginate_all(
+        label="campaigns_list",
+        fetch_page=lambda offset, limit: client.campaigns.list_campaigns(
+            campaign_name=search, limit=min(limit, 10), offset=offset
+        ),
+        extract_items=_extract_campaign_items,
+        page_size=10,
+        emit=emit,
+        phase="campaigns",
+        max_items=500,
     )
-    data["campaigns_list"] = campaigns_list
-    all_calls.append(list_call)
+    all_calls.extend(page_calls)
+    data["campaigns_list"] = campaigns  # store as flat list of all campaigns
 
-    if list_call["status"] == "success":
-        count = list_call.get("item_count", 0)
-        await emit("campaigns", 0, 3, f"  \u2713 campaigns_list: {count} items ({list_call.get('duration_ms', 0)}ms)")
-    else:
-        await emit("campaigns", 0, 3, f"  \u2717 campaigns_list: {list_call.get('error_message', '')[:80]}")
-
-    # Phase 2: Fetch details + messages for top campaigns
-    campaigns = []
-    if isinstance(campaigns_list, dict):
-        campaigns = campaigns_list.get("data", campaigns_list.get("campaigns", []))
-        if isinstance(campaigns, dict):
-            campaigns = campaigns.get("data", [])
-    if not isinstance(campaigns, list):
-        campaigns = []
-
-    await emit("campaigns", 1, 3, f"Fetching details for {len(campaigns[:limit])} campaigns...")
+    # Phase 2: Fetch details + messages for each campaign
+    await emit("campaigns", 1, 3, f"Fetching details for {len(campaigns)} campaigns...")
     details = []
-    for i, camp in enumerate(campaigns[:limit]):
-        camp_id = camp.get("id")
+    for i, camp in enumerate(campaigns):
+        camp_id = camp.get("id") or camp.get("campaignId")
         if not camp_id:
             continue
         detail, detail_call = await _tracked_call(
@@ -445,7 +543,8 @@ async def _extract_campaigns(
     data.update(template_data)
     all_calls.extend(template_calls)
 
-    await emit("campaigns", 3, 3, f"Done — {len(details)} campaigns fetched")
+    await emit("campaigns", 3, 3,
+               f"Done — {len(campaigns)} campaigns listed, {len(details)} details fetched")
     return data, all_calls
 
 
@@ -454,22 +553,92 @@ async def _extract_promotions(
     params: Dict[str, Any],
     emit: ProgressCallback,
 ) -> Tuple[Dict[str, Any], List[APICallResult]]:
-    """Fetch promotion configurations."""
-    limit = int(params.get("limit", 50))
+    """Fetch promotion configurations with pagination for loyalty and cart promotions."""
     active_only = params.get("active_only", False)
 
-    apis = [
-        ("loyalty_promotions", lambda: client.loyalty.list_promotions(limit=limit, offset=0)),
-        ("cart_promotions", lambda: client.promotion.get_cart_promo_or_gift_voucher_by_name(
-            active=active_only if active_only else None
-        )),
+    data: Dict[str, Any] = {}
+    all_calls: List[APICallResult] = []
+
+    # Phase 1: Paginate loyalty promotions (page_size = 50)
+    await emit("promotions", 0, 4, "Fetching loyalty promotions (paginated)...")
+
+    def _extract_promo_items(resp: Any) -> list:
+        if isinstance(resp, list):
+            return resp
+        if isinstance(resp, dict):
+            for k in ("data", "promotions", "entity", "entities"):
+                val = resp.get(k)
+                if isinstance(val, list):
+                    return val
+        return []
+
+    promos, promo_calls = await _paginate_all(
+        label="loyalty_promotions",
+        fetch_page=lambda offset, limit: client.loyalty.list_promotions(
+            limit=limit, offset=offset
+        ),
+        extract_items=_extract_promo_items,
+        page_size=50,
+        emit=emit,
+        phase="promotions",
+        max_items=500,
+    )
+    all_calls.extend(promo_calls)
+    data["loyalty_promotions"] = promos
+
+    # Phase 2: Paginate cart promotions (page_size=500, sorted by last updated)
+    await emit("promotions", 1, 4, "Fetching cart promotions (paginated, 500/page)...")
+
+    cart_promos, cart_calls = await _paginate_all(
+        label="cart_promotions",
+        fetch_page=lambda offset, limit: client.promotion.get_cart_promo_or_gift_voucher_by_name(
+            active=active_only if active_only else None,
+            limit=limit,
+            offset=offset,
+            sort_on="LAST_UPDATED_ON",
+            order="DESC",
+        ),
+        extract_items=_extract_items_local,
+        page_size=500,
+        emit=emit,
+        phase="promotions",
+        max_items=500,
+    )
+    all_calls.extend(cart_calls)
+    data["cart_promotions"] = cart_promos
+
+    # Phase 3: Paginate promotion events (latest 500)
+    await emit("promotions", 2, 4, "Fetching promotion events (max 500)...")
+    promo_events, pe_calls = await _paginate_all(
+        label="promotion_events",
+        fetch_page=lambda offset, limit: client.mysql.get_events(
+            "promotions", limit=limit, offset=offset, sort="DESC",
+        ),
+        extract_items=_extract_items_local,
+        page_size=100,
+        emit=emit,
+        phase="promotions",
+        max_items=500,
+    )
+    all_calls.extend(pe_calls)
+    data["promotion_events"] = promo_events
+
+    # Phase 4: Non-paginated promotion APIs
+    await emit("promotions", 3, 4, "Fetching other promotion APIs...")
+    other_apis = [
         ("cart_promotion_custom_fields", lambda: client.cart_promotion.get_custom_fields_for_cart_promotion()),
         ("rewards_custom_fields", lambda: client.promotion.get_custom_fields_list()),
         ("rewards_groups", lambda: client.promotion.get_groups_list()),
         ("rewards_languages", lambda: client.promotion.get_languages_list()),
         ("segments", lambda: client.promotion.get_segments_list()),
     ]
-    return await _run_apis(apis, "promotions", emit)
+    other_data, other_calls = await _run_apis(other_apis, "promotions_other", emit)
+    data.update(other_data)
+    all_calls.extend(other_calls)
+
+    await emit("promotions", 4, 4,
+               f"Done \u2014 {len(promos)} loyalty + {len(cart_promos)} cart + {len(promo_events)} events + other APIs")
+    return data, all_calls
 
 
 async def _extract_coupons(
@@ -477,12 +646,49 @@ async def _extract_coupons(
     params: Dict[str, Any],
     emit: ProgressCallback,
 ) -> Tuple[Dict[str, Any], List[APICallResult]]:
-    """Fetch coupon and reward configurations."""
+    """Fetch coupon and reward configurations with pagination for coupon series."""
     owned_by = params.get("owned_by", "NONE")
     owned_by_val = owned_by if owned_by == "LOYALTY" else None
 
-    apis = [
-        ("coupon_series", lambda: client.coupon.list_coupon_series(owned_by=owned_by_val)),
+    data: Dict[str, Any] = {}
+    all_calls: List[APICallResult] = []
+
+    # Phase 1: Paginate coupon series (page_size=100, max 500, baseline alignment)
+    await emit("coupons", 0, 3, "Fetching coupon series (paginated, 100/page)...")
+
+    coupon_series, cs_calls = await _paginate_all(
+        label="coupon_series",
+        fetch_page=lambda offset, limit: client.coupon.list_coupon_series(
+            owned_by=owned_by_val, limit=limit, offset=offset,
+        ),
+        extract_items=_extract_items_local,
+        page_size=100,
+        emit=emit,
+        phase="coupons",
+        max_items=500,
+    )
+    all_calls.extend(cs_calls)
+    data["coupon_series"] = coupon_series
+
+    # Phase 2: Paginate voucher series events (latest 500)
+    await emit("coupons", 1, 3, "Fetching voucher series events (max 500)...")
+    vs_events, vs_calls = await _paginate_all(
+        label="voucher_series_events",
+        fetch_page=lambda offset, limit: client.mysql.get_events(
+            "voucher_series", limit=limit, offset=offset, sort="DESC",
+        ),
+        extract_items=_extract_items_local,
+        page_size=100,
+        emit=emit,
+        phase="coupons",
+        max_items=500,
+    )
+    all_calls.extend(vs_calls)
+    data["voucher_series_events"] = vs_events
+
+    # Phase 3: Non-paginated coupon/reward APIs
+    await emit("coupons", 2, 3, "Fetching other coupon/reward APIs...")
+    other_apis = [
         ("coupon_custom_property", lambda: client.coupon.get_custom_property()),
         ("coupon_org_settings", lambda: client.coupon.get_org_settings()),
         ("product_categories", lambda: client.coupon.get_product_categories()),
@@ -490,7 +696,13 @@ async def _extract_coupons(
         ("product_attributes", lambda: client.coupon.get_product_attributes()),
         ("reward_custom_fields", lambda: client.reward.get_custom_fields()),
     ]
-    return await _run_apis(apis, "coupons", emit)
+    other_data, other_calls = await _run_apis(other_apis, "coupons_other", emit)
+    data.update(other_data)
+    all_calls.extend(other_calls)
+
+    await emit("coupons", 3, 3,
+               f"Done \u2014 {len(coupon_series)} coupon series + {len(vs_events)} events + other APIs")
+    return data, all_calls
 
 
 async def _extract_audiences(
@@ -498,18 +710,90 @@ async def _extract_audiences(
     params: Dict[str, Any],
     emit: ProgressCallback,
 ) -> Tuple[Dict[str, Any], List[APICallResult]]:
-    """Fetch audience and segment configurations."""
+    """Fetch audience and segment configurations with pagination."""
     search = params.get("search", "")
 
-    apis = [
-        ("audiences", lambda: client.campaigns.get_audiences(search=search)),
-        ("target_groups", lambda: client.org_settings.get_all_target_groups()),
+    data: Dict[str, Any] = {}
+    all_calls: List[APICallResult] = []
+
+    # Phase 1: Paginate audiences (IRIS API max = 10 per page, matching baseline)
+    await emit("audiences", 0, 4, "Fetching audiences (paginated, max 10/page)...")
+
+    def _extract_audience_items(resp: Any) -> list:
+        if isinstance(resp, list):
+            return resp
+        if isinstance(resp, dict):
+            val = resp.get("data", resp)
+            if isinstance(val, list):
+                return val
+        return []
+
+    audiences, aud_calls = await _paginate_all(
+        label="audiences",
+        fetch_page=lambda offset, limit: client.campaigns.get_audiences(
+            search=search, limit=min(limit, 10), offset=offset
+        ),
+        extract_items=_extract_audience_items,
+        page_size=10,
+        emit=emit,
+        phase="audiences",
+        max_items=500,
+    )
+    all_calls.extend(aud_calls)
+    data["audiences"] = audiences
+
+    # Phase 2: Paginate target groups (page_size=1000, max 500, with dedup)
+    await emit("audiences", 1, 4, "Fetching target groups (paginated, 1000/page)...")
+
+    raw_tgs, tg_calls = await _paginate_all(
+        label="target_groups",
+        fetch_page=lambda offset, limit: client.org_settings.get_all_target_groups(
+            limit=limit, offset=offset,
+        ),
+        extract_items=_extract_target_items,
+        page_size=1000,
+        emit=emit,
+        phase="audiences",
+        max_items=500,
+    )
+    all_calls.extend(tg_calls)
+    unique_tgs = _deduplicate_target_groups(raw_tgs)
+    if len(unique_tgs) != len(raw_tgs):
+        await emit("audiences", 1, 4,
+                    f"  target_groups: {len(raw_tgs)} raw \u2192 {len(unique_tgs)} after dedup")
+    data["target_groups"] = unique_tgs
+
+    # Phase 3: Paginate target group events (latest 500)
+    await emit("audiences", 2, 4, "Fetching target group events (max 500)...")
+    tg_events, te_calls = await _paginate_all(
+        label="target_group_events",
+        fetch_page=lambda offset, limit: client.mysql.get_events(
+            "target_groups", limit=limit, offset=offset, sort="DESC",
+        ),
+        extract_items=_extract_items_local,
+        page_size=100,
+        emit=emit,
+        phase="audiences",
+        max_items=500,
+    )
+    all_calls.extend(te_calls)
+    data["target_group_events"] = tg_events
+
+    # Phase 4: Non-paginated audience/segment APIs
+    await emit("audiences", 3, 4, "Fetching filters, events...")
+    other_apis = [
         ("audience_filters", lambda: client.audience.get_audience_filters()),
         ("dim_attr_availability", lambda: client.audience.get_dim_attr_value_availability()),
         ("customer_test_control", lambda: client.audience.get_customer_test_control()),
         ("behavioral_events", lambda: client.org_settings.get_behavioral_events()),
     ]
-    return await _run_apis(apis, "audiences", emit)
+    other_data, other_calls = await _run_apis(other_apis, "audiences_other", emit)
+    data.update(other_data)
+    all_calls.extend(other_calls)
+
+    await emit("audiences", 4, 4,
+               f"Done \u2014 {len(audiences)} audiences, {len(unique_tgs)} target groups, {len(tg_events)} events + other APIs")
+    return data, all_calls
 
 
 async def _extract_org_settings(
@@ -517,25 +801,52 @@ async def _extract_org_settings(
     params: Dict[str, Any],
     emit: ProgressCallback,
 ) -> Tuple[Dict[str, Any], List[APICallResult]]:
-    """Fetch organization settings."""
+    """Fetch organization settings with paginated target groups."""
     channels = params.get("channels", ["SMS", "EMAIL"])
     if isinstance(channels, str):
         channels = [c.strip() for c in channels.split(",")]
 
+    data: Dict[str, Any] = {}
+    all_calls: List[APICallResult] = []
+
+    # Phase 1: Non-paginated org APIs (target_groups handled separately)
     apis = [
         ("behavioral_events", lambda: client.org_settings.get_behavioral_events()),
         ("customer_labels", lambda: client.org_settings.get_customer_labels()),
         ("organization_hierarchy", lambda: client.intouch.get_organization_hierarchy()),
-        ("target_groups", lambda: client.org_settings.get_all_target_groups()),
     ]
-
     for ch in channels:
         apis.append((
             f"domain_properties_{ch.lower()}",
             lambda channel=ch: client.campaigns.get_domain_properties(channel),
         ))
 
-    return await _run_apis(apis, "org_settings", emit)
+    org_data, org_calls = await _run_apis(apis, "org_settings", emit)
+    data.update(org_data)
+    all_calls.extend(org_calls)
+
+    # Phase 2: Paginate target groups (page_size=1000, max 500, with dedup)
+    await emit("org_settings", len(apis), len(apis) + 1,
+               "Fetching target groups (paginated, 1000/page)...")
+
+    raw_tgs, tg_calls = await _paginate_all(
+        label="target_groups",
+        fetch_page=lambda offset, limit: client.org_settings.get_all_target_groups(
+            limit=limit, offset=offset,
+        ),
+        extract_items=_extract_target_items,
+        page_size=1000,
+        emit=emit,
+        phase="org_settings",
+        max_items=500,
+    )
+    all_calls.extend(tg_calls)
+    unique_tgs = _deduplicate_target_groups(raw_tgs)
+    data["target_groups"] = unique_tgs
+
+    await emit("org_settings", len(apis) + 1, len(apis) + 1,
+               f"Done \u2014 {len(org_data)} settings + {len(unique_tgs)} target groups")
+    return data, all_calls
 
 
 # Category → extraction function map

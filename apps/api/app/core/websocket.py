@@ -122,4 +122,10 @@ async def websocket_endpoint(websocket: WebSocket):
             except json.JSONDecodeError:
                 pass
     except WebSocketDisconnect:
-        await ws_manager.disconnect(connection_id, user_id)
+        pass
+    except Exception:
+        logger.exception(f"WebSocket error in general endpoint (connection={connection_id})")
+    finally:
+        # Guarantee cleanup even on unexpected exceptions
+        if connection_id in ws_manager.active_connections:
+            await ws_manager.disconnect(connection_id, user_id)

@@ -34,6 +34,7 @@ export function useWebSocket({
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout>>();
   const reconnectAttempts = useRef(0);
+  const pingRef = useRef<ReturnType<typeof setInterval>>();
 
   const { token } = useAuthStore();
 
@@ -51,22 +52,37 @@ export function useWebSocket({
     wsRef.current = ws;
 
     ws.onopen = () => {
-      reconnectAttempts.current = 0;
-      // Send auth token as first message (avoids token in URL/logs)
+      // Don't reset reconnectAttempts here — auth hasn't happened yet.
+      // Counter resets only after receiving a server message (proving auth passed).
       ws.send(JSON.stringify({ type: "auth", token }));
+
+      // Start heartbeat ping every 30s to keep connection alive
+      clearInterval(pingRef.current);
+      pingRef.current = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "ping" }));
+        }
+      }, 30_000);
     };
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        // Server sent a real message — connection is authenticated & healthy
+        reconnectAttempts.current = 0;
         onMessageRef.current(data);
       } catch {
         // Ignore non-JSON messages
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       wsRef.current = null;
+      clearInterval(pingRef.current);
+
+      // 4001 = auth failure (expired/invalid token) — retrying won't help
+      if (event.code === 4001) return;
+
       if (reconnectAttempts.current < maxReconnects) {
         reconnectAttempts.current++;
         const delay = Math.min(1000 * 2 ** reconnectAttempts.current, 30000);
@@ -84,6 +100,7 @@ export function useWebSocket({
     connect();
     return () => {
       clearTimeout(reconnectRef.current);
+      clearInterval(pingRef.current);
       if (wsRef.current) {
         wsRef.current.onclose = null; // Prevent reconnect on unmount
         wsRef.current.close();

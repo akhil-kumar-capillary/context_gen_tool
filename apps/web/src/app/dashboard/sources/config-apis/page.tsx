@@ -17,13 +17,13 @@ export default function ConfigApisPage() {
   const { orgId } = useAuthStore();
   const { activeStep } = useConfigApisStore();
 
-  // Reset store when org changes
+  // Reset store when org changes (skip hydration: null → number)
   const prevOrgIdRef = useRef(orgId);
   useEffect(() => {
-    if (prevOrgIdRef.current !== orgId) {
-      prevOrgIdRef.current = orgId;
+    if (prevOrgIdRef.current !== orgId && prevOrgIdRef.current !== null && orgId !== null) {
       useConfigApisStore.getState().reset();
     }
+    prevOrgIdRef.current = orgId;
   }, [orgId]);
 
   // Connect to WebSocket for progress events

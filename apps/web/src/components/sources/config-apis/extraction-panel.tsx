@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Loader2, Play, Square, ChevronDown, ChevronRight,
   RefreshCw, Check, AlertCircle, Clock, Trash2,
@@ -41,6 +41,12 @@ export function ExtractionPanel() {
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
+  // Derive extraction-complete flag (used by re-fetch effect and JSX)
+  const isComplete = extractionProgress.some(
+    (p) => p.phase === "complete" && p.status === "done"
+  );
+  const hasReloadedRef = useRef(false);
+
   // Load categories on mount
   useEffect(() => {
     if (!token || categories.length > 0) return;
@@ -76,6 +82,33 @@ export function ExtractionPanel() {
     };
     load();
   }, [token, orgId, setExtractionRuns, setIsLoadingRuns]);
+
+  // Re-fetch extraction runs when an extraction completes (once per completion)
+  useEffect(() => {
+    if (!isComplete || !token || hasReloadedRef.current) return;
+    hasReloadedRef.current = true;
+    let cancelled = false;
+    const reload = async () => {
+      try {
+        const data = await apiClient.get<{ runs: ExtractionRun[] }>(
+          `/api/sources/config-apis/extract/runs${orgId ? `?org_id=${orgId}` : ""}`,
+          { token }
+        );
+        if (!cancelled) setExtractionRuns(data.runs);
+      } catch (e) {
+        console.error("Failed to reload extraction runs:", e);
+      }
+    };
+    reload();
+    return () => { cancelled = true; };
+  }, [isComplete, token, orgId, setExtractionRuns]);
+
+  // Reset reload flag when a new extraction starts
+  useEffect(() => {
+    if (isExtracting) {
+      hasReloadedRef.current = false;
+    }
+  }, [isExtracting]);
 
   // Get host from base_url in auth store
   const getHost = () => {
@@ -158,10 +191,6 @@ export function ExtractionPanel() {
       console.error("Failed to delete extraction run:", err);
     }
   };
-
-  const isComplete = extractionProgress.some(
-    (p) => p.phase === "complete" && p.status === "done"
-  );
 
   return (
     <div className="space-y-4">
@@ -330,63 +359,70 @@ export function ExtractionPanel() {
       )}
 
       {/* Extraction History */}
-      {extractionRuns.length > 0 && (
+      {(isLoadingRuns || extractionRuns.length > 0) && (
         <div className="rounded-xl border border-gray-200 bg-white">
           <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
             <h3 className="text-sm font-semibold text-gray-700">Extraction History</h3>
             {isLoadingRuns && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
           </div>
-          <div className="divide-y divide-gray-50">
-            {extractionRuns.slice(0, 10).map((run) => (
-              <div
-                key={run.id}
-                onClick={() => {
-                  setActiveExtractionId(run.id);
-                  setActiveStep("analyze");
-                }}
-                className={cn(
-                  "flex w-full items-center justify-between px-5 py-3 text-left hover:bg-gray-50 transition-colors cursor-pointer",
-                  activeExtractionId === run.id && "bg-violet-50"
-                )}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-gray-900">
-                      {run.categories?.length || 0} categories
-                    </span>
-                    <span
-                      className={cn(
-                        "rounded-full px-2 py-0.5 text-[10px] font-medium",
-                        run.status === "completed"
-                          ? "bg-green-100 text-green-700"
-                          : run.status === "failed"
-                          ? "bg-red-100 text-red-700"
-                          : "bg-yellow-100 text-yellow-700"
-                      )}
-                    >
-                      {run.status}
-                    </span>
+          {isLoadingRuns && extractionRuns.length === 0 ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+              <span className="ml-2 text-xs text-gray-400">Loading history...</span>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {extractionRuns.slice(0, 10).map((run) => (
+                <div
+                  key={run.id}
+                  onClick={() => {
+                    setActiveExtractionId(run.id);
+                    setActiveStep("analyze");
+                  }}
+                  className={cn(
+                    "flex w-full items-center justify-between px-5 py-3 text-left hover:bg-gray-50 transition-colors cursor-pointer",
+                    activeExtractionId === run.id && "bg-violet-50"
+                  )}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-gray-900">
+                        {run.categories?.length || 0} categories
+                      </span>
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                          run.status === "completed"
+                            ? "bg-green-100 text-green-700"
+                            : run.status === "failed"
+                            ? "bg-red-100 text-red-700"
+                            : "bg-yellow-100 text-yellow-700"
+                        )}
+                      >
+                        {run.status}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-0.5">
+                      {formatDate(run.created_at || null)} &middot; {run.host}
+                    </p>
                   </div>
-                  <p className="text-[11px] text-gray-400 mt-0.5">
-                    {formatDate(run.created_at || null)} &middot; {run.host}
-                  </p>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteExtraction(run.id);
+                      }}
+                      className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                      title="Delete extraction run"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                    <ChevronRight className="h-4 w-4 text-gray-300" />
+                  </div>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteExtraction(run.id);
-                    }}
-                    className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
-                    title="Delete extraction run"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                  <ChevronRight className="h-4 w-4 text-gray-300" />
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

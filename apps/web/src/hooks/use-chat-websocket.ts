@@ -138,6 +138,7 @@ export function useChatWebSocket() {
           }
           break;
 
+        case "auth_ok":
         case "pong":
           break;
       }

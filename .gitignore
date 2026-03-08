@@ -218,6 +218,9 @@ npm-debug.log*
 .env.local
 .env.*.local
 
+# Pre-existing context files (managed outside this repo)
+existing_contexts/
+
 # OS
 .DS_Store
 Thumbs.db
