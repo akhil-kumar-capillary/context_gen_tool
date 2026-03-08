@@ -1,10 +1,15 @@
 import asyncio
 import json
 import logging
+import time
 from typing import Dict, Set
 from fastapi import WebSocket, WebSocketDisconnect
 
 logger = logging.getLogger(__name__)
+
+# Idle timeout: disconnect WebSockets with no activity for this many seconds.
+# Client heartbeat ping (30s) keeps healthy connections alive.
+_WS_IDLE_TIMEOUT = 300.0  # 5 minutes
 
 
 class WebSocketManager:
@@ -24,6 +29,7 @@ class WebSocketManager:
         self.user_connections: Dict[int, Set[str]] = {}
         self._lock = asyncio.Lock()           # protects connection map mutations
         self._send_locks: Dict[str, asyncio.Lock] = {}  # per-connection send serialization
+        self._last_activity: Dict[str, float] = {}      # tracks last message time
 
     async def connect(self, websocket: WebSocket, connection_id: str, user_id: int | None = None, *, already_accepted: bool = False):
         if not already_accepted:
@@ -31,21 +37,33 @@ class WebSocketManager:
         async with self._lock:
             self.active_connections[connection_id] = websocket
             self._send_locks[connection_id] = asyncio.Lock()
+            self._last_activity[connection_id] = time.monotonic()
             if user_id:
                 if user_id not in self.user_connections:
                     self.user_connections[user_id] = set()
                 self.user_connections[user_id].add(connection_id)
-        logger.info(f"WebSocket connected: {connection_id} (user={user_id})")
+        logger.info(
+            f"WebSocket connected: {connection_id} (user={user_id}) "
+            f"[total={len(self.active_connections)}]"
+        )
 
     async def disconnect(self, connection_id: str, user_id: int | None = None):
         async with self._lock:
             self.active_connections.pop(connection_id, None)
             self._send_locks.pop(connection_id, None)
+            self._last_activity.pop(connection_id, None)
             if user_id and user_id in self.user_connections:
                 self.user_connections[user_id].discard(connection_id)
                 if not self.user_connections[user_id]:
                     del self.user_connections[user_id]
-        logger.info(f"WebSocket disconnected: {connection_id}")
+        logger.info(
+            f"WebSocket disconnected: {connection_id} "
+            f"[total={len(self.active_connections)}]"
+        )
+
+    def touch(self, connection_id: str):
+        """Update last-activity timestamp for a connection."""
+        self._last_activity[connection_id] = time.monotonic()
 
     async def send_to_connection(self, connection_id: str, message: dict):
         # Look up both ws and its send lock atomically under the manager lock
@@ -112,7 +130,12 @@ async def websocket_endpoint(websocket: WebSocket):
     await ws_manager.connect(websocket, connection_id, user_id, already_accepted=True)
     try:
         while True:
-            data = await websocket.receive_text()
+            # Idle timeout: if no message for 5 min, assume client is dead.
+            # Client heartbeat ping (30s) keeps healthy connections alive.
+            data = await asyncio.wait_for(
+                websocket.receive_text(), timeout=_WS_IDLE_TIMEOUT
+            )
+            ws_manager.touch(connection_id)
             try:
                 msg = json.loads(data)
                 if msg.get("type") == "ping":
@@ -121,6 +144,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     )
             except json.JSONDecodeError:
                 pass
+    except asyncio.TimeoutError:
+        logger.info(f"WebSocket idle timeout (connection={connection_id})")
     except WebSocketDisconnect:
         pass
     except Exception:

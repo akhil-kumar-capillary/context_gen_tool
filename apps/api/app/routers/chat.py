@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.core.auth import get_current_user, decode_session_token
-from app.core.websocket import ws_manager
+from app.core.websocket import ws_manager, _WS_IDLE_TIMEOUT
 from app.database import get_db
 from app.models.chat import ChatConversation, ChatMessage
 from app.models.user import UserOrg
@@ -100,7 +100,12 @@ async def chat_websocket(websocket: WebSocket):
 
     try:
         while True:
-            raw = await websocket.receive_text()
+            # Idle timeout: if no message for 5 min, assume client is dead.
+            # Client heartbeat ping (30s) keeps healthy connections alive.
+            raw = await asyncio.wait_for(
+                websocket.receive_text(), timeout=_WS_IDLE_TIMEOUT
+            )
+            ws_manager.touch(connection_id)
             try:
                 msg = json.loads(raw)
             except json.JSONDecodeError:
@@ -148,6 +153,8 @@ async def chat_websocket(websocket: WebSocket):
                     {"type": "error", "message": f"Unknown message type: {msg_type}"},
                 )
 
+    except asyncio.TimeoutError:
+        logger.info(f"Chat WebSocket idle timeout (connection={connection_id})")
     except WebSocketDisconnect:
         pass
     except RuntimeError:
