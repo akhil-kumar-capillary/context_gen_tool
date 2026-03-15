@@ -5,6 +5,7 @@ but return formatted strings suitable for LLM consumption.
 """
 import base64
 import logging
+import re
 from pathlib import Path
 
 import aiofiles
@@ -13,11 +14,41 @@ import httpx
 
 from app.services.tools.registry import registry
 from app.services.tools.tool_context import ToolContext
+from app.services.context_engine.parsing import parse_refactor_output as _parse_refactor_output
 from app.config import settings
+from app.utils import md_to_html
 
 logger = logging.getLogger(__name__)
 
 BLUEPRINT_PATH = Path(__file__).parent.parent.parent / "resources" / "blueprint.md"
+
+# Summary tool constants
+_SUMMARY_RE = re.compile(
+    r"^(?:<!-- SUMMARY:.*?-->\n*|> \*\*Summary:\*\*.*?\n\n)",
+    re.DOTALL,
+)
+
+SUMMARY_SYSTEM_PROMPT = (
+    "You are a technical writer. Generate a concise, factual description of the "
+    "given context document in UNDER 300 characters. The description must convey "
+    "the document's purpose and key topics so an AI system reading only the first "
+    "300 characters can decide whether to load the full document.\n\n"
+    "Rules:\n"
+    "- Return ONLY the description text, nothing else.\n"
+    "- HARD LIMIT: 300 characters maximum. Count carefully.\n"
+    "- Write in third person, declarative tone (e.g. 'Defines the schema for...').\n"
+    "- NEVER use first person ('I'), questions, or conversational language.\n"
+    "- NEVER ask for clarification or say the content is insufficient.\n"
+    "- If the content is too short to summarize meaningfully, return ONLY the word: SKIP\n\n"
+    "Before returning, validate against this checklist:\n"
+    "1. Is the output UNDER 300 characters? If not, shorten it.\n"
+    "2. Does it start with a verb or noun phrase (not 'I', 'This', or a question)?\n"
+    "3. Does it describe WHAT the document covers, not HOW it is structured?\n"
+    "4. Is it a single factual statement, not a conversation?\n"
+    "Only return the final description after all checks pass."
+)
+
+_MIN_CONTENT_LENGTH = 50  # Skip summary for trivially short docs
 
 
 # ---------------------------------------------------------------------------
@@ -260,8 +291,9 @@ async def update_context(
     if not context_id:
         return f"Error: Could not determine ID for context '{context_name}'."
 
-    # Update the context
-    encoded = base64.b64encode(new_content.encode("utf-8")).decode("utf-8")
+    # Update the context (convert markdown→HTML for Capillary)
+    html_content = md_to_html(new_content)
+    encoded = base64.b64encode(html_content.encode("utf-8")).decode("utf-8")
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.put(
             f"{ctx.base_url}/ask-aira/context/update_context",
@@ -341,13 +373,6 @@ async def delete_context(ctx: ToolContext, context_name: str) -> str:
         return f"Error: Failed to delete context '{context_name}' (HTTP {resp.status_code})"
 
     return f"Successfully deleted context document '{context_name}'."
-
-
-# ---------------------------------------------------------------------------
-# Helpers: JSON parsing for refactoring output (shared module)
-# ---------------------------------------------------------------------------
-
-from app.services.context_engine.parsing import parse_refactor_output as _parse_refactor_output  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -507,3 +532,148 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
         "or ask you to upload all staged contexts."
     )
     return summary
+
+
+# ---------------------------------------------------------------------------
+# Tool: add_summary_to_contexts
+# ---------------------------------------------------------------------------
+
+@registry.tool(
+    name="add_summary_to_contexts",
+    description=(
+        "Generate a concise summary (under 300 characters) for each context document "
+        "and prepend it to the top of the content. Summaries help aiRA quickly decide "
+        "which contexts to load. Results are staged in the 'AI Generated' tab. "
+        "Call this when the user asks to add summaries to contexts."
+    ),
+    module="context_management",
+    requires_permission=("context_management", "edit"),
+    annotations={"display": "Generating context summaries..."},
+)
+async def add_summary_to_contexts(ctx: ToolContext) -> str:
+    """Generate a short summary for each context and prepend it to the content.
+
+    Processes contexts one at a time, stages results in the AI Generated tab.
+    """
+    from app.services.llm_service import call_llm
+
+    # 1. Fetch all active contexts
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(
+            f"{ctx.base_url}/ask-aira/context/list",
+            params={"is_active": "true"},
+            headers=ctx.capillary_headers(),
+        )
+        if resp.status_code != 200:
+            return f"Error: Failed to fetch contexts (HTTP {resp.status_code})"
+        data = resp.json()
+
+    contexts = data if isinstance(data, list) else data.get("data", data.get("contexts", []))
+    if not contexts:
+        return "No context documents found to summarize."
+
+    total = len(contexts)
+    staged_names: list[str] = []
+
+    # 2. Process each context sequentially
+    for i, c in enumerate(contexts):
+        name = c.get("name", f"Context {i + 1}")
+        raw_content = c.get("content", c.get("context", ""))
+        scope = c.get("scope", "org")
+
+        # Decode base64 if needed
+        try:
+            raw_content = base64.b64decode(raw_content).decode("utf-8")
+        except Exception:
+            pass
+
+        # Strip existing summary if present (allows re-running)
+        clean_content = _SUMMARY_RE.sub("", raw_content)
+
+        # Skip trivially short docs — not enough content to summarize
+        if len(clean_content.strip()) < _MIN_CONTENT_LENGTH:
+            logger.info(f"Skipping summary for '{name}': content too short ({len(clean_content.strip())} chars)")
+            new_content = clean_content
+            if ctx.ws_manager and ctx.ws_connection_id:
+                await ctx.ws_manager.send_to_connection(
+                    ctx.ws_connection_id,
+                    {
+                        "type": "ai_context_staged",
+                        "context": {"name": name, "content": new_content, "scope": scope},
+                    },
+                )
+                await ctx.ws_manager.send_to_connection(
+                    ctx.ws_connection_id,
+                    {
+                        "type": "tool_progress",
+                        "tool": "add_summary_to_contexts",
+                        "text": f"Skipped {i + 1}/{total}: {name} (too short)",
+                    },
+                )
+            staged_names.append(f"- **{name}** (skipped — too short)")
+            continue
+
+        # 3. Call LLM for summary — send full content (no truncation, no data loss)
+        try:
+            result = await call_llm(
+                provider="anthropic",
+                model="claude-haiku-4-5-20251001",
+                system=SUMMARY_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": clean_content}],
+                max_tokens=200,
+            )
+            summary_text = ""
+            for block in result.get("content", []):
+                if block.get("type") == "text":
+                    summary_text = block["text"].strip()
+                    break
+        except Exception as e:
+            logger.warning(f"Failed to generate summary for '{name}': {e}")
+            summary_text = ""
+
+        # If LLM returned SKIP or conversational filler, discard it
+        if summary_text.upper() == "SKIP" or summary_text.lower().startswith("i "):
+            summary_text = ""
+
+        # Truncate to 300 chars — prefer cutting at last sentence boundary
+        if len(summary_text) > 300:
+            truncated = summary_text[:300]
+            last_period = max(truncated.rfind(". "), truncated.rfind(".\n"))
+            if last_period > 100:
+                summary_text = truncated[: last_period + 1]
+            else:
+                last_space = truncated.rfind(" ")
+                summary_text = truncated[:last_space] + "..." if last_space > 100 else truncated[:297] + "..."
+
+        # 4. Prepend summary as a blockquote (visible in preview, in first 300 raw chars)
+        if summary_text:
+            new_content = f"> **Summary:** {summary_text}\n\n{clean_content}"
+        else:
+            new_content = clean_content
+
+        # 5. Stage in AI Generated tab
+        if ctx.ws_manager and ctx.ws_connection_id:
+            await ctx.ws_manager.send_to_connection(
+                ctx.ws_connection_id,
+                {
+                    "type": "ai_context_staged",
+                    "context": {"name": name, "content": new_content, "scope": scope},
+                },
+            )
+            await ctx.ws_manager.send_to_connection(
+                ctx.ws_connection_id,
+                {
+                    "type": "tool_progress",
+                    "tool": "add_summary_to_contexts",
+                    "text": f"Summarized {i + 1}/{total}: {name}",
+                },
+            )
+        staged_names.append(f"- **{name}**")
+
+    return (
+        f"Generated summaries for {total} context documents and staged them in the "
+        f"'AI Generated' tab for review:\n\n"
+        + "\n".join(staged_names)
+        + "\n\nEach context now has a `> **Summary:** ...` blockquote within the first "
+        "300 characters. Review and upload from the 'AI Generated' tab."
+    )

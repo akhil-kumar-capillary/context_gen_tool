@@ -28,6 +28,7 @@ sqlglot>=25.0.0
 # Confluence
 atlassian-python-api>=3.41.0
 markdownify>=0.13.0
+markdown-it-py>=3.0.0
 
 # Pydantic
 pydantic>=2.9.0

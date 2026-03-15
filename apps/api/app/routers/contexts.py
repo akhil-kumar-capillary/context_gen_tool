@@ -4,6 +4,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from app.core.rbac import require_permission
 from app.schemas.context import ContextCreateRequest, ContextUpdateRequest, BulkUploadRequest
+from app.utils import md_to_html
 
 router = APIRouter()
 
@@ -41,7 +42,8 @@ async def upload_context(
     org_id: int = Query(...),
     current_user: dict = Depends(require_permission("context_management", "create")),
 ):
-    encoded = base64.b64encode(req.content.encode("utf-8")).decode("utf-8")
+    html_content = md_to_html(req.content)
+    encoded = base64.b64encode(html_content.encode("utf-8")).decode("utf-8")
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(
             f"{current_user['base_url']}/ask-aira/context/upload_context",
@@ -63,7 +65,8 @@ async def update_context(
     org_id: int = Query(...),
     current_user: dict = Depends(require_permission("context_management", "edit")),
 ):
-    encoded = base64.b64encode(req.content.encode("utf-8")).decode("utf-8")
+    html_content = md_to_html(req.content)
+    encoded = base64.b64encode(html_content.encode("utf-8")).decode("utf-8")
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.put(
             f"{current_user['base_url']}/ask-aira/context/update_context",

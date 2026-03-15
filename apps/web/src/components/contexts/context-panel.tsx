@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Sparkles, Upload, X, Loader2 } from "lucide-react";
+import { Sparkles, Upload, X, Loader2, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useContextStore } from "@/stores/context-store";
 import { useChatStore } from "@/stores/chat-store";
@@ -43,6 +43,16 @@ export function ContextPanel({ onSendChatMessage }: ContextPanelProps) {
       setViewMode("ai-generated");
       onSendChatMessage(
         "Please refactor and sanitize all my contexts using the blueprint. Restructure them into well-organized documents following best practices."
+      );
+    }
+  }, [onSendChatMessage]);
+
+  const handleAddSummary = useCallback(() => {
+    if (onSendChatMessage) {
+      setViewMode("ai-generated");
+      onSendChatMessage(
+        "Please add a concise summary to each of my context documents. " +
+          "Generate a description under 300 characters and prepend it to the top of each context."
       );
     }
   }, [onSendChatMessage]);
@@ -95,23 +105,42 @@ export function ContextPanel({ onSendChatMessage }: ContextPanelProps) {
         <div className="space-y-4">
           {/* Actions bar */}
           <div className="flex items-center justify-between">
-            <button
-              onClick={handleSanitize}
-              disabled={isStreaming || !onSendChatMessage}
-              className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
-            >
-              {isStreaming ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Sanitizing...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4" />
-                  Sanitize All Contexts
-                </>
-              )}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleSanitize}
+                disabled={isStreaming || !onSendChatMessage}
+                className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
+              >
+                {isStreaming ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Sanitizing...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    Sanitize All Contexts
+                  </>
+                )}
+              </button>
+              <button
+                onClick={handleAddSummary}
+                disabled={isStreaming || !onSendChatMessage}
+                className="flex items-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
+              >
+                {isStreaming ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Summarizing...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="h-4 w-4" />
+                    Add Summary in Context
+                  </>
+                )}
+              </button>
+            </div>
 
             {aiContexts && aiContexts.length > 0 && (
               <div className="flex items-center gap-2">
