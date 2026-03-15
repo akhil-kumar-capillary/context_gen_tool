@@ -30,18 +30,18 @@ _SUMMARY_RE = re.compile(
 
 SUMMARY_SYSTEM_PROMPT = (
     "You are a technical writer. Generate a concise, factual description of the "
-    "given context document in UNDER 300 characters. The description must convey "
-    "the document's purpose and key topics so an AI system reading only the first "
-    "300 characters can decide whether to load the full document.\n\n"
+    "given context document in UNDER 250 characters (this is a HARD LIMIT). "
+    "The description must convey the document's purpose and key topics so an AI "
+    "system can decide whether to load the full document.\n\n"
     "Rules:\n"
     "- Return ONLY the description text, nothing else.\n"
-    "- HARD LIMIT: 300 characters maximum. Count carefully.\n"
+    "- HARD LIMIT: 250 characters maximum. Aim for 150-200 characters.\n"
     "- Write in third person, declarative tone (e.g. 'Defines the schema for...').\n"
     "- NEVER use first person ('I'), questions, or conversational language.\n"
     "- NEVER ask for clarification or say the content is insufficient.\n"
     "- If the content is too short to summarize meaningfully, return ONLY the word: SKIP\n\n"
     "Before returning, validate against this checklist:\n"
-    "1. Is the output UNDER 300 characters? If not, shorten it.\n"
+    "1. Is the output UNDER 250 characters? If not, shorten it.\n"
     "2. Does it start with a verb or noun phrase (not 'I', 'This', or a question)?\n"
     "3. Does it describe WHAT the document covers, not HOW it is structured?\n"
     "4. Is it a single factual statement, not a conversation?\n"
@@ -67,7 +67,7 @@ async def _generate_summary(content: str) -> str:
             model="claude-haiku-4-5-20251001",
             system=SUMMARY_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": content}],
-            max_tokens=200,
+            max_tokens=150,
         )
         summary_text = ""
         for block in result.get("content", []):
@@ -82,15 +82,17 @@ async def _generate_summary(content: str) -> str:
     if summary_text.upper() == "SKIP" or summary_text.lower().startswith("i "):
         return ""
 
-    # Truncate to 300 chars — prefer cutting at sentence boundary
-    if len(summary_text) > 300:
-        truncated = summary_text[:300]
+    # Hard cap at 280 chars so "> **Summary:** {text}\n\n" stays under 300 raw chars.
+    # LLMs can't count — this is the real enforcement.
+    _MAX_SUMMARY = 280
+    if len(summary_text) > _MAX_SUMMARY:
+        truncated = summary_text[:_MAX_SUMMARY]
         last_period = max(truncated.rfind(". "), truncated.rfind(".\n"))
         if last_period > 100:
             summary_text = truncated[: last_period + 1]
         else:
-            last_space = truncated.rfind(" ", 0, 297)
-            summary_text = truncated[:last_space] + "..." if last_space > 100 else truncated[:297] + "..."
+            last_space = truncated.rfind(" ", 0, _MAX_SUMMARY - 3)
+            summary_text = truncated[:last_space] + "..." if last_space > 100 else truncated[:_MAX_SUMMARY - 3] + "..."
 
     return summary_text
 
