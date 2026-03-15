@@ -82,7 +82,12 @@ async def _fetch_active_contexts(ctx: ToolContext) -> list[dict]:
             raise RuntimeError(
                 f"Failed to fetch contexts (HTTP {resp.status_code})"
             )
-        data = resp.json()
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise RuntimeError(
+                f"Invalid JSON response from context API: {exc}"
+            ) from exc
 
     return (
         data
