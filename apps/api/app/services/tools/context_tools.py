@@ -642,7 +642,7 @@ async def add_summary_to_contexts(ctx: ToolContext) -> str:
             if last_period > 100:
                 summary_text = truncated[: last_period + 1]
             else:
-                last_space = truncated.rfind(" ")
+                last_space = truncated.rfind(" ", 0, 297)
                 summary_text = truncated[:last_space] + "..." if last_space > 100 else truncated[:297] + "..."
 
         # 4. Prepend summary as a blockquote (visible in preview, in first 300 raw chars)

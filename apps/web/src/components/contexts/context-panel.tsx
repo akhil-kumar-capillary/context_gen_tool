@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Sparkles, Upload, X, Loader2, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useContextStore } from "@/stores/context-store";
@@ -15,8 +15,11 @@ interface ContextPanelProps {
   onSendChatMessage?: (content: string) => void;
 }
 
+type ActiveAction = "sanitize" | "summary" | null;
+
 export function ContextPanel({ onSendChatMessage }: ContextPanelProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("contexts");
+  const [activeAction, setActiveAction] = useState<ActiveAction>(null);
 
   const {
     aiContexts,
@@ -38,9 +41,14 @@ export function ContextPanel({ onSendChatMessage }: ContextPanelProps) {
     aiContexts?.filter((c) => c.uploadStatus !== "success" && c.uploadStatus !== "uploading")
       .length ?? 0;
 
+  useEffect(() => {
+    if (!isStreaming) setActiveAction(null);
+  }, [isStreaming]);
+
   const handleSanitize = useCallback(() => {
     if (onSendChatMessage) {
       setViewMode("ai-generated");
+      setActiveAction("sanitize");
       onSendChatMessage(
         "Please refactor and sanitize all my contexts using the blueprint. Restructure them into well-organized documents following best practices."
       );
@@ -50,6 +58,7 @@ export function ContextPanel({ onSendChatMessage }: ContextPanelProps) {
   const handleAddSummary = useCallback(() => {
     if (onSendChatMessage) {
       setViewMode("ai-generated");
+      setActiveAction("summary");
       onSendChatMessage(
         "Please add a concise summary to each of my context documents. " +
           "Generate a description under 300 characters and prepend it to the top of each context."
@@ -111,7 +120,7 @@ export function ContextPanel({ onSendChatMessage }: ContextPanelProps) {
                 disabled={isStreaming || !onSendChatMessage}
                 className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
               >
-                {isStreaming ? (
+                {isStreaming && activeAction === "sanitize" ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Sanitizing...
@@ -128,7 +137,7 @@ export function ContextPanel({ onSendChatMessage }: ContextPanelProps) {
                 disabled={isStreaming || !onSendChatMessage}
                 className="flex items-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
               >
-                {isStreaming ? (
+                {isStreaming && activeAction === "summary" ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Summarizing...
