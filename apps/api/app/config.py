@@ -205,7 +205,9 @@ class Settings(BaseSettings):
     dialect: str = "spark"
 
     # Sanitize/Refactoring
-    sanitize_max_output_tokens: int = 64000
+    refactor_provider: str = "anthropic"
+    refactor_model: str = "claude-opus-4-6"
+    sanitize_max_output_tokens: int = 128000
     chat_max_output_tokens: int = 8192
     chat_history_window: int = 20
     max_tool_rounds: int = 5

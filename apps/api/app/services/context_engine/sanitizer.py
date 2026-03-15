@@ -88,10 +88,6 @@ def _build_sanitize_message(
 
     user_content = "".join(parts)
 
-    # Cap the payload to avoid exceeding LLM limits
-    if len(user_content) > settings.max_payload_chars:
-        user_content = user_content[: settings.max_payload_chars]
-
     return user_content
 
 

@@ -3,6 +3,7 @@
 These wrap the Capillary context API proxying logic (same as routers/contexts.py)
 but return formatted strings suitable for LLM consumption.
 """
+
 import base64
 import logging
 import re
@@ -12,17 +13,24 @@ import aiofiles
 import aiofiles.os
 import httpx
 
+from app.config import settings
+from app.services.context_engine.parsing import (
+    parse_refactor_output as _parse_refactor_output,
+)
+from app.services.llm_service import call_llm, stream_llm
 from app.services.tools.registry import registry
 from app.services.tools.tool_context import ToolContext
-from app.services.context_engine.parsing import parse_refactor_output as _parse_refactor_output
-from app.config import settings
 from app.utils import md_to_html
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
 BLUEPRINT_PATH = Path(__file__).parent.parent.parent / "resources" / "blueprint.md"
 
-# Summary tool constants
+# Regex to strip existing summaries (old HTML-comment and new blockquote formats)
 _SUMMARY_RE = re.compile(
     r"^(?:<!-- SUMMARY:.*?-->\n*|> \*\*Summary:\*\*.*?\n\n)",
     re.DOTALL,
@@ -49,15 +57,87 @@ SUMMARY_SYSTEM_PROMPT = (
 )
 
 _MIN_CONTENT_LENGTH = 50  # Skip summary for trivially short docs
+_MAX_SUMMARY = 280  # Hard cap; "> **Summary:** {text}\n\n" adds ~18 chars → stays under 300
+
+
+# ---------------------------------------------------------------------------
+# Private helpers
+# ---------------------------------------------------------------------------
+
+
+async def _fetch_active_contexts(ctx: ToolContext) -> list[dict]:
+    """Fetch active contexts from the Capillary API.
+
+    Returns the normalised list of context dicts.
+    Raises ``RuntimeError`` on HTTP failure so callers can catch and return
+    an error string.
+    """
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(
+            f"{ctx.base_url}/ask-aira/context/list",
+            params={"is_active": "true"},
+            headers=ctx.capillary_headers(),
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"Failed to fetch contexts (HTTP {resp.status_code})"
+            )
+        data = resp.json()
+
+    return (
+        data
+        if isinstance(data, list)
+        else data.get("data", data.get("contexts", []))
+    )
+
+
+def _find_context_by_name(
+    contexts: list[dict],
+    name: str,
+    *,
+    exact: bool = False,
+) -> dict | None:
+    """Find a context by name (case-insensitive).
+
+    * ``exact=False`` (default) — prefers an exact match; falls back to the
+      first substring match.  Used by ``get_context_content`` and
+      ``update_context`` for user convenience.
+    * ``exact=True`` — exact match only.  Used by ``delete_context`` for
+      safety (no accidental partial-match deletion).
+    """
+    name_lower = name.lower()
+    partial_match: dict | None = None
+
+    for c in contexts:
+        cname = c.get("name", "").lower()
+        if cname == name_lower:
+            return c
+        if not exact and name_lower in cname and partial_match is None:
+            partial_match = c
+
+    return partial_match
+
+
+def _maybe_decode_base64(content: str) -> str:
+    """Decode base64 if the string is valid base64, otherwise return as-is."""
+    try:
+        return base64.b64decode(content).decode("utf-8")
+    except Exception:
+        return content
+
+
+async def _send_ws(ctx: ToolContext, payload: dict) -> None:
+    """Send a WebSocket message if a connection is active, otherwise no-op."""
+    if ctx.ws_manager and ctx.ws_connection_id:
+        await ctx.ws_manager.send_to_connection(ctx.ws_connection_id, payload)
 
 
 async def _generate_summary(content: str) -> str:
     """Generate a <300 char summary for a context document using Haiku.
 
-    Returns empty string if content is too short, LLM fails, or output is unusable.
+    Returns empty string if content is too short, LLM fails, or output is
+    unusable.
     """
-    from app.services.llm_service import call_llm
-
     if len(content.strip()) < _MIN_CONTENT_LENGTH:
         return ""
 
@@ -69,22 +149,21 @@ async def _generate_summary(content: str) -> str:
             messages=[{"role": "user", "content": content}],
             max_tokens=150,
         )
-        summary_text = ""
         for block in result.get("content", []):
             if block.get("type") == "text":
                 summary_text = block["text"].strip()
                 break
+        else:
+            return ""
     except Exception as e:
-        logger.warning(f"Failed to generate summary: {e}")
+        logger.warning("Failed to generate summary: %s", e)
         return ""
 
     # Discard SKIP or conversational filler
     if summary_text.upper() == "SKIP" or summary_text.lower().startswith("i "):
         return ""
 
-    # Hard cap at 280 chars so "> **Summary:** {text}\n\n" stays under 300 raw chars.
-    # LLMs can't count — this is the real enforcement.
-    _MAX_SUMMARY = 280
+    # Hard cap — LLMs can't count, so this is the real enforcement.
     if len(summary_text) > _MAX_SUMMARY:
         truncated = summary_text[:_MAX_SUMMARY]
         last_period = max(truncated.rfind(". "), truncated.rfind(".\n"))
@@ -92,13 +171,17 @@ async def _generate_summary(content: str) -> str:
             summary_text = truncated[: last_period + 1]
         else:
             last_space = truncated.rfind(" ", 0, _MAX_SUMMARY - 3)
-            summary_text = truncated[:last_space] + "..." if last_space > 100 else truncated[:_MAX_SUMMARY - 3] + "..."
+            summary_text = (
+                truncated[:last_space] + "..."
+                if last_space > 100
+                else truncated[: _MAX_SUMMARY - 3] + "..."
+            )
 
     return summary_text
 
 
 def _prepend_summary(summary_text: str, content: str) -> str:
-    """Prepend a blockquote summary to content, or return content unchanged."""
+    """Prepend a blockquote summary to *content*, or return it unchanged."""
     if summary_text:
         return f"> **Summary:** {summary_text}\n\n{content}"
     return content
@@ -121,19 +204,11 @@ def _prepend_summary(summary_text: str, content: str) -> str:
 )
 async def list_contexts(ctx: ToolContext) -> str:
     """List all context documents for the org."""
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.get(
-            f"{ctx.base_url}/ask-aira/context/list",
-            params={"is_active": "true"},
-            headers=ctx.capillary_headers(),
-        )
-        if resp.status_code != 200:
-            return f"Error: Failed to fetch contexts (HTTP {resp.status_code})"
+    try:
+        contexts = await _fetch_active_contexts(ctx)
+    except RuntimeError as e:
+        return f"Error: {e}"
 
-        data = resp.json()
-
-    # Format for LLM consumption
-    contexts = data if isinstance(data, list) else data.get("data", data.get("contexts", []))
     if not contexts:
         return "No context documents found for this organization."
 
@@ -170,44 +245,19 @@ async def get_context_content(ctx: ToolContext, context_name: str) -> str:
 
     context_name: Name of the context document to retrieve
     """
-    # First, list active contexts to find the matching one
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.get(
-            f"{ctx.base_url}/ask-aira/context/list",
-            params={"is_active": "true"},
-            headers=ctx.capillary_headers(),
-        )
-        if resp.status_code != 200:
-            return f"Error: Failed to fetch context list (HTTP {resp.status_code})"
+    try:
+        contexts = await _fetch_active_contexts(ctx)
+    except RuntimeError as e:
+        return f"Error: {e}"
 
-        data = resp.json()
-        contexts = data if isinstance(data, list) else data.get("data", data.get("contexts", []))
-
-    # Find the matching context (case-insensitive partial match)
-    target = None
-    for c in contexts:
-        cname = c.get("name", "")
-        if cname.lower() == context_name.lower() or context_name.lower() in cname.lower():
-            target = c
-            break
-
+    target = _find_context_by_name(contexts, context_name)
     if not target:
         available = ", ".join(c.get("name", "?") for c in contexts[:10])
-        return (
-            f"Context '{context_name}' not found. "
-            f"Available contexts: {available}"
-        )
+        return f"Context '{context_name}' not found. Available contexts: {available}"
 
-    # The content may be in the list response or need a separate fetch
     content = target.get("content", target.get("context", ""))
     if content:
-        # Try to decode if it's base64
-        try:
-            decoded = base64.b64decode(content).decode("utf-8")
-            content = decoded
-        except Exception:
-            pass  # Already plain text
-
+        content = _maybe_decode_base64(content)
         return f"**Context: {target.get('name', context_name)}**\n\n{content}"
 
     return f"Context '{context_name}' exists but has no content."
@@ -243,15 +293,10 @@ async def create_context(
     content: The context content in markdown format
     scope: Scope of the context — 'org' (default) or 'personal'
     """
-    # Stage in the "AI Generated" tab via WebSocket event
-    if ctx.ws_manager and ctx.ws_connection_id:
-        await ctx.ws_manager.send_to_connection(
-            ctx.ws_connection_id,
-            {
-                "type": "ai_context_staged",
-                "context": {"name": name, "content": content, "scope": scope},
-            },
-        )
+    await _send_ws(ctx, {
+        "type": "ai_context_staged",
+        "context": {"name": name, "content": content, "scope": scope},
+    })
 
     return (
         f"Context document '{name}' has been drafted and staged in the 'AI Generated' tab "
@@ -278,11 +323,7 @@ async def create_context(
 )
 async def upload_staged_contexts(ctx: ToolContext) -> str:
     """Trigger bulk upload of all staged AI-generated contexts."""
-    if ctx.ws_manager and ctx.ws_connection_id:
-        await ctx.ws_manager.send_to_connection(
-            ctx.ws_connection_id,
-            {"type": "trigger_bulk_upload"},
-        )
+    await _send_ws(ctx, {"type": "trigger_bulk_upload"})
 
     return (
         "Upload has been triggered. The staged contexts in the 'AI Generated' tab "
@@ -316,27 +357,12 @@ async def update_context(
     context_name: Name of the context document to update
     new_content: The new content in markdown format
     """
-    # First, find the context ID by name (active contexts only)
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.get(
-            f"{ctx.base_url}/ask-aira/context/list",
-            params={"is_active": "true"},
-            headers=ctx.capillary_headers(),
-        )
-        if resp.status_code != 200:
-            return f"Error: Failed to fetch context list (HTTP {resp.status_code})"
+    try:
+        contexts = await _fetch_active_contexts(ctx)
+    except RuntimeError as e:
+        return f"Error: {e}"
 
-        data = resp.json()
-        contexts = data if isinstance(data, list) else data.get("data", data.get("contexts", []))
-
-    # Find matching context
-    target = None
-    for c in contexts:
-        cname = c.get("name", "")
-        if cname.lower() == context_name.lower() or context_name.lower() in cname.lower():
-            target = c
-            break
-
+    target = _find_context_by_name(contexts, context_name)
     if not target:
         return f"Error: Context '{context_name}' not found."
 
@@ -344,9 +370,10 @@ async def update_context(
     if not context_id:
         return f"Error: Could not determine ID for context '{context_name}'."
 
-    # Update the context (convert markdown→HTML for Capillary)
+    # Convert markdown → HTML for Capillary
     html_content = md_to_html(new_content)
     encoded = base64.b64encode(html_content.encode("utf-8")).decode("utf-8")
+
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.put(
             f"{ctx.base_url}/ask-aira/context/update_context",
@@ -388,26 +415,13 @@ async def delete_context(ctx: ToolContext, context_name: str) -> str:
 
     context_name: Name of the context document to delete
     """
-    # Find context ID by name (active contexts only)
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.get(
-            f"{ctx.base_url}/ask-aira/context/list",
-            params={"is_active": "true"},
-            headers=ctx.capillary_headers(),
-        )
-        if resp.status_code != 200:
-            return f"Error: Failed to fetch context list (HTTP {resp.status_code})"
+    try:
+        contexts = await _fetch_active_contexts(ctx)
+    except RuntimeError as e:
+        return f"Error: {e}"
 
-        data = resp.json()
-        contexts = data if isinstance(data, list) else data.get("data", data.get("contexts", []))
-
-    target = None
-    for c in contexts:
-        cname = c.get("name", "")
-        if cname.lower() == context_name.lower():
-            target = c
-            break
-
+    # exact=True: no partial-match deletion for safety
+    target = _find_context_by_name(contexts, context_name, exact=True)
     if not target:
         return f"Error: Context '{context_name}' not found. Deletion cancelled."
 
@@ -451,27 +465,18 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
     """Trigger full context refactoring via LLM.
 
     Fetches all contexts, sends them through the sanitize/refactor pipeline,
-    and returns a summary of the restructured output.
+    generates summaries, and stages results in the AI Generated tab.
     """
-    from app.services.llm_service import stream_llm
+    # 1. Fetch all active contexts
+    try:
+        contexts = await _fetch_active_contexts(ctx)
+    except RuntimeError as e:
+        return f"Error: {e}"
 
-    # 1. Fetch all active contexts (exclude archived)
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.get(
-            f"{ctx.base_url}/ask-aira/context/list",
-            params={"is_active": "true"},
-            headers=ctx.capillary_headers(),
-        )
-        if resp.status_code != 200:
-            return f"Error: Failed to fetch contexts (HTTP {resp.status_code})"
-        data = resp.json()
-
-    contexts = data if isinstance(data, list) else data.get("data", data.get("contexts", []))
     if not contexts:
         return "No context documents found to refactor."
 
-    # 2. Load blueprint (async file I/O to avoid blocking event loop)
-    # The blueprint IS the system prompt — matching the desktop app's approach
+    # 2. Load blueprint (async I/O to avoid blocking event loop)
     blueprint = ""
     if await aiofiles.os.path.exists(BLUEPRINT_PATH):
         async with aiofiles.open(BLUEPRINT_PATH, encoding="utf-8") as f:
@@ -480,17 +485,12 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
     if not blueprint:
         return "Error: Blueprint file not found. Cannot refactor without restructuring guidelines."
 
-    # 3. Build user message with token budget + structured context formatting
-    # (matching desktop app's formatContextsForLLM)
-    max_output_tokens = settings.sanitize_max_output_tokens
-    budget_per_file = max_output_tokens // max(len(contexts), 1)
-
+    # 3. Build user message — NO artificial token budget or payload cap
     user_parts: list[str] = [
         "Below are ALL the context documents for this organization. "
         "Please restructure them according to the blueprint instructions.\n\n"
-        f"IMPORTANT: You have a total output budget of ~{max_output_tokens} tokens. "
-        f"There are {len(contexts)} context document(s), so aim for ~{budget_per_file} tokens "
-        "per document. Be concise — compress and restructure without losing critical information.\n\n"
+        f"There are {len(contexts)} context document(s). "
+        "Restructure and compress without losing critical information.\n\n"
         "Return your response as a JSON array where each element has:\n"
         '- "name": the context document name (max 100 chars, only alphanumeric, spaces, _:#()-,)\n'
         '- "content": the restructured context content in markdown\n\n'
@@ -500,60 +500,50 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
 
     for i, c in enumerate(contexts):
         name = c.get("name", f"Context {i + 1}")
-        raw_content = c.get("content", c.get("context", ""))
+        raw_content = _maybe_decode_base64(
+            c.get("content", c.get("context", ""))
+        )
         scope = c.get("scope", "org")
-        # Try base64 decode
-        try:
-            raw_content = base64.b64decode(raw_content).decode("utf-8")
-        except Exception:
-            pass
         user_parts.append(f"### Context Document {i + 1}: {name}\n")
         user_parts.append(f"Scope: {scope}\n")
         user_parts.append(f"Content:\n{raw_content}\n\n---\n\n")
 
     user_content = "".join(user_parts)
-
-    # Cap the payload
-    if len(user_content) > settings.max_payload_chars:
-        user_content = user_content[: settings.max_payload_chars]
-
     messages = [{"role": "user", "content": user_content}]
 
     # 4. Stream LLM response (collect full output)
     full_output = ""
-    provider = "anthropic"  # Default to Anthropic for refactoring
-    model = "claude-opus-4-6"
-
     try:
         async for event in stream_llm(
-            provider=provider,
-            model=model,
+            provider=settings.refactor_provider,
+            model=settings.refactor_model,
             system=blueprint,
             messages=messages,
             max_tokens=settings.sanitize_max_output_tokens,
         ):
             if event["type"] == "chunk":
                 full_output += event["text"]
-                if ctx.ws_manager and ctx.ws_connection_id:
-                    await ctx.ws_manager.send_to_connection(
-                        ctx.ws_connection_id,
-                        {"type": "tool_progress", "tool": "refactor_all_contexts", "text": "."},
-                    )
+                await _send_ws(ctx, {
+                    "type": "tool_progress",
+                    "tool": "refactor_all_contexts",
+                    "text": ".",
+                })
     except Exception as e:
-        return f"Error during LLM refactoring: {str(e)}"
+        return f"Error during LLM refactoring: {e!s}"
 
-    # 5. Parse output (robust: handles code fences, truncation, name sanitization)
+    # 5. Parse output (robust: handles code fences, truncation, name sanitisation)
     try:
         new_docs = _parse_refactor_output(full_output)
     except ValueError as e:
-        return f"Error: {str(e)}"
+        return f"Error: {e!s}"
 
     if not new_docs:
         return "Error: LLM returned empty results. The response may have been truncated."
 
-    # 6. Generate summaries + stage restructured documents in the AI Generated tab
-    staged_names = []
+    # 6. Generate summaries + stage restructured documents
+    staged_names: list[str] = []
     total_docs = len(new_docs)
+
     for idx, doc in enumerate(new_docs):
         doc_name = doc.get("name", "Unnamed")
         doc_content = doc.get("content", "")
@@ -563,29 +553,22 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
         summary_text = await _generate_summary(doc_content)
         doc_content = _prepend_summary(summary_text, doc_content)
 
-        if ctx.ws_manager and ctx.ws_connection_id:
-            await ctx.ws_manager.send_to_connection(
-                ctx.ws_connection_id,
-                {
-                    "type": "ai_context_staged",
-                    "context": {
-                        "name": doc_name,
-                        "content": doc_content,
-                        "scope": doc_scope,
-                    },
-                },
-            )
-            await ctx.ws_manager.send_to_connection(
-                ctx.ws_connection_id,
-                {
-                    "type": "tool_progress",
-                    "tool": "refactor_all_contexts",
-                    "text": f"Summarized {idx + 1}/{total_docs}: {doc_name}",
-                },
-            )
+        await _send_ws(ctx, {
+            "type": "ai_context_staged",
+            "context": {
+                "name": doc_name,
+                "content": doc_content,
+                "scope": doc_scope,
+            },
+        })
+        await _send_ws(ctx, {
+            "type": "tool_progress",
+            "tool": "refactor_all_contexts",
+            "text": f"Summarized {idx + 1}/{total_docs}: {doc_name}",
+        })
         staged_names.append(f"- **{doc_name}**")
 
-    summary = (
+    return (
         f"Refactoring complete! Restructured {len(contexts)} documents into "
         f"{len(new_docs)} clean documents (with summaries prepended). They have been "
         f"staged in the 'AI Generated' tab for review:\n\n"
@@ -593,12 +576,12 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
         + "\n\nThe user can review, edit, and upload them from the 'AI Generated' tab, "
         "or ask you to upload all staged contexts."
     )
-    return summary
 
 
 # ---------------------------------------------------------------------------
 # Tool: add_summary_to_contexts
 # ---------------------------------------------------------------------------
+
 
 @registry.tool(
     name="add_summary_to_contexts",
@@ -618,17 +601,11 @@ async def add_summary_to_contexts(ctx: ToolContext) -> str:
     Processes contexts one at a time, stages results in the AI Generated tab.
     """
     # 1. Fetch all active contexts
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.get(
-            f"{ctx.base_url}/ask-aira/context/list",
-            params={"is_active": "true"},
-            headers=ctx.capillary_headers(),
-        )
-        if resp.status_code != 200:
-            return f"Error: Failed to fetch contexts (HTTP {resp.status_code})"
-        data = resp.json()
+    try:
+        contexts = await _fetch_active_contexts(ctx)
+    except RuntimeError as e:
+        return f"Error: {e}"
 
-    contexts = data if isinstance(data, list) else data.get("data", data.get("contexts", []))
     if not contexts:
         return "No context documents found to summarize."
 
@@ -638,16 +615,12 @@ async def add_summary_to_contexts(ctx: ToolContext) -> str:
     # 2. Process each context sequentially
     for i, c in enumerate(contexts):
         name = c.get("name", f"Context {i + 1}")
-        raw_content = c.get("content", c.get("context", ""))
+        raw_content = _maybe_decode_base64(
+            c.get("content", c.get("context", ""))
+        )
         scope = c.get("scope", "org")
 
-        # Decode base64 if needed
-        try:
-            raw_content = base64.b64decode(raw_content).decode("utf-8")
-        except Exception:
-            pass
-
-        # Strip existing summary if present (allows re-running)
+        # Strip existing summary if present (allows safe re-running)
         clean_content = _SUMMARY_RE.sub("", raw_content)
 
         # Generate summary via shared helper
@@ -655,26 +628,20 @@ async def add_summary_to_contexts(ctx: ToolContext) -> str:
         new_content = _prepend_summary(summary_text, clean_content)
 
         # Stage in AI Generated tab
-        if ctx.ws_manager and ctx.ws_connection_id:
-            status_label = f"Summarized {i + 1}/{total}: {name}"
-            if not summary_text:
-                status_label = f"Skipped {i + 1}/{total}: {name} (too short)"
-
-            await ctx.ws_manager.send_to_connection(
-                ctx.ws_connection_id,
-                {
-                    "type": "ai_context_staged",
-                    "context": {"name": name, "content": new_content, "scope": scope},
-                },
-            )
-            await ctx.ws_manager.send_to_connection(
-                ctx.ws_connection_id,
-                {
-                    "type": "tool_progress",
-                    "tool": "add_summary_to_contexts",
-                    "text": status_label,
-                },
-            )
+        status_label = (
+            f"Skipped {i + 1}/{total}: {name} (too short)"
+            if not summary_text
+            else f"Summarized {i + 1}/{total}: {name}"
+        )
+        await _send_ws(ctx, {
+            "type": "ai_context_staged",
+            "context": {"name": name, "content": new_content, "scope": scope},
+        })
+        await _send_ws(ctx, {
+            "type": "tool_progress",
+            "tool": "add_summary_to_contexts",
+            "text": status_label,
+        })
 
         suffix = " (skipped — too short)" if not summary_text else ""
         staged_names.append(f"- **{name}**{suffix}")
