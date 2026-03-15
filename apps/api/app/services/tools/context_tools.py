@@ -51,6 +51,57 @@ SUMMARY_SYSTEM_PROMPT = (
 _MIN_CONTENT_LENGTH = 50  # Skip summary for trivially short docs
 
 
+async def _generate_summary(content: str) -> str:
+    """Generate a <300 char summary for a context document using Haiku.
+
+    Returns empty string if content is too short, LLM fails, or output is unusable.
+    """
+    from app.services.llm_service import call_llm
+
+    if len(content.strip()) < _MIN_CONTENT_LENGTH:
+        return ""
+
+    try:
+        result = await call_llm(
+            provider="anthropic",
+            model="claude-haiku-4-5-20251001",
+            system=SUMMARY_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": content}],
+            max_tokens=200,
+        )
+        summary_text = ""
+        for block in result.get("content", []):
+            if block.get("type") == "text":
+                summary_text = block["text"].strip()
+                break
+    except Exception as e:
+        logger.warning(f"Failed to generate summary: {e}")
+        return ""
+
+    # Discard SKIP or conversational filler
+    if summary_text.upper() == "SKIP" or summary_text.lower().startswith("i "):
+        return ""
+
+    # Truncate to 300 chars — prefer cutting at sentence boundary
+    if len(summary_text) > 300:
+        truncated = summary_text[:300]
+        last_period = max(truncated.rfind(". "), truncated.rfind(".\n"))
+        if last_period > 100:
+            summary_text = truncated[: last_period + 1]
+        else:
+            last_space = truncated.rfind(" ", 0, 297)
+            summary_text = truncated[:last_space] + "..." if last_space > 100 else truncated[:297] + "..."
+
+    return summary_text
+
+
+def _prepend_summary(summary_text: str, content: str) -> str:
+    """Prepend a blockquote summary to content, or return content unchanged."""
+    if summary_text:
+        return f"> **Summary:** {summary_text}\n\n{content}"
+    return content
+
+
 # ---------------------------------------------------------------------------
 # Tool: list_contexts
 # ---------------------------------------------------------------------------
@@ -385,7 +436,8 @@ async def delete_context(ctx: ToolContext, context_name: str) -> str:
     description=(
         "Restructure and clean up all context documents using the refactoring "
         "blueprint. This fetches all contexts, sends them to an LLM for "
-        "restructuring, and stages the results in the 'AI Generated' tab for review. "
+        "restructuring, then generates a concise summary for each and prepends it. "
+        "Results are staged in the 'AI Generated' tab for review. "
         "Nothing is overwritten — the user reviews and uploads manually. "
         "Call this when the user asks to restructure, optimize, deduplicate, or clean up their contexts."
     ),
@@ -426,8 +478,6 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
     if not blueprint:
         return "Error: Blueprint file not found. Cannot refactor without restructuring guidelines."
 
-    system_prompt = blueprint
-
     # 3. Build user message with token budget + structured context formatting
     # (matching desktop app's formatContextsForLLM)
     max_output_tokens = settings.sanitize_max_output_tokens
@@ -446,10 +496,8 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
         "---\n\n",
     ]
 
-    name_to_id: dict[str, str] = {}
     for i, c in enumerate(contexts):
         name = c.get("name", f"Context {i + 1}")
-        cid = c.get("id", c.get("contextId", ""))
         raw_content = c.get("content", c.get("context", ""))
         scope = c.get("scope", "org")
         # Try base64 decode
@@ -460,7 +508,6 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
         user_parts.append(f"### Context Document {i + 1}: {name}\n")
         user_parts.append(f"Scope: {scope}\n")
         user_parts.append(f"Content:\n{raw_content}\n\n---\n\n")
-        name_to_id[name] = cid
 
     user_content = "".join(user_parts)
 
@@ -479,17 +526,17 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
         async for event in stream_llm(
             provider=provider,
             model=model,
-            system=system_prompt,
+            system=blueprint,
             messages=messages,
             max_tokens=settings.sanitize_max_output_tokens,
         ):
             if event["type"] == "chunk":
                 full_output += event["text"]
-                # Send progress to frontend
-                await ctx.ws_manager.send_to_connection(
-                    ctx.ws_connection_id,
-                    {"type": "tool_progress", "tool": "refactor_all_contexts", "text": "."},
-                )
+                if ctx.ws_manager and ctx.ws_connection_id:
+                    await ctx.ws_manager.send_to_connection(
+                        ctx.ws_connection_id,
+                        {"type": "tool_progress", "tool": "refactor_all_contexts", "text": "."},
+                    )
     except Exception as e:
         return f"Error during LLM refactoring: {str(e)}"
 
@@ -502,12 +549,17 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
     if not new_docs:
         return "Error: LLM returned empty results. The response may have been truncated."
 
-    # 6. Stage restructured documents in the AI Generated tab (not direct upload)
+    # 6. Generate summaries + stage restructured documents in the AI Generated tab
     staged_names = []
-    for doc in new_docs:
+    total_docs = len(new_docs)
+    for idx, doc in enumerate(new_docs):
         doc_name = doc.get("name", "Unnamed")
         doc_content = doc.get("content", "")
         doc_scope = doc.get("scope", "org")
+
+        # Generate and prepend summary for each refactored doc
+        summary_text = await _generate_summary(doc_content)
+        doc_content = _prepend_summary(summary_text, doc_content)
 
         if ctx.ws_manager and ctx.ws_connection_id:
             await ctx.ws_manager.send_to_connection(
@@ -521,12 +573,20 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
                     },
                 },
             )
+            await ctx.ws_manager.send_to_connection(
+                ctx.ws_connection_id,
+                {
+                    "type": "tool_progress",
+                    "tool": "refactor_all_contexts",
+                    "text": f"Summarized {idx + 1}/{total_docs}: {doc_name}",
+                },
+            )
         staged_names.append(f"- **{doc_name}**")
 
     summary = (
         f"Refactoring complete! Restructured {len(contexts)} documents into "
-        f"{len(new_docs)} clean documents. They have been staged in the "
-        f"'AI Generated' tab for review:\n\n"
+        f"{len(new_docs)} clean documents (with summaries prepended). They have been "
+        f"staged in the 'AI Generated' tab for review:\n\n"
         + "\n".join(staged_names)
         + "\n\nThe user can review, edit, and upload them from the 'AI Generated' tab, "
         "or ask you to upload all staged contexts."
@@ -555,8 +615,6 @@ async def add_summary_to_contexts(ctx: ToolContext) -> str:
 
     Processes contexts one at a time, stages results in the AI Generated tab.
     """
-    from app.services.llm_service import call_llm
-
     # 1. Fetch all active contexts
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(
@@ -590,69 +648,16 @@ async def add_summary_to_contexts(ctx: ToolContext) -> str:
         # Strip existing summary if present (allows re-running)
         clean_content = _SUMMARY_RE.sub("", raw_content)
 
-        # Skip trivially short docs — not enough content to summarize
-        if len(clean_content.strip()) < _MIN_CONTENT_LENGTH:
-            logger.info(f"Skipping summary for '{name}': content too short ({len(clean_content.strip())} chars)")
-            new_content = clean_content
-            if ctx.ws_manager and ctx.ws_connection_id:
-                await ctx.ws_manager.send_to_connection(
-                    ctx.ws_connection_id,
-                    {
-                        "type": "ai_context_staged",
-                        "context": {"name": name, "content": new_content, "scope": scope},
-                    },
-                )
-                await ctx.ws_manager.send_to_connection(
-                    ctx.ws_connection_id,
-                    {
-                        "type": "tool_progress",
-                        "tool": "add_summary_to_contexts",
-                        "text": f"Skipped {i + 1}/{total}: {name} (too short)",
-                    },
-                )
-            staged_names.append(f"- **{name}** (skipped — too short)")
-            continue
+        # Generate summary via shared helper
+        summary_text = await _generate_summary(clean_content)
+        new_content = _prepend_summary(summary_text, clean_content)
 
-        # 3. Call LLM for summary — send full content (no truncation, no data loss)
-        try:
-            result = await call_llm(
-                provider="anthropic",
-                model="claude-haiku-4-5-20251001",
-                system=SUMMARY_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": clean_content}],
-                max_tokens=200,
-            )
-            summary_text = ""
-            for block in result.get("content", []):
-                if block.get("type") == "text":
-                    summary_text = block["text"].strip()
-                    break
-        except Exception as e:
-            logger.warning(f"Failed to generate summary for '{name}': {e}")
-            summary_text = ""
-
-        # If LLM returned SKIP or conversational filler, discard it
-        if summary_text.upper() == "SKIP" or summary_text.lower().startswith("i "):
-            summary_text = ""
-
-        # Truncate to 300 chars — prefer cutting at last sentence boundary
-        if len(summary_text) > 300:
-            truncated = summary_text[:300]
-            last_period = max(truncated.rfind(". "), truncated.rfind(".\n"))
-            if last_period > 100:
-                summary_text = truncated[: last_period + 1]
-            else:
-                last_space = truncated.rfind(" ", 0, 297)
-                summary_text = truncated[:last_space] + "..." if last_space > 100 else truncated[:297] + "..."
-
-        # 4. Prepend summary as a blockquote (visible in preview, in first 300 raw chars)
-        if summary_text:
-            new_content = f"> **Summary:** {summary_text}\n\n{clean_content}"
-        else:
-            new_content = clean_content
-
-        # 5. Stage in AI Generated tab
+        # Stage in AI Generated tab
         if ctx.ws_manager and ctx.ws_connection_id:
+            status_label = f"Summarized {i + 1}/{total}: {name}"
+            if not summary_text:
+                status_label = f"Skipped {i + 1}/{total}: {name} (too short)"
+
             await ctx.ws_manager.send_to_connection(
                 ctx.ws_connection_id,
                 {
@@ -665,10 +670,12 @@ async def add_summary_to_contexts(ctx: ToolContext) -> str:
                 {
                     "type": "tool_progress",
                     "tool": "add_summary_to_contexts",
-                    "text": f"Summarized {i + 1}/{total}: {name}",
+                    "text": status_label,
                 },
             )
-        staged_names.append(f"- **{name}**")
+
+        suffix = " (skipped — too short)" if not summary_text else ""
+        staged_names.append(f"- **{name}**{suffix}")
 
     return (
         f"Generated summaries for {total} context documents and staged them in the "
