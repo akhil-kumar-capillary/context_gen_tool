@@ -12,10 +12,18 @@ logger = logging.getLogger(__name__)
 _NAME_REGEX = re.compile(r"^[a-zA-Z0-9 _:#()\-,]+$")
 
 
-def parse_refactor_output(text: str) -> list[dict]:
+def parse_refactor_output(
+    text: str,
+    expected_count: int | None = None,
+) -> list[dict]:
     """Parse LLM refactoring output — handles code fences, truncation, name sanitization.
 
     Ported from the desktop app's parse-llm-response.ts for consistency.
+
+    Args:
+        text: Raw LLM output (JSON array of docs).
+        expected_count: If provided, logs a warning when fewer docs are
+            recovered than expected (indicates truncation data loss).
 
     Returns a list of dicts, each with keys: name, content, scope.
     """
@@ -82,5 +90,14 @@ def parse_refactor_output(text: str) -> list[dict]:
             "content": content,
             "scope": item.get("scope", "org"),
         })
+
+    if expected_count is not None and len(result) < expected_count:
+        logger.warning(
+            "Parsed %d docs out of %d expected "
+            "(lost %d from truncated output)",
+            len(result),
+            expected_count,
+            expected_count - len(result),
+        )
 
     return result

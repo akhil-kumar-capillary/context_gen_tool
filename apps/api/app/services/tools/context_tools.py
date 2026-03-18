@@ -538,7 +538,7 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
 
     # 5. Parse output (robust: handles code fences, truncation, name sanitisation)
     try:
-        new_docs = _parse_refactor_output(full_output)
+        new_docs = _parse_refactor_output(full_output, expected_count=len(contexts))
     except ValueError as e:
         return f"Error: {e!s}"
 

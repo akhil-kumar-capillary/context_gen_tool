@@ -213,8 +213,8 @@ class Settings(BaseSettings):
     max_tool_rounds: int = 5
 
     # Tree modification
-    tree_modify_max_output_tokens: int = 8192
-    tree_modify_max_compact_chars: int = 50000
+    tree_modify_max_output_tokens: int = 64000   # Sonnet 4.6 max output
+    tree_modify_max_compact_chars: int = 200000  # match max_payload_chars — no artificial cap
 
     # LLM retry settings
     llm_max_retries: int = 3

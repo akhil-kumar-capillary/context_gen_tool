@@ -275,12 +275,20 @@ async def sanitize_tree_content(
 
     # 4. Parse output
     await emit("sanitizing", "Parsing sanitized content...", "running")
-    sanitized_docs = parse_refactor_output(full_output)
+    sanitized_docs = parse_refactor_output(full_output, expected_count=len(contexts))
 
     if not sanitized_docs:
         raise ValueError("LLM returned no parseable documents for sanitization")
 
     logger.info("Sanitization produced %d documents", len(sanitized_docs))
+
+    if len(sanitized_docs) < len(contexts):
+        logger.warning(
+            "Sanitization produced fewer docs (%d) than input (%d). "
+            "Unmatched leaves retain original content.",
+            len(sanitized_docs),
+            len(contexts),
+        )
 
     # 5. Attach sanitized content to tree leaves
     await emit(

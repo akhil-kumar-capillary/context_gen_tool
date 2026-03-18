@@ -146,7 +146,7 @@ async def build_optimized_tree(
     blueprint_text: str | None = None,
     provider: str = "anthropic",
     model: str = "claude-opus-4-6",
-    max_tokens: int = 64000,
+    max_tokens: int = 128000,
 ) -> dict[str, Any]:
     """Build an optimized context tree using a unified LLM call.
 
@@ -162,7 +162,7 @@ async def build_optimized_tree(
         blueprint_text: Custom blueprint text, or None for default blueprint.md.
         provider: LLM provider.
         model: LLM model.
-        max_tokens: Max output tokens (default: 64000 for comprehensive output).
+        max_tokens: Max output tokens (default: 128000, Opus 4.6 max).
 
     Returns:
         Same shape as build_tree():
@@ -196,9 +196,16 @@ async def build_optimized_tree(
 
     user_message = build_user_message(contexts, org_id)
 
-    # Cap payload to avoid exceeding LLM limits
+    # Warn if payload is large — but never silently truncate input.
+    # The LLM provider will enforce its own context-window limits with an
+    # explicit error, which is far better than silently dropping contexts.
     if len(user_message) > settings.max_payload_chars:
-        user_message = user_message[: settings.max_payload_chars]
+        logger.warning(
+            "User message (%d chars) exceeds max_payload_chars (%d). "
+            "Sending full payload — LLM provider will enforce context window limits.",
+            len(user_message),
+            settings.max_payload_chars,
+        )
 
     messages = [{"role": "user", "content": user_message}]
 
@@ -291,6 +298,12 @@ async def build_optimized_tree(
     leaf_count = _count_leaves(tree_data)
 
     if was_truncated:
+        if leaf_count < len(contexts) * 0.5:
+            logger.warning(
+                "Optimized tree may have data loss: %d leaves from %d inputs (truncated)",
+                leaf_count,
+                len(contexts),
+            )
         await emit(
             "validating",
             f"Tree recovered from truncated response — "
