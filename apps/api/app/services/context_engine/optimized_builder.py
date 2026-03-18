@@ -108,6 +108,31 @@ passwords, auth headers):
 2. Add a "secretRefs" array to the leaf referencing the key names
 3. Set the leaf's visibility to "private"
 
+## CRITICAL: Zero Data Loss Protocol
+You are given N input context documents. Your output MUST preserve ALL \
+information from ALL inputs. Before finalizing your response, run this \
+self-validation checklist:
+
+1. **Coverage check**: Count the input documents. Count your output leaves. \
+Every input document MUST appear in at least one output leaf (merged docs \
+count — but no input may be silently dropped).
+2. **Content completeness**: Each leaf's "desc" MUST contain the FULL \
+restructured content — every rule, every table, every SQL snippet, every \
+mapping from the original. Summaries are NOT acceptable in desc.
+3. **No silent drops**: If you cannot fit a document, DO NOT skip it. \
+Create a separate leaf for it rather than losing information.
+4. **Merge accounting**: If you merge documents A and B into one leaf, \
+ALL information from BOTH must appear in the merged leaf. Merging means \
+combining, not choosing one and dropping the other.
+5. **Final verification**: Re-read your JSON output and confirm every \
+input document's key content is present. If anything is missing, fix it \
+before responding.
+
+FAILURE MODE TO AVOID: Producing a tree that looks complete but silently \
+omits 1-3 input documents because the output was getting long. This is \
+the worst possible outcome. A longer output with all data is always \
+better than a shorter output with missing data.
+
 ## Output Format:
 Return ONLY valid JSON — the tree object. No markdown code fences, no \
 explanation, no text before or after the JSON. Start with { and end with }.

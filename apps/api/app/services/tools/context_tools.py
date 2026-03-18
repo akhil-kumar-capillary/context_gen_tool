@@ -500,6 +500,18 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
         '- "name": the context document name (max 100 chars, only alphanumeric, spaces, _:#()-,)\n'
         '- "content": the restructured context content in markdown\n\n'
         "Respond ONLY with the JSON array, no additional text before or after it.\n\n"
+        "## CRITICAL: Zero Data Loss Protocol\n"
+        f"You received {len(contexts)} input document(s). Your output JSON array "
+        f"MUST contain exactly {len(contexts)} element(s) — one per input. "
+        "Do NOT merge, skip, or drop any document.\n\n"
+        "Before finalizing your response, run this self-validation checklist:\n"
+        f"1. Count your output array elements. Must equal {len(contexts)}.\n"
+        "2. For each input document name, verify it appears as a 'name' in your output.\n"
+        "3. Each output 'content' must preserve ALL rules, tables, SQL snippets, "
+        "and mappings from the original — restructured but not reduced.\n"
+        "4. If any input is missing from your output, add it before responding.\n\n"
+        "FAILURE MODE TO AVOID: A shorter output that silently omits documents. "
+        "A longer complete output is always better than a shorter incomplete one.\n\n"
         "---\n\n",
     ]
 

@@ -79,6 +79,21 @@ auth headers), detect them and:
 2. Add a "secretRefs" array to the leaf node referencing the key names: ["{{KEY_NAME}}"]
 3. Set the leaf's visibility to "private"
 
+## CRITICAL: Zero Data Loss — Every Input Must Have a Leaf
+You are given N input context documents. Your output tree MUST contain \
+exactly N leaf nodes — one per input document. Do NOT merge, skip, or \
+drop any input. Every input's Name AND Key must appear as a leaf's \
+name and source_doc_key respectively.
+
+Before finalizing your response, run this self-validation checklist:
+1. Count input documents. Count output leaves. They MUST match.
+2. For each input, verify its source_doc_key appears in exactly one leaf.
+3. If any input is missing from the tree, add it before responding.
+
+FAILURE MODE TO AVOID: Producing a tree with fewer leaves than inputs \
+because you silently skipped documents. The system will detect this \
+mismatch and flag it as data loss.
+
 ## Output Format:
 Return ONLY valid JSON — the tree object. No markdown code fences, no \
 explanation, no text before or after the JSON. Start with { and end with }.
