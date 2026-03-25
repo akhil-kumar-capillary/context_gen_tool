@@ -16,7 +16,7 @@ from app.core.auth import get_current_user
 from app.core.rbac import require_permission
 from app.core.websocket import ws_manager
 from app.core.task_registry import task_registry
-from app.config import get_databricks_cluster, get_all_configured_clusters, normalize_cluster_key
+from app.config import get_databricks_cluster, get_all_configured_clusters, normalize_cluster_key, CLUSTER_DATABRICKS_MAP
 
 from app.services.databricks.storage import StorageService
 from app.services.databricks.client import DatabricksClient
@@ -241,10 +241,11 @@ async def list_extraction_runs(
     current_user: dict = Depends(require_permission("databricks", "view")),
 ):
     """List extraction runs for the user's current cluster."""
-    from app.config import normalize_cluster_key, CLUSTER_DATABRICKS_MAP
-
     cluster_key = normalize_cluster_key(current_user.get("cluster", ""))
     instance_url = CLUSTER_DATABRICKS_MAP.get(cluster_key)
+
+    if not instance_url:
+        return {"runs": []}
 
     storage = StorageService()
     runs = await storage.get_extraction_runs(databricks_instance=instance_url)
