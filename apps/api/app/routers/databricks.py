@@ -240,9 +240,14 @@ async def cancel_extraction(
 async def list_extraction_runs(
     current_user: dict = Depends(require_permission("databricks", "view")),
 ):
-    """List all extraction runs."""
+    """List extraction runs for the user's current cluster."""
+    from app.config import normalize_cluster_key, CLUSTER_DATABRICKS_MAP
+
+    cluster_key = normalize_cluster_key(current_user.get("cluster", ""))
+    instance_url = CLUSTER_DATABRICKS_MAP.get(cluster_key)
+
     storage = StorageService()
-    runs = await storage.get_extraction_runs()
+    runs = await storage.get_extraction_runs(databricks_instance=instance_url)
     return {"runs": runs}
 
 

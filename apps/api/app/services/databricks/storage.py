@@ -121,11 +121,18 @@ class StorageService:
             run_id, status="failed", completed_at=_utcnow()
         )
 
-    async def get_extraction_runs(self) -> list[dict]:
+    async def get_extraction_runs(
+        self, databricks_instance: str | None = None
+    ) -> list[dict]:
         async with async_session() as db:
-            result = await db.execute(
-                select(ExtractionRun).order_by(ExtractionRun.started_at.desc())
+            stmt = select(ExtractionRun).order_by(
+                ExtractionRun.started_at.desc()
             )
+            if databricks_instance:
+                stmt = stmt.where(
+                    ExtractionRun.databricks_instance == databricks_instance
+                )
+            result = await db.execute(stmt)
             runs = result.scalars().all()
             return [self._run_to_dict(r) for r in runs]
 
