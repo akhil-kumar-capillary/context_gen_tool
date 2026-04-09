@@ -64,41 +64,75 @@ async def _save_completion(
     system_prompt_used: str,
     progress_entries: list[dict],
 ):
-    """Save final tree result and mark run as completed."""
-    async with async_session() as db:
-        await db.execute(
-            update(ContextTreeRun)
-            .where(ContextTreeRun.id == uuid_mod.UUID(run_id))
-            .values(
-                tree_data=tree_data,
-                input_sources=input_sources,
-                input_context_count=input_count,
-                model_used=model_used,
-                provider_used=provider_used,
-                token_usage=token_usage,
-                system_prompt_used=system_prompt_used,
-                progress_data=progress_entries,
-                status="completed",
-                completed_at=utcnow(),
-            )
-        )
-        await db.commit()
+    """Save final tree result and mark run as completed.
+
+    Retries once on transient DB errors so a successful generation isn't
+    lost due to a momentary connection hiccup.
+    """
+    max_attempts = 2
+    for attempt in range(max_attempts):
+        try:
+            async with async_session() as db:
+                await db.execute(
+                    update(ContextTreeRun)
+                    .where(ContextTreeRun.id == uuid_mod.UUID(run_id))
+                    .values(
+                        tree_data=tree_data,
+                        input_sources=input_sources,
+                        input_context_count=input_count,
+                        model_used=model_used,
+                        provider_used=provider_used,
+                        token_usage=token_usage,
+                        system_prompt_used=system_prompt_used,
+                        progress_data=progress_entries,
+                        status="completed",
+                        completed_at=utcnow(),
+                    )
+                )
+                await db.commit()
+                return  # success
+        except Exception:
+            if attempt < max_attempts - 1:
+                logger.warning(
+                    "DB commit failed for run %s (attempt %d), retrying...",
+                    run_id, attempt + 1,
+                )
+                await asyncio.sleep(1)
+            else:
+                logger.exception("DB commit failed for run %s after %d attempts", run_id, max_attempts)
+                raise
 
 
 async def _save_failure(run_id: str, error_message: str, progress_entries: list[dict]):
-    """Mark run as failed with error message."""
-    async with async_session() as db:
-        await db.execute(
-            update(ContextTreeRun)
-            .where(ContextTreeRun.id == uuid_mod.UUID(run_id))
-            .values(
-                status="failed",
-                error_message=error_message,
-                progress_data=progress_entries,
-                completed_at=utcnow(),
+    """Mark run as failed with error message.
+
+    Guards against overwriting an already-completed run — if the run was
+    successfully saved but a later step raised, we must not downgrade it.
+    """
+    try:
+        async with async_session() as db:
+            # Only overwrite if the run is still "running" — never downgrade
+            # a "completed" run to "failed".
+            result = await db.execute(
+                update(ContextTreeRun)
+                .where(
+                    ContextTreeRun.id == uuid_mod.UUID(run_id),
+                    ContextTreeRun.status == "running",
+                )
+                .values(
+                    status="failed",
+                    error_message=error_message,
+                    progress_data=progress_entries,
+                    completed_at=utcnow(),
+                )
             )
-        )
-        await db.commit()
+            await db.commit()
+            if result.rowcount == 0:
+                logger.info(
+                    "Run %s not marked as failed — already has terminal status", run_id
+                )
+    except Exception:
+        logger.exception("Failed to save failure status for run %s", run_id)
 
 
 async def run_tree_generation(

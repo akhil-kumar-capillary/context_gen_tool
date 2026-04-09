@@ -2,6 +2,7 @@
 
 import asyncio
 import uuid
+from datetime import timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -156,7 +157,28 @@ async def generate_tree(
     """
     user_id = current_user["user_id"]
 
-    # Guard: reject if a run is already in progress for this org
+    # Guard: reject if a run is already in progress for this org.
+    # Runs stuck in "running" for >15 minutes are considered stale and
+    # auto-marked as failed so they don't block new runs forever.
+    stale_threshold = utcnow() - timedelta(minutes=15)
+
+    async with async_session() as db:
+        # Mark stale runs as failed first
+        await db.execute(
+            update(ContextTreeRun)
+            .where(
+                ContextTreeRun.org_id == org_id,
+                ContextTreeRun.status == "running",
+                ContextTreeRun.created_at < stale_threshold,
+            )
+            .values(
+                status="failed",
+                error_message="Marked as failed: stuck in running state for >15 minutes",
+                completed_at=utcnow(),
+            )
+        )
+        await db.commit()
+
     async with async_session() as db:
         existing = await db.execute(
             select(ContextTreeRun.id)
