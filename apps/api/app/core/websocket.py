@@ -80,9 +80,10 @@ class WebSocketManager:
             except Exception:
                 await self.disconnect(connection_id)
 
-    def set_connection_org(self, connection_id: str, org_id: int):
+    async def set_connection_org(self, connection_id: str, org_id: int):
         """Update the org_id for a connection (called when client sends org context)."""
-        self._connection_org[connection_id] = org_id
+        async with self._lock:
+            self._connection_org[connection_id] = org_id
 
     async def send_to_user(self, user_id: int, message: dict, *, org_id: int | None = None):
         """Send to all connections for a user, optionally filtered by org_id."""

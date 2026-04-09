@@ -47,9 +47,12 @@ class ApiClient {
     if (!response.ok) {
       // Auto-logout on auth failure — token expired or invalid
       if (response.status === 401) {
-        import("@/stores/auth-store").then(({ useAuthStore }) => {
+        try {
+          const { useAuthStore } = await import("@/stores/auth-store");
           useAuthStore.getState().logout();
-        });
+        } catch {
+          // Ignore import/logout errors — redirect handles recovery
+        }
         if (typeof window !== "undefined") {
           window.location.href = "/login";
         }
