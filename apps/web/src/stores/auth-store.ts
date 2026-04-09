@@ -47,11 +47,21 @@ export const useAuthStore = create<AuthState>()(
       selectOrg: (orgId, orgName) => {
         const prevOrgId = get().orgId;
         set({ orgId, orgName });
-        // Reset org-scoped stores when switching organizations
+        // Reset ALL org-scoped stores when switching organizations
         if (prevOrgId !== null && prevOrgId !== orgId) {
-          // Dynamic import to avoid circular dependency
+          // Dynamic imports to avoid circular dependencies
           import("@/stores/chat-store").then(({ useChatStore }) =>
             useChatStore.getState().reset(),
+          );
+          import("@/stores/context-engine-store").then(
+            ({ useContextEngineStore }) =>
+              useContextEngineStore.getState().reset(),
+          );
+          import("@/stores/databricks-store").then(({ useDatabricksStore }) =>
+            useDatabricksStore.getState().reset(),
+          );
+          import("@/stores/config-apis-store").then(({ useConfigApisStore }) =>
+            useConfigApisStore.getState().reset(),
           );
         }
       },

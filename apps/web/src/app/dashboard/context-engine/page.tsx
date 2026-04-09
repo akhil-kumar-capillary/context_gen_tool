@@ -15,6 +15,7 @@ import {
   Trash2,
   Sparkles,
 } from "lucide-react";
+import { toast } from "sonner";
 import { cn, formatDate } from "@/lib/utils";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth-store";
@@ -229,9 +230,9 @@ export default function ContextEnginePage() {
       );
       setActiveRunId(data.run_id);
 
-      // If backend says a run was already in progress, just track it
+      // If backend says a run was already in progress, track it and notify user
       if (data.status === "already_running") {
-        console.info("Generation already in progress, tracking existing run:", data.run_id);
+        toast.info("A generation is already in progress — tracking it.");
       }
     } catch (e) {
       console.error("Failed to start generation:", e);
