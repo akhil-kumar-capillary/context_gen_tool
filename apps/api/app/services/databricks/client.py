@@ -15,6 +15,7 @@ from tenacity import (
     retry,
     stop_after_attempt,
     wait_exponential,
+    wait_random,
     retry_if_exception_type,
 )
 
@@ -60,7 +61,7 @@ class DatabricksClient:
     @retry(
         retry=retry_if_exception_type(APIError),
         stop=stop_after_attempt(4),
-        wait=wait_exponential(multiplier=2, min=2, max=30),
+        wait=wait_exponential(multiplier=2, min=2, max=30) + wait_random(0, 2),
         reraise=True,
     )
     async def _api_get(self, endpoint: str, params: dict) -> dict:

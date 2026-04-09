@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useChatStore } from "@/stores/chat-store";
 import { useContextStore } from "@/stores/context-store";
@@ -212,17 +212,25 @@ export function useChatWebSocket() {
   );
 
   // Cancel current chat/tool execution
+  const cancelTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
   const cancelChat = useCallback(() => {
     cancelledRef.current = true;
     send({ type: "cancel" });
     // Safety timeout in case backend doesn't respond with chat_end
-    setTimeout(() => {
+    clearTimeout(cancelTimerRef.current);
+    cancelTimerRef.current = setTimeout(() => {
       const { isStreaming: stillStreaming } = useChatStore.getState();
       if (stillStreaming) {
         finishStreaming("", undefined, undefined, "Cancelled by user");
       }
     }, 3000);
   }, [send, finishStreaming]);
+
+  // Clean up cancel timer on unmount
+  useEffect(() => {
+    return () => clearTimeout(cancelTimerRef.current);
+  }, []);
 
   return { sendMessage, cancelChat, isConnected };
 }

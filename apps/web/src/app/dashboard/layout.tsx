@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth-store";
 import { AppSidebar } from "@/components/layout/app-sidebar";
@@ -15,15 +15,20 @@ export default function DashboardLayout({
   const router = useRouter();
   const { isLoggedIn, orgId } = useAuthStore();
 
+  // Wait for Zustand persist hydration to avoid flash redirect on page refresh
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+
   useEffect(() => {
+    if (!hydrated) return;
     if (!isLoggedIn) {
       router.replace("/login");
     } else if (!orgId) {
       router.replace("/org-picker");
     }
-  }, [isLoggedIn, orgId, router]);
+  }, [hydrated, isLoggedIn, orgId, router]);
 
-  if (!isLoggedIn || !orgId) {
+  if (!hydrated || !isLoggedIn || !orgId) {
     return null;
   }
 

@@ -26,10 +26,23 @@ class ApiClient {
       headers["Authorization"] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      ...fetchOptions,
-      headers,
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}${path}`, {
+        ...fetchOptions,
+        headers,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      clearTimeout(timeout);
+      if (err instanceof DOMException && err.name === "AbortError") {
+        throw new ApiError(0, "Request timed out");
+      }
+      throw new ApiError(0, "Network error");
+    }
+    clearTimeout(timeout);
 
     if (!response.ok) {
       // Auto-logout on auth failure — token expired or invalid
