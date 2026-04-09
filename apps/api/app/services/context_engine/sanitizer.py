@@ -6,13 +6,10 @@ Falls back to original content for any leaf not matched by the LLM output.
 """
 import asyncio
 import logging
-from pathlib import Path
 from typing import Any, Callable, Awaitable
 
-import aiofiles
-import aiofiles.os
-
 from app.config import settings
+from app.services.context_engine.blueprint import build_refactor_preamble, load_blueprint
 from app.services.context_engine.parsing import parse_refactor_output
 from app.services.llm_service import stream_llm
 
@@ -20,72 +17,18 @@ logger = logging.getLogger(__name__)
 
 ProgressCallback = Callable[[str, str, str], Awaitable[None]]
 
-BLUEPRINT_PATH = Path(__file__).parent.parent.parent / "resources" / "blueprint.md"
-
-
-# ---------------------------------------------------------------------------
-# Blueprint loader
-# ---------------------------------------------------------------------------
-
-
-async def _load_blueprint(custom_text: str | None = None) -> str:
-    """Load the sanitization blueprint.
-
-    Priority:
-    1. Custom text provided by the user (from settings store)
-    2. Default blueprint.md file
-    """
-    if custom_text and custom_text.strip():
-        return custom_text.strip()
-
-    if await aiofiles.os.path.exists(BLUEPRINT_PATH):
-        async with aiofiles.open(BLUEPRINT_PATH, encoding="utf-8") as f:
-            return await f.read()
-
-    raise FileNotFoundError(
-        f"Blueprint file not found at {BLUEPRINT_PATH} and no custom blueprint provided."
-    )
-
 
 # ---------------------------------------------------------------------------
 # User message builder
 # ---------------------------------------------------------------------------
 
 
-def _build_sanitize_message(
-    contexts: list[dict],
-    max_output_tokens: int,
-) -> str:
-    """Build the user message with token budget guidance.
+def _build_sanitize_message(contexts: list[dict]) -> str:
+    """Build the user message for sanitization.
 
-    Uses the same formatting pattern as refactor_all_contexts in context_tools.py.
     Contexts here come from the collector (have source, name, content, doc_key).
     """
-    budget_per_file = max_output_tokens // max(len(contexts), 1)
-
-    parts: list[str] = [
-        "Below are ALL the context documents for this organization. "
-        "Please restructure them according to the blueprint instructions.\n\n"
-        f"There are {len(contexts)} context document(s). "
-        "Restructure and compress without losing critical information.\n\n"
-        "Return your response as a JSON array where each element has:\n"
-        '- "name": the context document name (max 100 chars, only alphanumeric, spaces, _:#()-,)\n'
-        '- "content": the restructured context content in markdown\n\n'
-        "Respond ONLY with the JSON array, no additional text before or after it.\n\n"
-        "## CRITICAL: Zero Data Loss Protocol\n"
-        f"You received {len(contexts)} input document(s). Your output JSON array "
-        f"MUST contain exactly {len(contexts)} element(s) — one per input. "
-        "Do NOT merge, skip, or drop any document.\n\n"
-        "Before finalizing your response, run this self-validation checklist:\n"
-        f"1. Count your output array elements. Must equal {len(contexts)}.\n"
-        "2. For each input document name, verify it appears as a 'name' in your output.\n"
-        "3. Each output 'content' must preserve ALL rules, tables, SQL snippets, "
-        "and mappings from the original — restructured but not reduced.\n"
-        "4. If any input is missing from your output, add it before responding.\n\n"
-        "FAILURE MODE TO AVOID: A shorter output that silently omits documents. "
-        "A longer complete output is always better than a shorter incomplete one.\n\n"
-        "---\n\n",
-    ]
+    parts: list[str] = [build_refactor_preamble(len(contexts))]
 
     for i, ctx in enumerate(contexts):
         name = ctx.get("name", f"Context {i + 1}")
@@ -97,9 +40,7 @@ def _build_sanitize_message(
         parts.append(f"Source: {source} | Scope: {scope}\n")
         parts.append(f"Content:\n{content}\n\n---\n\n")
 
-    user_content = "".join(parts)
-
-    return user_content
+    return "".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -108,12 +49,14 @@ def _build_sanitize_message(
 
 
 def _collect_leaves(node: dict, leaves: list[dict]):
-    """Recursively collect all leaf nodes from the tree."""
-    if node.get("type") == "leaf":
-        leaves.append(node)
-    for child in node.get("children", []):
-        if isinstance(child, dict):
-            _collect_leaves(child, leaves)
+    """Collect all leaf nodes from the tree (iterative to avoid recursion limits)."""
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        if n.get("type") == "leaf":
+            leaves.append(n)
+        else:
+            stack.extend(c for c in n.get("children", []) if isinstance(c, dict))
 
 
 def _attach_sanitized_content(
@@ -228,14 +171,14 @@ async def sanitize_tree_content(
 
     # 1. Load blueprint
     await emit("sanitizing", "Loading sanitization blueprint...", "running")
-    system_prompt = await _load_blueprint(blueprint_text)
+    system_prompt = await load_blueprint(blueprint_text)
 
     if cancel_event and cancel_event.is_set():
         raise asyncio.CancelledError()
 
     # 2. Build user message
     max_output_tokens = settings.sanitize_max_output_tokens
-    user_content = _build_sanitize_message(contexts, max_output_tokens)
+    user_content = _build_sanitize_message(contexts)
     messages = [{"role": "user", "content": user_content}]
 
     await emit(
@@ -245,7 +188,9 @@ async def sanitize_tree_content(
     )
 
     # 3. Stream LLM response
-    full_output = ""
+    chunks: list[str] = []
+    total_chars = 0
+    chars_since_emit = 0
     token_usage = {"input_tokens": 0, "output_tokens": 0}
 
     async for event in stream_llm(
@@ -257,12 +202,16 @@ async def sanitize_tree_content(
         cancel_event=cancel_event,
     ):
         if event["type"] == "chunk":
-            full_output += event["text"]
+            chunks.append(event["text"])
+            chunk_len = len(event["text"])
+            total_chars += chunk_len
+            chars_since_emit += chunk_len
             # Emit periodic progress
-            if len(full_output) % 3000 < len(event["text"]):
+            if chars_since_emit >= 3000:
+                chars_since_emit = 0
                 await emit(
                     "sanitizing",
-                    f"Sanitizing content... ({len(full_output)} chars)",
+                    f"Sanitizing content... ({total_chars} chars)",
                     "running",
                 )
         elif event["type"] == "end":
@@ -270,13 +219,15 @@ async def sanitize_tree_content(
             if event.get("stop_reason") in ("max_tokens", "length"):
                 logger.warning(
                     "Sanitization LLM response was truncated at %d chars",
-                    len(full_output),
+                    total_chars,
                 )
                 await emit(
                     "sanitizing",
                     "Response was truncated — recovering partial results...",
                     "running",
                 )
+
+    full_output = "".join(chunks)
 
     if not full_output.strip():
         raise ValueError("LLM returned empty response for sanitization")

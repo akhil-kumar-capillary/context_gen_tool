@@ -214,7 +214,7 @@ class Settings(BaseSettings):
 
     # Tree modification
     tree_modify_max_output_tokens: int = 64000   # Sonnet 4.6 max output
-    tree_modify_max_compact_chars: int = 200000  # match max_payload_chars — no artificial cap
+    tree_modify_max_compact_chars: int = 200000  # generous cap for tree compaction sent to LLM
 
     # LLM retry settings
     llm_max_retries: int = 3

@@ -14,10 +14,9 @@ import asyncio
 import logging
 from typing import Any, Callable, Awaitable
 
-import aiofiles
-import aiofiles.os
-
 from app.config import settings
+from app.services.context_engine.blueprint import load_blueprint
+from app.services.llm_exceptions import LLMOverloadedError, LLMTransientError
 from app.services.context_engine.tree_builder import (
     build_user_message,
     parse_tree_output,
@@ -27,8 +26,6 @@ from app.services.context_engine.tree_builder import (
 from app.services.llm_service import stream_llm
 
 logger = logging.getLogger(__name__)
-
-BLUEPRINT_PATH = __import__("pathlib").Path(__file__).parent.parent.parent / "resources" / "blueprint.md"
 
 # ---------------------------------------------------------------------------
 # System prompt suffix — appended after the blueprint
@@ -108,54 +105,32 @@ passwords, auth headers):
 2. Add a "secretRefs" array to the leaf referencing the key names
 3. Set the leaf's visibility to "private"
 
-## CRITICAL: Zero Data Loss Protocol
-You are given N input context documents. Your output MUST preserve ALL \
-information from ALL inputs. Before finalizing your response, run this \
-self-validation checklist:
+## CRITICAL: Zero Information Loss Protocol
+You MAY merge, split, rename, or reorganize documents freely — the output \
+leaf count does NOT need to match the input count. However, every piece of \
+INFORMATION from every input must survive in the output. Before finalizing \
+your response, run this self-validation checklist:
 
-1. **Coverage check**: Count the input documents. Count your output leaves. \
-Every input document MUST appear in at least one output leaf (merged docs \
-count — but no input may be silently dropped).
-2. **Content completeness**: Each leaf's "desc" MUST contain the FULL \
-restructured content — every rule, every table, every SQL snippet, every \
-mapping from the original. Summaries are NOT acceptable in desc.
-3. **No silent drops**: If you cannot fit a document, DO NOT skip it. \
-Create a separate leaf for it rather than losing information.
-4. **Merge accounting**: If you merge documents A and B into one leaf, \
-ALL information from BOTH must appear in the merged leaf. Merging means \
-combining, not choosing one and dropping the other.
-5. **Final verification**: Re-read your JSON output and confirm every \
-input document's key content is present. If anything is missing, fix it \
-before responding.
-
-FAILURE MODE TO AVOID: Producing a tree that looks complete but silently \
-omits 1-3 input documents because the output was getting long. This is \
-the worst possible outcome. A longer output with all data is always \
-better than a shorter output with missing data.
+1. **Information audit**: For each input document, mentally check — is \
+every rule, table, SQL snippet, mapping, KPI definition, and process flow \
+from that input present somewhere in the output? If not, add it.
+2. **Content completeness**: Each leaf's "desc" MUST contain FULL \
+restructured content — every rule, every table, every SQL snippet. \
+Summaries are NOT acceptable in desc fields.
+3. **Merge accounting**: If you merge documents A and B into one leaf, \
+ALL information from BOTH must appear. Merging means combining content, \
+not choosing one and discarding the other.
+4. **No silent drops**: Never skip content because the output is getting \
+long. A longer output with all information is always better than a \
+shorter output with missing information.
+5. **Final verification**: Re-read your output and confirm no rules, \
+tables, SQL patterns, or definitions were lost. Fix any gaps before \
+responding.
 
 ## Output Format:
 Return ONLY valid JSON — the tree object. No markdown code fences, no \
 explanation, no text before or after the JSON. Start with { and end with }.
 """
-
-
-# ---------------------------------------------------------------------------
-# Blueprint loader (same logic as sanitizer)
-# ---------------------------------------------------------------------------
-
-
-async def _load_blueprint(custom_text: str | None = None) -> str:
-    """Load the restructuring blueprint."""
-    if custom_text and custom_text.strip():
-        return custom_text.strip()
-
-    if await aiofiles.os.path.exists(BLUEPRINT_PATH):
-        async with aiofiles.open(BLUEPRINT_PATH, encoding="utf-8") as f:
-            return await f.read()
-
-    raise FileNotFoundError(
-        f"Blueprint file not found at {BLUEPRINT_PATH} and no custom blueprint provided."
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +181,7 @@ async def build_optimized_tree(
     # 1. Load blueprint and construct system prompt
     await emit("analyzing", "Loading optimization blueprint...", "running")
 
-    blueprint = await _load_blueprint(blueprint_text)
+    blueprint = await load_blueprint(blueprint_text)
     system_prompt = blueprint + "\n" + OPTIMIZED_TREE_INSTRUCTIONS
 
     if cancel_event and cancel_event.is_set():
@@ -235,14 +210,17 @@ async def build_optimized_tree(
     messages = [{"role": "user", "content": user_message}]
 
     # 3. Stream LLM response with retry
-    full_output = ""
+    chunks: list[str] = []
+    total_chars = 0
     token_usage = {"input_tokens": 0, "output_tokens": 0}
     was_truncated = False
     max_retries = 2
 
     for attempt in range(max_retries + 1):
-        full_output = ""
+        chunks = []
+        total_chars = 0
         token_usage = {"input_tokens": 0, "output_tokens": 0}
+        chars_since_emit = 0
 
         try:
             async for event in stream_llm(
@@ -254,12 +232,16 @@ async def build_optimized_tree(
                 cancel_event=cancel_event,
             ):
                 if event["type"] == "chunk":
-                    full_output += event["text"]
+                    chunks.append(event["text"])
+                    chunk_len = len(event["text"])
+                    total_chars += chunk_len
+                    chars_since_emit += chunk_len
                     # Emit periodic progress
-                    if len(full_output) % 3000 < len(event["text"]):
+                    if chars_since_emit >= 3000:
+                        chars_since_emit = 0
                         await emit(
                             "analyzing",
-                            f"Optimizing & building tree... ({len(full_output)} chars)",
+                            f"Optimizing & building tree... ({total_chars} chars)",
                             "running",
                         )
                 elif event["type"] == "end":
@@ -270,7 +252,7 @@ async def build_optimized_tree(
                         was_truncated = True
                         logger.warning(
                             f"Optimized tree generation truncated at max_tokens={max_tokens} "
-                            f"({len(full_output)} chars collected)"
+                            f"({total_chars} chars collected)"
                         )
                         await emit(
                             "analyzing",
@@ -282,13 +264,8 @@ async def build_optimized_tree(
 
         except asyncio.CancelledError:
             raise
-        except Exception as e:
-            is_server_error = (
-                "500" in str(e)
-                or "Internal server error" in str(e)
-                or "api_error" in str(e)
-            )
-            if is_server_error and attempt < max_retries:
+        except (LLMTransientError, LLMOverloadedError) as e:
+            if attempt < max_retries:
                 wait = 3 * (attempt + 1)
                 logger.warning(
                     f"LLM API error (attempt {attempt + 1}/{max_retries + 1}), "
@@ -304,6 +281,11 @@ async def build_optimized_tree(
                 continue
             logger.exception("Optimized tree generation failed")
             raise ValueError(f"Optimized tree generation failed: {e}") from e
+        except Exception as e:
+            logger.exception("Optimized tree generation failed")
+            raise ValueError(f"Optimized tree generation failed: {e}") from e
+
+    full_output = "".join(chunks)
 
     if not full_output.strip():
         raise ValueError("LLM returned empty response for optimized tree generation")
@@ -353,11 +335,13 @@ async def build_optimized_tree(
 
 
 def _count_leaves(node: dict) -> int:
-    """Count leaf nodes in the tree."""
-    if node.get("type") == "leaf":
-        return 1
+    """Count leaf nodes in the tree (iterative to avoid recursion limits)."""
+    stack = [node]
     count = 0
-    for child in node.get("children", []):
-        if isinstance(child, dict):
-            count += _count_leaves(child)
+    while stack:
+        n = stack.pop()
+        if n.get("type") == "leaf":
+            count += 1
+        else:
+            stack.extend(c for c in n.get("children", []) if isinstance(c, dict))
     return count

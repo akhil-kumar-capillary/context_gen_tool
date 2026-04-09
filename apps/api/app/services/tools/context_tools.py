@@ -4,6 +4,7 @@ These wrap the Capillary context API proxying logic (same as routers/contexts.py
 but return formatted strings suitable for LLM consumption.
 """
 
+import asyncio
 import base64
 import logging
 import re
@@ -14,6 +15,7 @@ import aiofiles.os
 import httpx
 
 from app.config import settings
+from app.services.context_engine.blueprint import build_refactor_preamble
 from app.services.context_engine.parsing import (
     parse_refactor_output as _parse_refactor_output,
 )
@@ -59,6 +61,17 @@ SUMMARY_SYSTEM_PROMPT = (
 _MIN_CONTENT_LENGTH = 50  # Skip summary for trivially short docs
 _MAX_SUMMARY = 280  # Hard cap; "> **Summary:** {text}\n\n" adds ~18 chars → stays under 300
 
+# Module-level shared HTTP client — reuses connections across tool calls.
+_http_client: httpx.AsyncClient | None = None
+
+
+def _get_http_client() -> httpx.AsyncClient:
+    """Return a shared httpx.AsyncClient, creating it on first use."""
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(timeout=30.0)
+    return _http_client
+
 
 # ---------------------------------------------------------------------------
 # Private helpers
@@ -72,22 +85,22 @@ async def _fetch_active_contexts(ctx: ToolContext) -> list[dict]:
     Raises ``RuntimeError`` on HTTP failure so callers can catch and return
     an error string.
     """
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.get(
-            f"{ctx.base_url}/ask-aira/context/list",
-            params={"is_active": "true"},
-            headers=ctx.capillary_headers(),
+    client = _get_http_client()
+    resp = await client.get(
+        f"{ctx.base_url}/ask-aira/context/list",
+        params={"is_active": "true"},
+        headers=ctx.capillary_headers(),
+    )
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"Failed to fetch contexts (HTTP {resp.status_code})"
         )
-        if resp.status_code != 200:
-            raise RuntimeError(
-                f"Failed to fetch contexts (HTTP {resp.status_code})"
-            )
-        try:
-            data = resp.json()
-        except ValueError as exc:
-            raise RuntimeError(
-                f"Invalid JSON response from context API: {exc}"
-            ) from exc
+    try:
+        data = resp.json()
+    except ValueError as exc:
+        raise RuntimeError(
+            f"Invalid JSON response from context API: {exc}"
+        ) from exc
 
     return (
         data
@@ -379,20 +392,20 @@ async def update_context(
     html_content = md_to_html(new_content)
     encoded = base64.b64encode(html_content.encode("utf-8")).decode("utf-8")
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.put(
-            f"{ctx.base_url}/ask-aira/context/update_context",
-            params={"context_id": context_id},
-            headers={
-                **ctx.capillary_headers(),
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
-            data={
-                "name": target.get("name", context_name),
-                "context": encoded,
-                "scope": target.get("scope", "org"),
-            },
-        )
+    client = _get_http_client()
+    resp = await client.put(
+        f"{ctx.base_url}/ask-aira/context/update_context",
+        params={"context_id": context_id},
+        headers={
+            **ctx.capillary_headers(),
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        data={
+            "name": target.get("name", context_name),
+            "context": encoded,
+            "scope": target.get("scope", "org"),
+        },
+    )
 
     if resp.status_code != 200:
         return f"Error: Failed to update context '{context_name}' (HTTP {resp.status_code})"
@@ -434,12 +447,12 @@ async def delete_context(ctx: ToolContext, context_name: str) -> str:
     if not context_id:
         return f"Error: Could not determine ID for context '{context_name}'."
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.delete(
-            f"{ctx.base_url}/ask-aira/context/delete_context",
-            params={"context_id": context_id},
-            headers=ctx.capillary_headers(),
-        )
+    client = _get_http_client()
+    resp = await client.delete(
+        f"{ctx.base_url}/ask-aira/context/delete_context",
+        params={"context_id": context_id},
+        headers=ctx.capillary_headers(),
+    )
 
     if resp.status_code != 200:
         return f"Error: Failed to delete context '{context_name}' (HTTP {resp.status_code})"
@@ -491,29 +504,7 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
         return "Error: Blueprint file not found. Cannot refactor without restructuring guidelines."
 
     # 3. Build user message — NO artificial token budget or payload cap
-    user_parts: list[str] = [
-        "Below are ALL the context documents for this organization. "
-        "Please restructure them according to the blueprint instructions.\n\n"
-        f"There are {len(contexts)} context document(s). "
-        "Restructure and compress without losing critical information.\n\n"
-        "Return your response as a JSON array where each element has:\n"
-        '- "name": the context document name (max 100 chars, only alphanumeric, spaces, _:#()-,)\n'
-        '- "content": the restructured context content in markdown\n\n'
-        "Respond ONLY with the JSON array, no additional text before or after it.\n\n"
-        "## CRITICAL: Zero Data Loss Protocol\n"
-        f"You received {len(contexts)} input document(s). Your output JSON array "
-        f"MUST contain exactly {len(contexts)} element(s) — one per input. "
-        "Do NOT merge, skip, or drop any document.\n\n"
-        "Before finalizing your response, run this self-validation checklist:\n"
-        f"1. Count your output array elements. Must equal {len(contexts)}.\n"
-        "2. For each input document name, verify it appears as a 'name' in your output.\n"
-        "3. Each output 'content' must preserve ALL rules, tables, SQL snippets, "
-        "and mappings from the original — restructured but not reduced.\n"
-        "4. If any input is missing from your output, add it before responding.\n\n"
-        "FAILURE MODE TO AVOID: A shorter output that silently omits documents. "
-        "A longer complete output is always better than a shorter incomplete one.\n\n"
-        "---\n\n",
-    ]
+    user_parts: list[str] = [build_refactor_preamble(len(contexts))]
 
     for i, c in enumerate(contexts):
         name = c.get("name", f"Context {i + 1}")
@@ -529,7 +520,7 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
     messages = [{"role": "user", "content": user_content}]
 
     # 4. Stream LLM response (collect full output)
-    full_output = ""
+    chunks: list[str] = []
     try:
         async for event in stream_llm(
             provider=settings.refactor_provider,
@@ -539,7 +530,7 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
             max_tokens=settings.sanitize_max_output_tokens,
         ):
             if event["type"] == "chunk":
-                full_output += event["text"]
+                chunks.append(event["text"])
                 await _send_ws(ctx, {
                     "type": "tool_progress",
                     "tool": "refactor_all_contexts",
@@ -547,6 +538,8 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
                 })
     except Exception as e:
         return f"Error during LLM refactoring: {e!s}"
+
+    full_output = "".join(chunks)
 
     # 5. Parse output (robust: handles code fences, truncation, name sanitisation)
     try:
@@ -557,18 +550,24 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
     if not new_docs:
         return "Error: LLM returned empty results. The response may have been truncated."
 
-    # 6. Generate summaries + stage restructured documents
-    staged_names: list[str] = []
+    # 6. Generate summaries concurrently, then stage restructured documents
     total_docs = len(new_docs)
 
-    for idx, doc in enumerate(new_docs):
-        doc_name = doc.get("name", "Unnamed")
-        doc_content = doc.get("content", "")
-        doc_scope = doc.get("scope", "org")
+    sem = asyncio.Semaphore(5)
 
-        # Generate and prepend summary for each refactored doc
-        summary_text = await _generate_summary(doc_content)
-        doc_content = _prepend_summary(summary_text, doc_content)
+    async def _bounded_summary(content: str) -> str:
+        async with sem:
+            return await _generate_summary(content)
+
+    summaries = await asyncio.gather(
+        *[_bounded_summary(doc.get("content", "")) for doc in new_docs]
+    )
+
+    staged_names: list[str] = []
+    for idx, (doc, summary_text) in enumerate(zip(new_docs, summaries)):
+        doc_name = doc.get("name", "Unnamed")
+        doc_content = _prepend_summary(summary_text, doc.get("content", ""))
+        doc_scope = doc.get("scope", "org")
 
         await _send_ws(ctx, {
             "type": "ai_context_staged",
@@ -581,7 +580,7 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
         await _send_ws(ctx, {
             "type": "tool_progress",
             "tool": "refactor_all_contexts",
-            "text": f"Summarized {idx + 1}/{total_docs}: {doc_name}",
+            "text": f"Staged {idx + 1}/{total_docs}: {doc_name}",
         })
         staged_names.append(f"- **{doc_name}**")
 
@@ -615,7 +614,7 @@ async def refactor_all_contexts(ctx: ToolContext) -> str:
 async def add_summary_to_contexts(ctx: ToolContext) -> str:
     """Generate a short summary for each context and prepend it to the content.
 
-    Processes contexts one at a time, stages results in the AI Generated tab.
+    Generates summaries concurrently, then stages results in the AI Generated tab.
     """
     # 1. Fetch all active contexts
     try:
@@ -627,24 +626,36 @@ async def add_summary_to_contexts(ctx: ToolContext) -> str:
         return "No context documents found to summarize."
 
     total = len(contexts)
-    staged_names: list[str] = []
 
-    # 2. Process each context sequentially
+    # 2. Prepare clean content for all contexts
+    prepared: list[tuple[str, str, str]] = []  # (name, clean_content, scope)
     for i, c in enumerate(contexts):
         name = c.get("name", f"Context {i + 1}")
         raw_content = _maybe_decode_base64(
             c.get("content", c.get("context", ""))
         )
         scope = c.get("scope", "org")
-
-        # Strip existing summary if present (allows safe re-running)
         clean_content = _SUMMARY_RE.sub("", raw_content)
+        prepared.append((name, clean_content, scope))
 
-        # Generate summary via shared helper
-        summary_text = await _generate_summary(clean_content)
+    # 3. Generate summaries concurrently (max 5 parallel LLM calls)
+    sem = asyncio.Semaphore(5)
+
+    async def _bounded_summary(content: str) -> str:
+        async with sem:
+            return await _generate_summary(content)
+
+    summaries = await asyncio.gather(
+        *[_bounded_summary(clean_content) for _, clean_content, _ in prepared]
+    )
+
+    # 4. Stage results
+    staged_names: list[str] = []
+    for i, ((name, clean_content, scope), summary_text) in enumerate(
+        zip(prepared, summaries)
+    ):
         new_content = _prepend_summary(summary_text, clean_content)
 
-        # Stage in AI Generated tab
         status_label = (
             f"Skipped {i + 1}/{total}: {name} (too short)"
             if not summary_text
