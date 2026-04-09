@@ -51,6 +51,7 @@ export function useDatabricksWebSocket() {
           break;
         }
         case "extraction_failed":
+          if (!useDatabricksStore.getState().isExtracting) break;
           setIsExtracting(false);
           addExtractionProgress({
             type: "extraction_progress",
@@ -60,6 +61,7 @@ export function useDatabricksWebSocket() {
           });
           break;
         case "extraction_cancelled":
+          if (!useDatabricksStore.getState().isExtracting) break;
           setIsExtracting(false);
           addExtractionProgress({
             type: "extraction_progress",
@@ -84,6 +86,7 @@ export function useDatabricksWebSocket() {
           break;
         }
         case "analysis_failed":
+          if (!useDatabricksStore.getState().isAnalyzing) break;
           setIsAnalyzing(false);
           addAnalysisProgress({
             type: "analysis_progress",
@@ -93,6 +96,7 @@ export function useDatabricksWebSocket() {
           });
           break;
         case "analysis_cancelled":
+          if (!useDatabricksStore.getState().isAnalyzing) break;
           setIsAnalyzing(false);
           addAnalysisProgress({
             type: "analysis_progress",
@@ -112,6 +116,7 @@ export function useDatabricksWebSocket() {
           });
           break;
         case "generation_failed":
+          if (!useDatabricksStore.getState().isGenerating) break;
           setIsGenerating(false);
           addGenerationProgress({
             type: "llm_progress",
@@ -121,6 +126,7 @@ export function useDatabricksWebSocket() {
           });
           break;
         case "generation_cancelled":
+          if (!useDatabricksStore.getState().isGenerating) break;
           setIsGenerating(false);
           addGenerationProgress({
             type: "llm_progress",

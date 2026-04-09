@@ -50,6 +50,7 @@ export function useConfigApisWebSocket() {
           break;
         }
         case "config_extraction_failed":
+          if (!useConfigApisStore.getState().isExtracting) break;
           setIsExtracting(false);
           addExtractionProgress({
             type: "config_extraction_progress",
@@ -59,6 +60,7 @@ export function useConfigApisWebSocket() {
           });
           break;
         case "config_extraction_cancelled":
+          if (!useConfigApisStore.getState().isExtracting) break;
           setIsExtracting(false);
           addExtractionProgress({
             type: "config_extraction_progress",
@@ -83,6 +85,7 @@ export function useConfigApisWebSocket() {
           break;
         }
         case "config_analysis_failed":
+          if (!useConfigApisStore.getState().isAnalyzing) break;
           setIsAnalyzing(false);
           addAnalysisProgress({
             type: "config_analysis_progress",
@@ -92,6 +95,7 @@ export function useConfigApisWebSocket() {
           });
           break;
         case "config_analysis_cancelled":
+          if (!useConfigApisStore.getState().isAnalyzing) break;
           setIsAnalyzing(false);
           addAnalysisProgress({
             type: "config_analysis_progress",
@@ -111,6 +115,7 @@ export function useConfigApisWebSocket() {
           });
           break;
         case "config_generation_failed":
+          if (!useConfigApisStore.getState().isGenerating) break;
           setIsGenerating(false);
           addGenerationProgress({
             type: "config_generation_progress",
@@ -120,6 +125,7 @@ export function useConfigApisWebSocket() {
           });
           break;
         case "config_generation_cancelled":
+          if (!useConfigApisStore.getState().isGenerating) break;
           setIsGenerating(false);
           addGenerationProgress({
             type: "config_generation_progress",

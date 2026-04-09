@@ -304,7 +304,16 @@ export const useConfigApisStore = create<ConfigApisState>((set) => ({
   setExtractionRuns: (runs) => set({ extractionRuns: runs }),
   setActiveExtractionId: (id) => set({ activeExtractionId: id }),
   addExtractionProgress: (event) =>
-    set((s) => ({ extractionProgress: [...s.extractionProgress, event] })),
+    set((s) => {
+      const isDone = event.status === "done" || event.status === "failed";
+      if (isDone) {
+        const hasTerminal = s.extractionProgress.some(
+          (e) => e.status === "done" || e.status === "failed",
+        );
+        if (hasTerminal) return {};
+      }
+      return { extractionProgress: [...s.extractionProgress, event] };
+    }),
   clearExtractionProgress: () => set({ extractionProgress: [] }),
   setIsExtracting: (v) => set({ isExtracting: v }),
 
@@ -312,7 +321,16 @@ export const useConfigApisStore = create<ConfigApisState>((set) => ({
   setAnalysisRuns: (runs) => set({ analysisRuns: runs }),
   setActiveAnalysisId: (id) => set({ activeAnalysisId: id }),
   addAnalysisProgress: (event) =>
-    set((s) => ({ analysisProgress: [...s.analysisProgress, event] })),
+    set((s) => {
+      const isDone = event.status === "done" || event.status === "failed";
+      if (isDone) {
+        const hasTerminal = s.analysisProgress.some(
+          (e) => e.status === "done" || e.status === "failed",
+        );
+        if (hasTerminal) return {};
+      }
+      return { analysisProgress: [...s.analysisProgress, event] };
+    }),
   clearAnalysisProgress: () => set({ analysisProgress: [] }),
   setIsAnalyzing: (v) => set({ isAnalyzing: v }),
 
@@ -358,7 +376,16 @@ export const useConfigApisStore = create<ConfigApisState>((set) => ({
   // Generation
   setContextDocs: (docs) => set({ contextDocs: docs }),
   addGenerationProgress: (event) =>
-    set((s) => ({ generationProgress: [...s.generationProgress, event] })),
+    set((s) => {
+      const isDone = event.status === "done" || event.status === "failed";
+      if (isDone) {
+        const hasTerminal = s.generationProgress.some(
+          (e) => e.status === "done" || e.status === "failed",
+        );
+        if (hasTerminal) return {};
+      }
+      return { generationProgress: [...s.generationProgress, event] };
+    }),
   clearGenerationProgress: () => set({ generationProgress: [] }),
   setIsGenerating: (v) => set({ isGenerating: v }),
 

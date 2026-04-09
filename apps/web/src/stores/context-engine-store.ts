@@ -213,6 +213,15 @@ export const useContextEngineStore = create<ContextEngineState>((set, get) => ({
     set((s) => {
       const list = [...s.generationProgress];
 
+      // Once a terminal state (complete/done or failed) has been recorded,
+      // reject further terminal events to prevent contradictory UI states.
+      const hasTerminal = list.some(
+        (e) =>
+          e.phase === "complete" &&
+          (e.status === "done" || e.status === "failed"),
+      );
+      if (hasTerminal) return {};
+
       // Deduplicate "complete" — only allow one entry
       if (p.phase === "complete") {
         if (list.some((e) => e.phase === "complete")) return {};

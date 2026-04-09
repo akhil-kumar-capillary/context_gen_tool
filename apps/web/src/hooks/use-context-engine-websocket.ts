@@ -38,6 +38,8 @@ export function useContextEngineWebSocket() {
           break;
 
         case "context_engine_failed":
+          // Guard: ignore if already completed (backend race condition)
+          if (!useContextEngineStore.getState().isGenerating) break;
           setIsGenerating(false);
           addProgress({
             phase: "error",
@@ -47,6 +49,7 @@ export function useContextEngineWebSocket() {
           break;
 
         case "context_engine_cancelled":
+          if (!useContextEngineStore.getState().isGenerating) break;
           setIsGenerating(false);
           addProgress({
             phase: "cancelled",
