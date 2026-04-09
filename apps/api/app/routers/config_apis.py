@@ -168,9 +168,12 @@ async def start_extraction(
                 "error": str(e),
             })
 
+    # Dedupe by run_id in the task name for cancel lookup.
+    # Also check if ANY config-extraction task is already running for this user.
     task_name = f"config-extraction-{run_id}"
-    if task_name in task_registry.active_tasks:
-        return {"run_id": run_id, "status": "already_running"}
+    for k in task_registry.active_tasks:
+        if k.startswith("config-extraction-"):
+            return {"run_id": run_id, "status": "already_running"}
     task_registry.create_task(_run(), name=task_name, user_id=user_id)
     return {"run_id": run_id, "status": "started"}
 
@@ -342,9 +345,11 @@ async def start_analysis(
                 "error": str(e),
             })
 
+    # Dedupe by extraction run_id — only one analysis per extraction at a time
     task_name = f"config-analysis-{analysis_id}"
-    if task_name in task_registry.active_tasks:
-        return {"analysis_id": analysis_id, "run_id": req.run_id, "status": "already_running"}
+    for k in task_registry.active_tasks:
+        if k.startswith("config-analysis-"):
+            return {"analysis_id": analysis_id, "run_id": req.run_id, "status": "already_running"}
     task_registry.create_task(_run(), name=task_name, user_id=user_id)
     return {"analysis_id": analysis_id, "run_id": req.run_id, "status": "started"}
 
@@ -601,6 +606,7 @@ async def start_generation(
             })
 
     task_name = f"config-generation-{req.analysis_id}"
+    # analysis_id is stable (from user), so exact match works here
     if task_name in task_registry.active_tasks:
         return {"analysis_id": req.analysis_id, "status": "already_running"}
     task_registry.create_task(_run(), name=task_name, user_id=user_id)
