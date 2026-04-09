@@ -8,6 +8,10 @@ interface UseWebSocketOptions {
   endpoint: string;
   /** Handler called for each parsed JSON message */
   onMessage: (data: Record<string, unknown>) => void;
+  /** Called after a successful reconnection (not on initial connect) */
+  onReconnect?: () => void;
+  /** Called when the server rejects auth (code 4001) — retrying won't help */
+  onAuthFailure?: () => void;
   /** Maximum reconnection attempts (default: 5) */
   maxReconnects?: number;
 }
@@ -29,6 +33,8 @@ interface UseWebSocketReturn {
 export function useWebSocket({
   endpoint,
   onMessage,
+  onReconnect,
+  onAuthFailure,
   maxReconnects = 5,
 }: UseWebSocketOptions): UseWebSocketReturn {
   const wsRef = useRef<WebSocket | null>(null);
@@ -38,9 +44,13 @@ export function useWebSocket({
 
   const { token } = useAuthStore();
 
-  // Stable ref for the message handler to avoid reconnects when callbacks change
+  // Stable refs for callbacks to avoid reconnects when they change
   const onMessageRef = useRef(onMessage);
   onMessageRef.current = onMessage;
+  const onReconnectRef = useRef(onReconnect);
+  onReconnectRef.current = onReconnect;
+  const onAuthFailureRef = useRef(onAuthFailure);
+  onAuthFailureRef.current = onAuthFailure;
 
   const connect = useCallback(() => {
     if (!token) return;
@@ -69,7 +79,13 @@ export function useWebSocket({
       try {
         const data = JSON.parse(event.data);
         // Server sent a real message — connection is authenticated & healthy
+        const wasReconnect = reconnectAttempts.current > 0;
         reconnectAttempts.current = 0;
+        // Notify callers after a successful reconnection so they can
+        // reconcile state that may have been missed while disconnected.
+        if (wasReconnect) {
+          onReconnectRef.current?.();
+        }
         onMessageRef.current(data);
       } catch {
         // Ignore non-JSON messages
@@ -80,8 +96,12 @@ export function useWebSocket({
       wsRef.current = null;
       clearInterval(pingRef.current);
 
-      // 4001 = auth failure (expired/invalid token) — retrying won't help
-      if (event.code === 4001) return;
+      // 4001 = auth failure (expired/invalid token) — retrying won't help.
+      // Notify callers so they can clear in-progress state.
+      if (event.code === 4001) {
+        onAuthFailureRef.current?.();
+        return;
+      }
 
       if (reconnectAttempts.current < maxReconnects) {
         reconnectAttempts.current++;

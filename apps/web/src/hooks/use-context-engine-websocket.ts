@@ -2,6 +2,8 @@
 
 import { useCallback } from "react";
 import { useContextEngineStore } from "@/stores/context-engine-store";
+import { useAuthStore } from "@/stores/auth-store";
+import { apiClient } from "@/lib/api-client";
 import { useWebSocket } from "./use-websocket";
 
 /**
@@ -71,9 +73,38 @@ export function useContextEngineWebSocket() {
     [addProgress, setIsGenerating, setActiveRunId],
   );
 
+  // On reconnect, reconcile state with backend
+  const onReconnect = useCallback(() => {
+    const { isGenerating } = useContextEngineStore.getState();
+    if (!isGenerating) return;
+    const { token, orgId } = useAuthStore.getState();
+    if (!token || !orgId) return;
+    // Check if the run we're tracking is still actually running
+    apiClient
+      .get<{ runs: Array<{ id: string; status: string }> }>(
+        `/api/context-engine/runs?org_id=${orgId}`,
+        { token },
+      )
+      .then((data) => {
+        const running = data.runs.find((r) => r.status === "running");
+        if (!running) {
+          // No running run — clear stale isGenerating
+          useContextEngineStore.getState().setIsGenerating(false);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // On auth failure, clear all in-progress state
+  const onAuthFailure = useCallback(() => {
+    useContextEngineStore.getState().setIsGenerating(false);
+  }, []);
+
   const { isConnected } = useWebSocket({
     endpoint: "/api/ws",
     onMessage,
+    onReconnect,
+    onAuthFailure,
   });
 
   return { isConnected };

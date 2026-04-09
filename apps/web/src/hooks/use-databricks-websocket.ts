@@ -151,9 +151,19 @@ export function useDatabricksWebSocket() {
     ],
   );
 
+  // On reconnect or auth failure, clear stale in-progress flags
+  const clearStaleFlags = useCallback(() => {
+    const s = useDatabricksStore.getState();
+    if (s.isExtracting) s.setIsExtracting(false);
+    if (s.isAnalyzing) s.setIsAnalyzing(false);
+    if (s.isGenerating) s.setIsGenerating(false);
+  }, []);
+
   const { isConnected } = useWebSocket({
     endpoint: "/api/ws",
     onMessage,
+    onReconnect: clearStaleFlags,
+    onAuthFailure: clearStaleFlags,
   });
 
   return { isConnected };

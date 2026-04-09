@@ -181,6 +181,35 @@ export default function ContextEnginePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isComplete, token, orgId]);
 
+  // Reconcile state when user tabs back — if isGenerating but the run
+  // actually finished while the tab was hidden, clear the stale flag.
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState !== "visible") return;
+      const { isGenerating: gen } = useContextEngineStore.getState();
+      if (!gen || !token || !orgId) return;
+      apiClient
+        .get<{ runs: Array<{ id: string; status: string }> }>(
+          `/api/context-engine/runs?org_id=${orgId}`,
+          { token },
+        )
+        .then((data) => {
+          const running = data.runs.find((r) => r.status === "running");
+          if (!running) {
+            setIsGenerating(false);
+            generatingLockRef.current = false;
+            setTreeRuns(data.runs);
+            const latest = data.runs.find((r) => r.status === "completed");
+            if (latest) setActiveRunId(latest.id);
+          }
+        })
+        .catch(() => {});
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, orgId]);
+
   // ── Handlers ──
 
   const handleGenerate = async () => {
