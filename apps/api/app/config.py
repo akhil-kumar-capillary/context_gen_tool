@@ -189,7 +189,7 @@ class Settings(BaseSettings):
     token_budget_05_patterns: int = 4000
     focus_token_budget: int = 3000
     max_focus_docs: int = 3
-    max_payload_chars: int = 200000
+    max_payload_chars: int = 800000
 
     # Databricks pipeline settings
     filter_mandatory_pct: float = 0.50
