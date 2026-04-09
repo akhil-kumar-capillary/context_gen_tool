@@ -7,7 +7,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, update, desc, delete
+from sqlalchemy import select, update, desc, delete, func
 
 from app.core.rbac import require_permission
 from app.core.websocket import ws_manager
@@ -31,11 +31,13 @@ class GenerateRequest(BaseModel):
 
 class UpdateTreeRequest(BaseModel):
     tree_data: dict = Field(..., description="Updated tree structure")
+    version: int = Field(..., description="Expected version for optimistic locking")
 
 
 class AddNodeRequest(BaseModel):
     parent_id: str = Field(..., description="ID of the parent node")
     node: dict = Field(..., description="New node data (name, desc, visibility, type)")
+    version: int = Field(..., description="Expected version for optimistic locking")
 
 
 class UpdateNodeRequest(BaseModel):
@@ -43,11 +45,13 @@ class UpdateNodeRequest(BaseModel):
     desc: Optional[str] = None
     visibility: Optional[str] = None
     health: Optional[int] = None
+    version: int = Field(..., description="Expected version for optimistic locking")
 
 
 class RestructureRequest(BaseModel):
     node_ids: list[str] = Field(..., description="IDs of nodes to restructure")
     instruction: str = Field(..., description="What to do: merge, split, reorganize, etc.")
+    version: int = Field(..., description="Expected version for optimistic locking")
 
 
 # ── Helper: tree node operations ──────────────────────────────────────
@@ -73,6 +77,39 @@ def _find_parent(tree: dict, node_id: str) -> dict | None:
         if found:
             return found
     return None
+
+
+async def _versioned_tree_update(
+    run_id: str, org_id: int, tree_data: dict, expected_version: int
+) -> dict:
+    """Atomically update tree_data with optimistic locking.
+
+    Increments version and checks expected_version matches. Returns the
+    updated tree_data and new version. Raises HTTP 409 on version conflict.
+    """
+    async with async_session() as db:
+        result = await db.execute(
+            update(ContextTreeRun)
+            .where(
+                ContextTreeRun.id == uuid.UUID(run_id),
+                ContextTreeRun.org_id == org_id,
+                ContextTreeRun.version == expected_version,
+            )
+            .values(
+                tree_data=tree_data,
+                version=ContextTreeRun.version + 1,
+                updated_at=utcnow(),
+            )
+        )
+        if result.rowcount == 0:
+            await db.rollback()
+            raise HTTPException(
+                409,
+                "Tree was modified by another request. "
+                "Please refresh and try again.",
+            )
+        await db.commit()
+    return {"tree_data": tree_data, "version": expected_version + 1}
 
 
 def _remove_node(tree: dict, node_id: str) -> bool:
@@ -130,6 +167,7 @@ def _serialize_run(run) -> dict:
         "token_usage": run.token_usage,
         "error_message": run.error_message,
         "progress_data": run.progress_data,
+        "version": run.version,
     }
 
 
@@ -158,43 +196,48 @@ async def generate_tree(
     user_id = current_user["user_id"]
 
     # Guard: reject if a run is already in progress for this org.
-    # Runs stuck in "running" for >15 minutes are considered stale and
-    # auto-marked as failed so they don't block new runs forever.
-    stale_threshold = utcnow() - timedelta(minutes=15)
+    # Runs stuck in "running" for >30 minutes (no progress update) are
+    # considered stale and auto-marked as failed so they don't block new runs.
+    # Uses COALESCE(updated_at, created_at) so active runs that report
+    # progress are never killed prematurely.
+    stale_threshold = utcnow() - timedelta(minutes=30)
+    run_id = str(uuid.uuid4())
 
+    # Single transaction: mark stale → check for running → create new run.
+    # This eliminates the race window between check and create.
     async with async_session() as db:
         # Mark stale runs as failed first
+        stale_col = func.coalesce(ContextTreeRun.updated_at, ContextTreeRun.created_at)
         await db.execute(
             update(ContextTreeRun)
             .where(
                 ContextTreeRun.org_id == org_id,
                 ContextTreeRun.status == "running",
-                ContextTreeRun.created_at < stale_threshold,
+                stale_col < stale_threshold,
             )
             .values(
                 status="failed",
-                error_message="Marked as failed: stuck in running state for >15 minutes",
+                error_message="Marked as failed: no progress for >30 minutes",
                 completed_at=utcnow(),
             )
         )
-        await db.commit()
 
-    async with async_session() as db:
+        # Check for any still-running run (with row lock to prevent races)
         existing = await db.execute(
             select(ContextTreeRun.id)
             .where(
                 ContextTreeRun.org_id == org_id,
                 ContextTreeRun.status == "running",
             )
+            .with_for_update(skip_locked=True)
             .limit(1)
         )
         running_row = existing.scalar_one_or_none()
         if running_row:
+            await db.commit()
             return {"run_id": str(running_row), "status": "already_running"}
 
-    # Create the run record
-    run_id = str(uuid.uuid4())
-    async with async_session() as db:
+        # Create the new run record inside the same transaction
         run = ContextTreeRun(
             id=uuid.UUID(run_id),
             user_id=user_id,
@@ -300,19 +343,7 @@ async def update_tree(
 ):
     """Update the tree structure (after user edits in the UI)."""
     await _get_run_for_org(run_id, org_id)
-
-    async with async_session() as db:
-        await db.execute(
-            update(ContextTreeRun)
-            .where(
-                ContextTreeRun.id == uuid.UUID(run_id),
-                ContextTreeRun.org_id == org_id,
-            )
-            .values(tree_data=req.tree_data)
-        )
-        await db.commit()
-
-    return {"success": True}
+    return await _versioned_tree_update(run_id, org_id, req.tree_data, req.version)
 
 
 @router.delete("/runs/{run_id}")
@@ -369,18 +400,7 @@ async def add_node(
 
     parent["children"].append(new_node)
 
-    async with async_session() as db:
-        await db.execute(
-            update(ContextTreeRun)
-            .where(
-                ContextTreeRun.id == uuid.UUID(run_id),
-                ContextTreeRun.org_id == org_id,
-            )
-            .values(tree_data=tree)
-        )
-        await db.commit()
-
-    return {"tree_data": tree}
+    return await _versioned_tree_update(run_id, org_id, tree, req.version)
 
 
 @router.put("/runs/{run_id}/node/{node_id}")
@@ -408,18 +428,7 @@ async def update_node(
     if req.health is not None:
         node["health"] = req.health
 
-    async with async_session() as db:
-        await db.execute(
-            update(ContextTreeRun)
-            .where(
-                ContextTreeRun.id == uuid.UUID(run_id),
-                ContextTreeRun.org_id == org_id,
-            )
-            .values(tree_data=tree)
-        )
-        await db.commit()
-
-    return {"tree_data": tree}
+    return await _versioned_tree_update(run_id, org_id, tree, req.version)
 
 
 @router.delete("/runs/{run_id}/node/{node_id}")
@@ -427,6 +436,7 @@ async def delete_node(
     run_id: str,
     node_id: str,
     org_id: int = Query(...),
+    version: int = Query(..., description="Expected version for optimistic locking"),
     current_user: dict = Depends(require_permission("context_engine", "edit")),
 ):
     """Remove a node from the tree."""
@@ -440,18 +450,7 @@ async def delete_node(
     if not removed:
         raise HTTPException(404, f"Node '{node_id}' not found in tree")
 
-    async with async_session() as db:
-        await db.execute(
-            update(ContextTreeRun)
-            .where(
-                ContextTreeRun.id == uuid.UUID(run_id),
-                ContextTreeRun.org_id == org_id,
-            )
-            .values(tree_data=tree)
-        )
-        await db.commit()
-
-    return {"tree_data": tree}
+    return await _versioned_tree_update(run_id, org_id, tree, version)
 
 
 @router.post("/runs/{run_id}/sync")
@@ -566,19 +565,7 @@ async def apply_restructure(
 ):
     """Apply a previously proposed restructure by saving the new tree."""
     await _get_run_for_org(run_id, org_id)
-
-    async with async_session() as db:
-        await db.execute(
-            update(ContextTreeRun)
-            .where(
-                ContextTreeRun.id == uuid.UUID(run_id),
-                ContextTreeRun.org_id == org_id,
-            )
-            .values(tree_data=req.tree_data)
-        )
-        await db.commit()
-
-    return {"success": True, "tree_data": req.tree_data}
+    return await _versioned_tree_update(run_id, org_id, req.tree_data, req.version)
 
 
 # ── Checkpoint endpoints ─────────────────────────────────────────────

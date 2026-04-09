@@ -31,5 +31,9 @@ class ContextTreeRun(Base):
     error_message = Column(Text)
     progress_data = Column(JSONB)          # [{phase, detail, status}, ...]
 
+    # Optimistic locking — incremented on every tree mutation
+    version = Column(Integer, default=1, nullable=False)
+
     created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow)
     completed_at = Column(DateTime(timezone=True))

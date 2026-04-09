@@ -48,7 +48,7 @@ async def _save_progress(run_id: str, progress_entries: list[dict]):
         await db.execute(
             update(ContextTreeRun)
             .where(ContextTreeRun.id == uuid_mod.UUID(run_id))
-            .values(progress_data=progress_entries)
+            .values(progress_data=progress_entries, updated_at=utcnow())
         )
         await db.commit()
 
@@ -86,6 +86,7 @@ async def _save_completion(
                         system_prompt_used=system_prompt_used,
                         progress_data=progress_entries,
                         status="completed",
+                        updated_at=utcnow(),
                         completed_at=utcnow(),
                     )
                 )
