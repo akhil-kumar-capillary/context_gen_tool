@@ -373,11 +373,11 @@ async def _handle_chat_message(
                 },
             )
 
-    except Exception as e:
+    except Exception:
         logger.exception("Chat message processing failed")
         await ws_manager.send_to_connection(
             connection_id,
-            {"type": "error", "message": f"Failed to process message: {str(e)}"},
+            {"type": "error", "message": "An unexpected error occurred. Please try again."},
         )
 
 

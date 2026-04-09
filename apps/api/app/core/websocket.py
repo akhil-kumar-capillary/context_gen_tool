@@ -127,6 +127,10 @@ async def websocket_endpoint(websocket: WebSocket):
         except (asyncio.TimeoutError, json.JSONDecodeError, Exception):
             pass
 
+    if user_id is None:
+        await websocket.close(code=4001, reason="Authentication required")
+        return
+
     await ws_manager.connect(websocket, connection_id, user_id, already_accepted=True)
     try:
         while True:

@@ -271,5 +271,15 @@ class Settings(BaseSettings):
 
         return self
 
+    @model_validator(mode="after")
+    def _validate_production_secrets(self) -> "Settings":
+        """Refuse to start in production with the default JWT secret."""
+        if self.env == "production" and self.session_secret == "change-me-in-production":
+            raise ValueError(
+                "SESSION_SECRET must be set to a strong random value in production. "
+                "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+            )
+        return self
+
 
 settings = Settings()

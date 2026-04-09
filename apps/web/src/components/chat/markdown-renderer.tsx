@@ -2,7 +2,7 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
 
 interface MarkdownRendererProps {
   content: string;
@@ -14,7 +14,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
     <div className={className}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeRaw]}
+        rehypePlugins={[rehypeSanitize]}
         components={{
           // Style code blocks
           code({ className, children, ...props }) {

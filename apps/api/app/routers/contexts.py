@@ -1,10 +1,13 @@
 """Context CRUD — proxies requests to Capillary's context API."""
 import base64
+import logging
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from app.core.rbac import require_permission
 from app.schemas.context import ContextCreateRequest, ContextUpdateRequest, BulkUploadRequest
 from app.utils import md_to_html
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -54,8 +57,8 @@ async def upload_context(
             data={"name": req.name, "context": encoded, "scope": req.scope},
         )
         if not resp.is_success:
-            detail = resp.text[:500] if resp.text else "Failed to upload context"
-            raise HTTPException(resp.status_code, detail)
+            logger.warning("Context upload failed (HTTP %d): %s", resp.status_code, resp.text[:200])
+            raise HTTPException(resp.status_code, "Failed to upload context")
         return resp.json()
 
 

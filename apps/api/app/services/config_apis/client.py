@@ -212,7 +212,7 @@ class BaseAPIClient:
             return data
         except httpx.HTTPStatusError as exc:
             raise APIError(
-                f"HTTP {exc.response.status_code}: {exc.response.text[:500]}",
+                f"HTTP {exc.response.status_code}: API request failed",
                 status_code=exc.response.status_code,
                 response=exc.response.text,
             ) from exc
@@ -243,7 +243,7 @@ class BaseAPIClient:
             return data
         except httpx.HTTPStatusError as exc:
             raise APIError(
-                f"HTTP {exc.response.status_code}: {exc.response.text[:500]}",
+                f"HTTP {exc.response.status_code}: API request failed",
                 status_code=exc.response.status_code,
                 response=exc.response.text,
             ) from exc
@@ -266,7 +266,7 @@ class BaseAPIClient:
             return resp.content
         except httpx.HTTPStatusError as exc:
             raise APIError(
-                f"HTTP {exc.response.status_code}: {exc.response.text[:500]}",
+                f"HTTP {exc.response.status_code}: API request failed",
                 status_code=exc.response.status_code,
                 response=exc.response.text,
             ) from exc
