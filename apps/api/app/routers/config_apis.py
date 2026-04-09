@@ -168,12 +168,12 @@ async def start_extraction(
                 "error": str(e),
             })
 
-    # Dedupe by run_id in the task name for cancel lookup.
-    # Also check if ANY config-extraction task is already running for this user.
-    task_name = f"config-extraction-{run_id}"
+    # Dedupe: check if ANY config-extraction task is already running
     for k in task_registry.active_tasks:
         if k.startswith("config-extraction-"):
-            return {"run_id": run_id, "status": "already_running"}
+            existing_run_id = k.removeprefix("config-extraction-")
+            return {"run_id": existing_run_id, "status": "already_running"}
+    task_name = f"config-extraction-{run_id}"
     task_registry.create_task(_run(), name=task_name, user_id=user_id)
     return {"run_id": run_id, "status": "started"}
 
@@ -345,11 +345,12 @@ async def start_analysis(
                 "error": str(e),
             })
 
-    # Dedupe by extraction run_id — only one analysis per extraction at a time
-    task_name = f"config-analysis-{analysis_id}"
+    # Dedupe: only one config analysis at a time
     for k in task_registry.active_tasks:
         if k.startswith("config-analysis-"):
-            return {"analysis_id": analysis_id, "run_id": req.run_id, "status": "already_running"}
+            existing_analysis_id = k.removeprefix("config-analysis-")
+            return {"analysis_id": existing_analysis_id, "run_id": req.run_id, "status": "already_running"}
+    task_name = f"config-analysis-{analysis_id}"
     task_registry.create_task(_run(), name=task_name, user_id=user_id)
     return {"analysis_id": analysis_id, "run_id": req.run_id, "status": "started"}
 

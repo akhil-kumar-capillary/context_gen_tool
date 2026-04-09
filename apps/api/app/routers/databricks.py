@@ -224,10 +224,11 @@ async def start_extraction(
             })
 
     # Dedupe: check if ANY extraction task is already running
-    task_name = f"extraction-{run_id}"
     for k in task_registry.active_tasks:
         if k.startswith("extraction-"):
-            return {"run_id": run_id, "status": "already_running"}
+            existing_run_id = k.removeprefix("extraction-")
+            return {"run_id": existing_run_id, "status": "already_running"}
+    task_name = f"extraction-{run_id}"
     task_registry.create_task(_run(), name=task_name, user_id=user_id)
     return {"run_id": run_id, "status": "started"}
 

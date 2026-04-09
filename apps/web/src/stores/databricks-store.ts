@@ -186,10 +186,10 @@ export const useDatabricksStore = create<DatabricksState>((set) => ({
   setActiveExtractionId: (id) => set({ activeExtractionId: id }),
   addExtractionProgress: (event) =>
     set((s) => {
-      const isDone = event.status === "done" || event.status === "failed";
+      const isDone = event.status === "done" || event.status === "failed" || event.status === "cancelled";
       if (isDone) {
         const hasTerminal = s.extractionProgress.some(
-          (e) => e.status === "done" || e.status === "failed",
+          (e) => e.status === "done" || e.status === "failed" || e.status === "cancelled",
         );
         if (hasTerminal) return {};
       }
@@ -207,10 +207,10 @@ export const useDatabricksStore = create<DatabricksState>((set) => ({
   setActiveAnalysisId: (id) => set({ activeAnalysisId: id }),
   addAnalysisProgress: (event) =>
     set((s) => {
-      const isDone = event.status === "done" || event.status === "failed";
+      const isDone = event.status === "done" || event.status === "failed" || event.status === "cancelled";
       if (isDone) {
         const hasTerminal = s.analysisProgress.some(
-          (e) => e.status === "done" || e.status === "failed",
+          (e) => e.status === "done" || e.status === "failed" || e.status === "cancelled",
         );
         if (hasTerminal) return {};
       }
@@ -223,10 +223,10 @@ export const useDatabricksStore = create<DatabricksState>((set) => ({
   setContextDocs: (docs) => set({ contextDocs: docs }),
   addGenerationProgress: (event) =>
     set((s) => {
-      const isDone = event.status === "done" || event.status === "failed";
+      const isDone = event.status === "done" || event.status === "failed" || event.status === "cancelled";
       if (isDone) {
         const hasTerminal = s.generationProgress.some(
-          (e) => e.status === "done" || e.status === "failed",
+          (e) => e.status === "done" || e.status === "failed" || e.status === "cancelled",
         );
         if (hasTerminal) return {};
       }
