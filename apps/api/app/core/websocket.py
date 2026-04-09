@@ -150,12 +150,26 @@ async def websocket_endpoint(websocket: WebSocket):
 
     await ws_manager.connect(websocket, connection_id, user_id, org_id=org_id, already_accepted=True)
     try:
+        # Simple rate limiter: max 20 messages per second per connection
+        _rate_count = 0
+        _rate_window_start = time.monotonic()
+
         while True:
             # Idle timeout: if no message for 5 min, assume client is dead.
             # Client heartbeat ping (30s) keeps healthy connections alive.
             data = await asyncio.wait_for(
                 websocket.receive_text(), timeout=_WS_IDLE_TIMEOUT
             )
+
+            # Rate limiting
+            now = time.monotonic()
+            if now - _rate_window_start >= 1.0:
+                _rate_count = 0
+                _rate_window_start = now
+            _rate_count += 1
+            if _rate_count > 20:
+                continue  # silently drop excess messages
+
             ws_manager.touch(connection_id)
             try:
                 msg = json.loads(data)

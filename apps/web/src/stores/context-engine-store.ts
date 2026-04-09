@@ -277,7 +277,7 @@ export const useContextEngineStore = create<ContextEngineState>((set, get) => ({
     const { treeData } = get();
     if (!treeData) return;
     // Deep clone to avoid mutation
-    const clone = JSON.parse(JSON.stringify(treeData)) as ContextTreeNode;
+    const clone = structuredClone(treeData) as ContextTreeNode;
     const node = findNode(clone, nodeId);
     if (node) {
       Object.assign(node, updates);
@@ -288,7 +288,7 @@ export const useContextEngineStore = create<ContextEngineState>((set, get) => ({
   deleteNode: (nodeId) => {
     const { treeData, selectedNodeId } = get();
     if (!treeData || nodeId === "root") return;
-    const clone = JSON.parse(JSON.stringify(treeData)) as ContextTreeNode;
+    const clone = structuredClone(treeData) as ContextTreeNode;
     removeNode(clone, nodeId);
     set({
       treeData: clone,
@@ -299,7 +299,7 @@ export const useContextEngineStore = create<ContextEngineState>((set, get) => ({
   addNode: (parentId, node) => {
     const { treeData } = get();
     if (!treeData) return;
-    const clone = JSON.parse(JSON.stringify(treeData)) as ContextTreeNode;
+    const clone = structuredClone(treeData) as ContextTreeNode;
     const parent = findNode(clone, parentId);
     if (parent) {
       if (!parent.children) parent.children = [];
