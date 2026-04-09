@@ -168,9 +168,10 @@ async def start_extraction(
                 "error": str(e),
             })
 
-    task_registry.create_task(
-        _run(), name=f"config-extraction-{run_id}", user_id=user_id
-    )
+    task_name = f"config-extraction-{run_id}"
+    if task_name in task_registry.active_tasks:
+        return {"run_id": run_id, "status": "already_running"}
+    task_registry.create_task(_run(), name=task_name, user_id=user_id)
     return {"run_id": run_id, "status": "started"}
 
 
@@ -324,6 +325,10 @@ async def start_analysis(
             })
         except asyncio.CancelledError:
             logger.info(f"Config analysis {analysis_id} cancelled")
+            try:
+                await storage.fail_analysis_run(analysis_id, "Cancelled by user")
+            except Exception:
+                logger.warning(f"Failed to persist analysis cancellation for {analysis_id}")
             await ws_manager.send_to_user(user_id, {
                 "type": "config_analysis_cancelled",
                 "analysis_id": analysis_id,
@@ -337,9 +342,10 @@ async def start_analysis(
                 "error": str(e),
             })
 
-    task_registry.create_task(
-        _run(), name=f"config-analysis-{analysis_id}", user_id=user_id
-    )
+    task_name = f"config-analysis-{analysis_id}"
+    if task_name in task_registry.active_tasks:
+        return {"analysis_id": analysis_id, "run_id": req.run_id, "status": "already_running"}
+    task_registry.create_task(_run(), name=task_name, user_id=user_id)
     return {"analysis_id": analysis_id, "run_id": req.run_id, "status": "started"}
 
 
@@ -594,11 +600,10 @@ async def start_generation(
                 "error": str(e),
             })
 
-    task_registry.create_task(
-        _run(),
-        name=f"config-generation-{req.analysis_id}",
-        user_id=user_id,
-    )
+    task_name = f"config-generation-{req.analysis_id}"
+    if task_name in task_registry.active_tasks:
+        return {"analysis_id": req.analysis_id, "status": "already_running"}
+    task_registry.create_task(_run(), name=task_name, user_id=user_id)
     return {"analysis_id": req.analysis_id, "status": "started"}
 
 

@@ -215,11 +215,18 @@ async def start_extraction(
             })
         except Exception as e:
             logger.exception(f"Extraction {run_id} failed")
+            try:
+                await StorageService().fail_extraction_run(run_id, str(e))
+            except Exception:
+                logger.warning(f"Failed to persist extraction failure for {run_id}")
             await ws_manager.send_to_user(user_id, {
                 "type": "extraction_failed", "run_id": run_id, "error": str(e),
             })
 
-    task_registry.create_task(_run(), name=f"extraction-{run_id}", user_id=user_id)
+    task_name = f"extraction-{run_id}"
+    if task_name in task_registry.active_tasks:
+        return {"run_id": run_id, "status": "already_running"}
+    task_registry.create_task(_run(), name=task_name, user_id=user_id)
     return {"run_id": run_id, "status": "started"}
 
 
@@ -366,6 +373,8 @@ async def start_analysis(
                 "type": "analysis_failed", "run_id": req.run_id, "error": str(e),
             })
 
+    if task_name in task_registry.active_tasks:
+        return {"status": "already_running", "run_id": req.run_id, "org_id": req.org_id}
     task_registry.create_task(_run(), name=task_name, user_id=user_id)
     return {"status": "started", "run_id": req.run_id, "org_id": req.org_id}
 
@@ -541,7 +550,10 @@ async def generate_docs(
                 "error": str(e),
             })
 
-    task_registry.create_task(_run(), name=f"generation-{req.analysis_id}", user_id=user_id)
+    task_name = f"generation-{req.analysis_id}"
+    if task_name in task_registry.active_tasks:
+        return {"status": "already_running", "analysis_id": req.analysis_id}
+    task_registry.create_task(_run(), name=task_name, user_id=user_id)
     return {"status": "started", "analysis_id": req.analysis_id}
 
 
