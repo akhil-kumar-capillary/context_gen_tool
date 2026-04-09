@@ -266,7 +266,14 @@ async def stream_anthropic(
                                 try:
                                     tool_input = json.loads(current_tool_input_json) if current_tool_input_json else {}
                                 except json.JSONDecodeError:
-                                    tool_input = {"_raw": current_tool_input_json}
+                                    logger.warning(
+                                        "Skipping tool call '%s' (id=%s): malformed JSON input",
+                                        current_tool_name, current_tool_id,
+                                    )
+                                    current_tool_id = None
+                                    current_tool_name = None
+                                    current_tool_input_json = ""
+                                    continue
                                 has_yielded = True
                                 yield {
                                     "type": "tool_use",
@@ -509,7 +516,11 @@ async def stream_openai(
                         try:
                             tool_input = json.loads(tc_data["arguments"]) if tc_data["arguments"] else {}
                         except json.JSONDecodeError:
-                            tool_input = {"_raw": tc_data["arguments"]}
+                            logger.warning(
+                                "Skipping OpenAI tool call '%s' (id=%s): malformed JSON input",
+                                tc_data.get("name"), tc_data.get("id"),
+                            )
+                            continue
                         yield {
                             "type": "tool_use",
                             "id": tc_data["id"],
@@ -592,7 +603,11 @@ async def call_openai(
                         try:
                             tool_input = json.loads(tc.function.arguments) if tc.function.arguments else {}
                         except json.JSONDecodeError:
-                            tool_input = {"_raw": tc.function.arguments}
+                            logger.warning(
+                                "Skipping OpenAI tool call '%s' (id=%s): malformed JSON",
+                                tc.function.name, tc.id,
+                            )
+                            continue
                         result_blocks.append({
                             "type": "tool_use",
                             "id": tc.id,

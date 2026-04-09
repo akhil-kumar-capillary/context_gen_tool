@@ -42,7 +42,7 @@ export function useWebSocket({
   const reconnectAttempts = useRef(0);
   const pingRef = useRef<ReturnType<typeof setInterval>>();
 
-  const { token } = useAuthStore();
+  const { token, orgId } = useAuthStore();
 
   // Stable refs for callbacks to avoid reconnects when they change
   const onMessageRef = useRef(onMessage);
@@ -64,7 +64,7 @@ export function useWebSocket({
     ws.onopen = () => {
       // Don't reset reconnectAttempts here — auth hasn't happened yet.
       // Counter resets only after receiving a server message (proving auth passed).
-      ws.send(JSON.stringify({ type: "auth", token }));
+      ws.send(JSON.stringify({ type: "auth", token, org_id: orgId }));
 
       // Start heartbeat ping every 30s to keep connection alive
       clearInterval(pingRef.current);
@@ -113,7 +113,7 @@ export function useWebSocket({
     ws.onerror = () => {
       ws.close();
     };
-  }, [token, endpoint, maxReconnects]);
+  }, [token, orgId, endpoint, maxReconnects]);
 
   // Auto-connect on mount, clean up on unmount
   useEffect(() => {

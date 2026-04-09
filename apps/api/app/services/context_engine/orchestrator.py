@@ -29,6 +29,7 @@ def _make_progress_callback(
     ws_manager: WebSocketManager,
     user_id: int,
     run_id: str,
+    org_id: int | None = None,
 ) -> ProgressCallback:
     """Create a progress callback that emits WebSocket events."""
     async def _emit(phase: str, detail: str, status: str):
@@ -38,7 +39,7 @@ def _make_progress_callback(
             "phase": phase,
             "detail": detail,
             "status": status,
-        })
+        }, org_id=org_id)
     return _emit
 
 
@@ -159,7 +160,7 @@ async def run_tree_generation(
         blueprint_text: Custom blueprint text for sanitization (optional).
     """
     progress_entries: list[dict] = []
-    emit = _make_progress_callback(ws_manager, user_id, run_id)
+    emit = _make_progress_callback(ws_manager, user_id, run_id, org_id=org_id)
 
     async def track(phase: str, detail: str, status: str):
         """Track progress both in WS and in the progress list."""
@@ -205,7 +206,7 @@ async def run_tree_generation(
                 "type": "context_engine_failed",
                 "run_id": run_id,
                 "error": "No contexts found for this organization",
-            })
+            }, org_id=org_id)
             return
 
         # ─── Phase 2: Analyzing (LLM tree building) ───────────────
@@ -354,7 +355,7 @@ async def run_tree_generation(
             "type": "context_engine_complete",
             "run_id": run_id,
             "input_context_count": summary["total"],
-        })
+        }, org_id=org_id)
 
     except asyncio.CancelledError:
         await track("cancelled", "Tree generation was cancelled", "failed")
@@ -362,7 +363,7 @@ async def run_tree_generation(
         await ws_manager.send_to_user(user_id, {
             "type": "context_engine_cancelled",
             "run_id": run_id,
-        })
+        }, org_id=org_id)
 
     except Exception as e:
         logger.exception(f"Tree generation failed for run {run_id}")
@@ -373,4 +374,4 @@ async def run_tree_generation(
             "type": "context_engine_failed",
             "run_id": run_id,
             "error": error_msg,
-        })
+        }, org_id=org_id)

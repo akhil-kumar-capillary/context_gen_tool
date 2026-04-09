@@ -32,6 +32,17 @@ class ApiClient {
     });
 
     if (!response.ok) {
+      // Auto-logout on auth failure — token expired or invalid
+      if (response.status === 401) {
+        import("@/stores/auth-store").then(({ useAuthStore }) => {
+          useAuthStore.getState().logout();
+        });
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+        throw new ApiError(401, "Session expired");
+      }
+
       const error = await response.json().catch(() => ({
         detail: response.statusText,
       }));

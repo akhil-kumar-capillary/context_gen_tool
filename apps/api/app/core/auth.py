@@ -86,6 +86,7 @@ def create_session_token(
         "capillary_token": capillary_token,
         "cluster": cluster,
         "base_url": base_url,
+        "iat": datetime.now(timezone.utc),
         "exp": datetime.now(timezone.utc) + timedelta(hours=settings.jwt_expiry_hours),
     }
     return jwt.encode(payload, settings.session_secret, algorithm=settings.jwt_algorithm)

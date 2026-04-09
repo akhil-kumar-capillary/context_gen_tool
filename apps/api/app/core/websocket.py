@@ -27,17 +27,19 @@ class WebSocketManager:
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
         self.user_connections: Dict[int, Set[str]] = {}
+        self._connection_org: Dict[str, int | None] = {}  # connection_id → org_id
         self._lock = asyncio.Lock()           # protects connection map mutations
         self._send_locks: Dict[str, asyncio.Lock] = {}  # per-connection send serialization
         self._last_activity: Dict[str, float] = {}      # tracks last message time
 
-    async def connect(self, websocket: WebSocket, connection_id: str, user_id: int | None = None, *, already_accepted: bool = False):
+    async def connect(self, websocket: WebSocket, connection_id: str, user_id: int | None = None, org_id: int | None = None, *, already_accepted: bool = False):
         if not already_accepted:
             await websocket.accept()
         async with self._lock:
             self.active_connections[connection_id] = websocket
             self._send_locks[connection_id] = asyncio.Lock()
             self._last_activity[connection_id] = time.monotonic()
+            self._connection_org[connection_id] = org_id
             if user_id:
                 if user_id not in self.user_connections:
                     self.user_connections[user_id] = set()
@@ -52,6 +54,7 @@ class WebSocketManager:
             self.active_connections.pop(connection_id, None)
             self._send_locks.pop(connection_id, None)
             self._last_activity.pop(connection_id, None)
+            self._connection_org.pop(connection_id, None)
             if user_id and user_id in self.user_connections:
                 self.user_connections[user_id].discard(connection_id)
                 if not self.user_connections[user_id]:
@@ -77,9 +80,19 @@ class WebSocketManager:
             except Exception:
                 await self.disconnect(connection_id)
 
-    async def send_to_user(self, user_id: int, message: dict):
+    def set_connection_org(self, connection_id: str, org_id: int):
+        """Update the org_id for a connection (called when client sends org context)."""
+        self._connection_org[connection_id] = org_id
+
+    async def send_to_user(self, user_id: int, message: dict, *, org_id: int | None = None):
+        """Send to all connections for a user, optionally filtered by org_id."""
         async with self._lock:
             connection_ids = list(self.user_connections.get(user_id, set()))
+            if org_id is not None:
+                connection_ids = [
+                    cid for cid in connection_ids
+                    if self._connection_org.get(cid) == org_id
+                ]
         for conn_id in connection_ids:
             await self.send_to_connection(conn_id, message)
 
@@ -103,6 +116,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
     token = websocket.query_params.get("token")
     user_id = None
+    org_id = None
 
     if token:
         # Legacy query-param auth
@@ -113,7 +127,7 @@ async def websocket_endpoint(websocket: WebSocket):
         except Exception:
             pass
     else:
-        # Message-based auth — first message must be {type: "auth", token: "..."}
+        # Message-based auth — first message must be {type: "auth", token: "...", org_id?: N}
         try:
             raw_auth = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
             auth_msg = json.loads(raw_auth)
@@ -122,6 +136,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 try:
                     payload = decode_session_token(auth_msg["token"])
                     user_id = payload.get("user_id")
+                    # Capture org_id from auth message for org-scoped message routing
+                    if auth_msg.get("org_id"):
+                        org_id = int(auth_msg["org_id"])
                 except Exception:
                     pass
         except (asyncio.TimeoutError, json.JSONDecodeError, Exception):
@@ -131,7 +148,7 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.close(code=4001, reason="Authentication required")
         return
 
-    await ws_manager.connect(websocket, connection_id, user_id, already_accepted=True)
+    await ws_manager.connect(websocket, connection_id, user_id, org_id=org_id, already_accepted=True)
     try:
         while True:
             # Idle timeout: if no message for 5 min, assume client is dead.
