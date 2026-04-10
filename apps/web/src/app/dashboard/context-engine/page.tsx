@@ -26,6 +26,7 @@ import {
 } from "@/stores/context-engine-store";
 import { useContextEngineWebSocket } from "@/hooks/use-context-engine-websocket";
 import { TreeView, NodeDetail, SecretDetail, VersionHistory } from "@/components/context-engine";
+import { ConflictReview } from "@/components/context-engine/conflict-review";
 import { ModuleGuard } from "@/components/layout/module-guard";
 import { useSettingsStore } from "@/stores/settings-store";
 
@@ -40,6 +41,7 @@ export default function ContextEnginePage() {
     treeData,
     isGenerating,
     generationProgress,
+    conflicts,
     selectedNodeId,
     isLoadingRuns,
     isLoadingTree,
@@ -364,6 +366,23 @@ export default function ContextEnginePage() {
             </button>
           )}
         </div>
+
+        {/* Conflict Review */}
+        {conflicts.length > 0 && (
+          <div className="border-b border-gray-200 p-4">
+            <ConflictReview
+              conflicts={conflicts as never[]}
+              onResolveAll={(resolutions) => {
+                // Clear conflicts after resolution — tree generation continues
+                useContextEngineStore.getState().setConflicts([]);
+                toast.success(`Resolved ${Object.keys(resolutions).length} conflict(s)`);
+              }}
+              onDismiss={() => {
+                useContextEngineStore.getState().setConflicts([]);
+              }}
+            />
+          </div>
+        )}
 
         {/* Progress */}
         {generationProgress.length > 0 && (

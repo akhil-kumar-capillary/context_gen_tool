@@ -27,6 +27,13 @@ export function useContextEngineWebSocket() {
           });
           break;
 
+        case "context_engine_conflicts":
+          // Store conflicts for the review UI
+          useContextEngineStore.getState().setConflicts(
+            (data.conflicts as Array<Record<string, unknown>>) || [],
+          );
+          break;
+
         case "context_engine_complete":
           setIsGenerating(false);
           addProgress({

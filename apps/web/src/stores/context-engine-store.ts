@@ -93,6 +93,7 @@ interface ContextEngineState {
   // Generation
   isGenerating: boolean;
   generationProgress: ProgressEntry[];
+  conflicts: Array<Record<string, unknown>>;
 
   // UI state
   selectedNodeId: string | null;
@@ -117,6 +118,7 @@ interface ContextEngineState {
   setActiveRunId: (id: string | null) => void;
   setTreeData: (data: ContextTreeNode | null) => void;
   setIsGenerating: (v: boolean) => void;
+  setConflicts: (c: Array<Record<string, unknown>>) => void;
   addProgress: (p: ProgressEntry) => void;
   clearProgress: () => void;
   selectNode: (id: string | null) => void;
@@ -178,6 +180,7 @@ const initialState = {
   activeRunId: null as string | null,
   treeData: null as ContextTreeNode | null,
   isGenerating: false,
+  conflicts: [],
   generationProgress: [] as ProgressEntry[],
   selectedNodeId: null as string | null,
   expandedNodes: {} as Record<string, boolean>,
@@ -209,6 +212,7 @@ export const useContextEngineStore = create<ContextEngineState>((set, get) => ({
   },
 
   setIsGenerating: (v) => set({ isGenerating: v }),
+  setConflicts: (c) => set({ conflicts: c }),
   addProgress: (p) =>
     set((s) => {
       const list = [...s.generationProgress];
@@ -251,7 +255,7 @@ export const useContextEngineStore = create<ContextEngineState>((set, get) => ({
       // Fallback: append
       return { generationProgress: [...list, p] };
     }),
-  clearProgress: () => set({ generationProgress: [] }),
+  clearProgress: () => set({ generationProgress: [], conflicts: [] }),
 
   selectNode: (id) => set({ selectedNodeId: id }),
   toggleExpand: (id) =>
