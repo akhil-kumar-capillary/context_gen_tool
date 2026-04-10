@@ -75,8 +75,8 @@ export function TreeSkeleton() {
         </div>
         <Skeleton className="h-5 w-48" />
         <div className="ml-6 space-y-2">
-          <Skeleton className="h-4 w-38" />
-          <Skeleton className="h-4 w-34" />
+          <Skeleton className="h-4 w-36" />
+          <Skeleton className="h-4 w-32" />
         </div>
       </div>
     </div>

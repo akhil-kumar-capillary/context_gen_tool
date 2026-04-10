@@ -59,6 +59,7 @@ export function ConfirmDialog({
       onKeyDown={handleKeyDown}
       role="dialog"
       aria-modal="true"
+      tabIndex={-1}
       aria-labelledby="confirm-title"
       aria-describedby="confirm-desc"
     >
