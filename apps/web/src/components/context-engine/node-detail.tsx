@@ -147,10 +147,10 @@ export function NodeDetail() {
       </div>
 
       {/* Summary (if present — shown as subtitle) */}
-      {(node as Record<string, unknown>).summary && (
+      {typeof (node as Record<string, unknown>).summary === "string" && (
         <div className="border-b border-gray-100 px-4 py-2">
           <p className="text-xs text-gray-500 italic">
-            {(node as Record<string, unknown>).summary as string}
+            {String((node as Record<string, unknown>).summary)}
           </p>
         </div>
       )}
