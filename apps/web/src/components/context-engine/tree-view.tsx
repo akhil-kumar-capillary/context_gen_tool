@@ -42,7 +42,7 @@ function healthColors(score: number) {
 const SOURCE_LABELS: Record<string, { label: string; className: string }> = {
   databricks: { label: "DB", className: "bg-orange-50 text-orange-700" },
   config_apis: { label: "CA", className: "bg-blue-50 text-blue-700" },
-  capillary: { label: "CF", className: "bg-purple-50 text-purple-700" },
+  capillary: { label: "AC", className: "bg-purple-50 text-purple-700" },
   manual: { label: "M", className: "bg-gray-50 text-gray-600" },
 };
 
