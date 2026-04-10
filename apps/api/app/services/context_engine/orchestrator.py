@@ -212,6 +212,10 @@ async def run_tree_generation(
             }, org_id=org_id)
             return
 
+        # Reusable progress callback for sub-services
+        async def builder_progress(phase: str, detail: str, status: str):
+            await track(phase, detail, status)
+
         # ─── Phase 1b: Conflict Detection ─────────────────────────
         if cancel_event and cancel_event.is_set():
             raise asyncio.CancelledError()
@@ -248,9 +252,6 @@ async def run_tree_generation(
         # ─── Phase 2: Analyzing (LLM tree building) ───────────────
         if cancel_event and cancel_event.is_set():
             raise asyncio.CancelledError()
-
-        async def builder_progress(phase: str, detail: str, status: str):
-            await track(phase, detail, status)
 
         if sanitize:
             # Unified approach: blueprint restructuring + tree building in one LLM call.
