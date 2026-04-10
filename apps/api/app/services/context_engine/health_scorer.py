@@ -21,48 +21,81 @@ CONFLICT_PENALTY = {"high": 15, "medium": 8, "low": 3}
 
 
 def _score_content(node: dict) -> int:
-    """Score content quality (0-100)."""
+    """Score content quality (0-100) based on length AND structure."""
     desc = node.get("desc", "")
     if not desc:
         return 30  # No content at all
 
-    length = len(desc.strip())
+    text = desc.strip()
+    length = len(text)
+
+    # Base score from length
     if length > 500:
-        return 100
-    if length > 200:
-        return 85
-    if length > 100:
-        return 70
-    if length > 30:
-        return 50
-    return 30
+        base = 80
+    elif length > 200:
+        base = 65
+    elif length > 100:
+        base = 50
+    elif length > 30:
+        base = 40
+    else:
+        return 30
+
+    # Bonus for structured content (up to +20)
+    bonus = 0
+    if "#" in text:          # Has headings
+        bonus += 7
+    if "|" in text:          # Has tables
+        bonus += 5
+    if "```" in text:        # Has code blocks
+        bonus += 3
+    if "- " in text or "* " in text:  # Has lists
+        bonus += 5
+
+    return min(100, base + bonus)
 
 
-def _score_redundancy(node: dict) -> int:
-    """Score based on redundancy analysis (0-100, higher = less redundant)."""
-    analysis = node.get("analysis", {})
-    redundancy = analysis.get("redundancy", {})
+def _score_redundancy(node: dict) -> tuple[int, bool]:
+    """Score based on redundancy analysis (0-100, higher = less redundant).
+
+    Returns (score, is_uncertain) — uncertain if analysis data is missing.
+    """
+    analysis = node.get("analysis")
+    if not analysis or not isinstance(analysis, dict):
+        return 70, True  # Uncertain — cap at moderate score
+
+    redundancy = analysis.get("redundancy")
+    if not redundancy or not isinstance(redundancy, dict):
+        return 70, True
+
     score = redundancy.get("score", 0)
-
     if score == 0:
-        return 100  # No redundancy detected
-    return max(0, 100 - score)
+        return 100, False
+    return max(0, 100 - score), False
 
 
-def _score_conflicts(node: dict) -> int:
-    """Score based on conflict count and severity (0-100, higher = fewer conflicts)."""
-    analysis = node.get("analysis", {})
-    conflicts = analysis.get("conflicts", [])
+def _score_conflicts(node: dict) -> tuple[int, bool]:
+    """Score based on conflict count and severity (0-100, higher = fewer conflicts).
+
+    Returns (score, is_uncertain) — uncertain if analysis data is missing.
+    """
+    analysis = node.get("analysis")
+    if not analysis or not isinstance(analysis, dict):
+        return 70, True
+
+    conflicts = analysis.get("conflicts")
+    if conflicts is None:
+        return 70, True
 
     if not conflicts:
-        return 100
+        return 100, False
 
     penalty = 0
     for c in conflicts:
         severity = c.get("severity", "low")
         penalty += CONFLICT_PENALTY.get(severity, 3)
 
-    return max(0, 100 - penalty)
+    return max(0, 100 - penalty), False
 
 
 def _score_completeness(node: dict) -> int:
@@ -85,10 +118,14 @@ def _score_completeness(node: dict) -> int:
 
 
 def _score_leaf(node: dict) -> int:
-    """Compute health score for a leaf node."""
+    """Compute health score for a leaf node.
+
+    If analysis data is missing (enricher failed), the score is capped
+    at 70 to indicate uncertainty rather than falsely reporting 100.
+    """
     content_score = _score_content(node)
-    redundancy_score = _score_redundancy(node)
-    conflict_score = _score_conflicts(node)
+    redundancy_score, r_uncertain = _score_redundancy(node)
+    conflict_score, c_uncertain = _score_conflicts(node)
     completeness_score = _score_completeness(node)
 
     weighted = (
@@ -97,7 +134,13 @@ def _score_leaf(node: dict) -> int:
         + conflict_score * W_CONFLICTS
         + completeness_score * W_COMPLETENESS
     )
-    return round(weighted)
+    score = round(weighted)
+
+    # Cap at 70 if analysis data is missing — indicates uncertainty
+    if (r_uncertain or c_uncertain) and score > 70:
+        score = 70
+
+    return score
 
 
 def _score_category(node: dict) -> int:
