@@ -4,7 +4,12 @@ from pathlib import Path
 import aiofiles
 import aiofiles.os
 
+from app.core.cache import app_cache
+
 BLUEPRINT_PATH = Path(__file__).parent.parent.parent / "resources" / "blueprint.md"
+
+_CACHE_KEY = "blueprint_default"
+_CACHE_TTL = 600  # 10 minutes
 
 
 async def load_blueprint(custom_text: str | None = None) -> str:
@@ -12,14 +17,22 @@ async def load_blueprint(custom_text: str | None = None) -> str:
 
     Priority:
     1. Custom text provided by the caller
-    2. Default blueprint.md file
+    2. Cached default blueprint (10-minute TTL)
+    3. Default blueprint.md file from disk
     """
     if custom_text and custom_text.strip():
         return custom_text.strip()
 
+    # Check cache first
+    cached = app_cache.get(_CACHE_KEY)
+    if cached is not None:
+        return cached
+
     if await aiofiles.os.path.exists(BLUEPRINT_PATH):
         async with aiofiles.open(BLUEPRINT_PATH, encoding="utf-8") as f:
-            return await f.read()
+            content = await f.read()
+        app_cache.set(_CACHE_KEY, content, ttl=_CACHE_TTL)
+        return content
 
     raise FileNotFoundError(
         f"Blueprint file not found at {BLUEPRINT_PATH} and no custom blueprint provided."
