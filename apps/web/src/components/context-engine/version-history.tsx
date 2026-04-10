@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import {
   Loader2,
   History,
@@ -76,8 +77,10 @@ export function VersionHistory() {
       addCheckpoint(data);
       setLabel("");
       setShowLabelInput(false);
+      toast.success("Checkpoint saved");
     } catch (e) {
       console.error("Failed to save checkpoint:", e);
+      toast.error("Failed to save checkpoint");
     }
     setIsSavingCheckpoint(false);
   };
@@ -96,9 +99,11 @@ export function VersionHistory() {
       );
       if (data.tree_data) {
         setTreeData(data.tree_data as never);
+        toast.success("Checkpoint restored");
       }
     } catch (e) {
       console.error("Failed to restore checkpoint:", e);
+      toast.error("Failed to restore checkpoint");
     }
     setRestoringId(null);
   };
@@ -113,8 +118,10 @@ export function VersionHistory() {
         { token }
       );
       removeCheckpoint(checkpointId);
+      toast.success("Checkpoint deleted");
     } catch (e) {
       console.error("Failed to delete checkpoint:", e);
+      toast.error("Failed to delete checkpoint");
     }
     setDeletingId(null);
   };

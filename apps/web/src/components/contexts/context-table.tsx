@@ -8,6 +8,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { downloadAllContexts } from "@/lib/utils";
 import { ContextRow } from "./context-row";
 import { NewContextDialog } from "./new-context-dialog";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { EditContextDialog } from "./edit-context-dialog";
 
 const STATUS_OPTIONS: { value: ContextStatusFilter; label: string }[] = [
@@ -124,9 +125,8 @@ export function ContextTable() {
 
         {/* Loading */}
         {isLoading && contexts.length === 0 && (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
-            <span className="ml-2 text-sm text-gray-400">Loading contexts...</span>
+          <div className="py-4">
+            <TableSkeleton rows={4} />
           </div>
         )}
 

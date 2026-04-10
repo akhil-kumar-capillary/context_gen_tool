@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatDate } from "@/lib/utils";
+import { TreeSkeleton, Skeleton } from "@/components/ui/skeleton";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth-store";
 import {
@@ -236,6 +237,7 @@ export default function ContextEnginePage() {
       }
     } catch (e) {
       console.error("Failed to start generation:", e);
+      toast.error("Failed to start generation");
       setIsGenerating(false);
       generatingLockRef.current = false;
     }
@@ -437,8 +439,13 @@ export default function ContextEnginePage() {
             History
           </h3>
           {isLoadingRuns ? (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+            <div className="space-y-2 py-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-2 rounded-lg px-3 py-2">
+                  <Skeleton className="h-3 w-3 rounded-full" />
+                  <Skeleton className="h-3 w-28" />
+                </div>
+              ))}
             </div>
           ) : treeRuns.length === 0 ? (
             <p className="text-xs text-gray-400">
@@ -510,9 +517,8 @@ export default function ContextEnginePage() {
       {/* Center: Tree View */}
       <div className="flex-1 flex flex-col min-w-0">
         {isLoadingTree ? (
-          <div className="flex items-center justify-center flex-1">
-            <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-            <span className="ml-2 text-sm text-gray-400">Loading tree...</span>
+          <div className="flex-1 p-4">
+            <TreeSkeleton />
           </div>
         ) : !treeData ? (
           <div className="flex flex-col items-center justify-center flex-1">

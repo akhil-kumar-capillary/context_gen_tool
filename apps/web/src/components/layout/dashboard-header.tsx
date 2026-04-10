@@ -21,10 +21,11 @@ export function DashboardHeader() {
   };
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-gray-200 bg-white px-6">
+    <header className="flex h-14 items-center justify-between border-b border-gray-200 bg-white px-6 pl-16 lg:pl-6">
       <div className="flex items-center gap-3">
         <button
           onClick={handleSwitchOrg}
+          aria-label={`Switch organization (current: ${orgName})`}
           className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-sm transition-colors hover:bg-gray-50"
         >
           <Building2 className="h-3.5 w-3.5 text-gray-500" />
@@ -34,9 +35,10 @@ export function DashboardHeader() {
       </div>
 
       <div className="flex items-center gap-4">
-        <span className="text-sm text-gray-500">{user?.email}</span>
+        <span className="hidden text-sm text-gray-500 sm:inline">{user?.email}</span>
         <button
           onClick={handleLogout}
+          aria-label="Sign out"
           className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
         >
           <LogOut className="h-3.5 w-3.5" />

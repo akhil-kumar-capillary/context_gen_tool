@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import {
   X,
   Globe,
@@ -107,8 +108,9 @@ export function NodeDetail() {
           { desc: editedDesc },
           { token }
         );
+        toast.success("Node saved");
       } catch {
-        // Silently fail — local update already applied
+        toast.error("Failed to save to server — changes are local only");
       }
     }
   };

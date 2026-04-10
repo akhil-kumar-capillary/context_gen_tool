@@ -13,7 +13,10 @@ import {
   LayoutDashboard,
   MessageSquare,
   GitBranch,
+  Menu,
+  X,
 } from "lucide-react";
+import { useState, useEffect } from "react";
 
 const navItems = [
   {
@@ -57,9 +60,48 @@ const navItems = [
 export function AppSidebar() {
   const pathname = usePathname();
   const { user } = useAuthStore();
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Close mobile menu on navigation
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
   return (
-    <aside className="flex w-60 flex-col border-r border-gray-200 bg-white">
+    <>
+      {/* Mobile hamburger button — shown only on small screens */}
+      <button
+        onClick={() => setMobileOpen(true)}
+        className="fixed left-4 top-4 z-40 rounded-lg border border-gray-200 bg-white p-2 shadow-sm lg:hidden"
+        aria-label="Open navigation menu"
+      >
+        <Menu className="h-5 w-5 text-gray-600" />
+      </button>
+
+      {/* Backdrop for mobile */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/30 lg:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      <aside
+        className={cn(
+          "flex w-60 flex-col border-r border-gray-200 bg-white",
+          // Mobile: fixed overlay, hidden by default
+          "fixed inset-y-0 left-0 z-50 transition-transform duration-200 lg:relative lg:translate-x-0",
+          mobileOpen ? "translate-x-0" : "-translate-x-full",
+        )}
+      >
+        {/* Mobile close button */}
+        <button
+          onClick={() => setMobileOpen(false)}
+          className="absolute right-3 top-4 rounded-md p-1 text-gray-400 hover:text-gray-600 lg:hidden"
+          aria-label="Close navigation menu"
+        >
+          <X className="h-4 w-4" />
+        </button>
       <div className="flex h-14 items-center gap-2 border-b border-gray-200 px-4">
         <LayoutDashboard className="h-5 w-5 text-primary" />
         <span className="text-lg font-bold text-gray-900">aiRA</span>
@@ -68,7 +110,7 @@ export function AppSidebar() {
         </span>
       </div>
 
-      <nav className="flex-1 space-y-1 p-3">
+      <nav className="flex-1 space-y-1 p-3" aria-label="Main navigation">
         <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
           Modules
         </p>
@@ -89,6 +131,7 @@ export function AppSidebar() {
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={isActive ? "page" : undefined}
                 className={cn(
                   "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                   isActive
@@ -124,5 +167,6 @@ export function AppSidebar() {
         )}
       </nav>
     </aside>
+    </>
   );
 }
