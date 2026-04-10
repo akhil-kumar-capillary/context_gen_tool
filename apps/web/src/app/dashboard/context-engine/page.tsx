@@ -190,7 +190,7 @@ export default function ContextEnginePage() {
       const { isGenerating: gen } = useContextEngineStore.getState();
       if (!gen || !token || !orgId) return;
       apiClient
-        .get<{ runs: Array<{ id: string; status: string }> }>(
+        .get<{ runs: TreeRun[] }>(
           `/api/context-engine/runs?org_id=${orgId}`,
           { token },
         )

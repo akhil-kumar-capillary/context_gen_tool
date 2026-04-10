@@ -81,7 +81,7 @@ export function useContextEngineWebSocket() {
     if (!token || !orgId) return;
     // Check if the run we're tracking is still actually running
     apiClient
-      .get<{ runs: Array<{ id: string; status: string }> }>(
+      .get<{ runs: Array<{ status: string }> }>(
         `/api/context-engine/runs?org_id=${orgId}`,
         { token },
       )
