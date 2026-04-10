@@ -49,9 +49,7 @@ const SOURCE_LABELS: Record<string, { label: string; className: string }> = {
 
 function getSourceBadges(node: ContextTreeNode) {
   // Prefer explicit sources array (set by optimized/standard builder)
-  const sources: string[] =
-    (node as Record<string, unknown>).sources as string[] ||
-    (node.source ? [node.source] : []);
+  const sources: string[] = node.sources || (node.source ? [node.source] : []);
   return [...new Set(sources)]
     .map((s) => SOURCE_LABELS[s])
     .filter(Boolean);

@@ -9,9 +9,12 @@ export interface ContextTreeNode {
   health: number;
   visibility: "public" | "private";
   children?: ContextTreeNode[];
+  summary?: string; // 200-300 char description for tree display
   desc?: string;
-  source?: string; // "databricks" | "config_apis" | "capillary" | "manual"
-  source_doc_key?: string;
+  source?: string; // legacy single source
+  sources?: string[]; // array of contributing source types
+  source_doc_key?: string; // legacy single key
+  source_doc_keys?: string[]; // array of all contributing doc keys
   used?: string; // last retrieved timestamp
   hits?: number; // retrieval count
   secrets?: Array<{
