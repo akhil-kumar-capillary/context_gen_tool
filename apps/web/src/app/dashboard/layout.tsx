@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useShallow } from "zustand/react/shallow";
 import { useAuthStore } from "@/stores/auth-store";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { GlobalChatDrawer } from "@/components/chat/global-chat-drawer";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 export default function DashboardLayout({
   children,
@@ -13,7 +15,9 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { isLoggedIn, orgId } = useAuthStore();
+  const { isLoggedIn, orgId } = useAuthStore(
+    useShallow((s) => ({ isLoggedIn: s.isLoggedIn, orgId: s.orgId })),
+  );
 
   // Wait for Zustand persist hydration to avoid flash redirect on page refresh
   const [hydrated, setHydrated] = useState(false);
@@ -38,7 +42,9 @@ export default function DashboardLayout({
       <div className="flex flex-1 flex-col overflow-hidden">
         <DashboardHeader />
         <div className="flex flex-1 overflow-hidden">
-          <main className="flex-1 overflow-auto p-6">{children}</main>
+          <main className="flex-1 overflow-auto p-6">
+            <ErrorBoundary>{children}</ErrorBoundary>
+          </main>
           <GlobalChatDrawer />
         </div>
       </div>
