@@ -85,7 +85,8 @@ class TTLCache:
 
     @property
     def size(self) -> int:
-        return len(self._store)
+        with self._lock:
+            return len(self._store)
 
 
 # Shared application cache

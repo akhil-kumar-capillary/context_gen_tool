@@ -16,5 +16,5 @@ class TestHealth:
             "/health",
             headers={"Origin": "http://localhost:3000", "Access-Control-Request-Method": "GET"},
         )
-        # FastAPI CORS middleware should handle preflight
-        assert resp.status_code in (200, 204, 405)
+        assert resp.status_code in (200, 204)
+        assert "access-control-allow-origin" in resp.headers

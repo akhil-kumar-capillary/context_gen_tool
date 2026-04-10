@@ -11,19 +11,23 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+  retryCount: number;
 }
+
+const MAX_RETRIES = 3;
 
 /**
  * Global error boundary that catches unhandled React errors.
- * Shows a retry UI instead of a blank screen.
+ * Shows a retry UI instead of a blank screen. Limits retries to
+ * prevent infinite loops from deterministic errors.
  */
 export class ErrorBoundary extends React.Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, retryCount: 0 };
   }
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return { hasError: true, error };
   }
 
@@ -53,13 +57,28 @@ export class ErrorBoundary extends React.Component<Props, State> {
               </p>
             )}
           </div>
-          <button
-            onClick={() => this.setState({ hasError: false, error: null })}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            <RotateCcw className="h-4 w-4" />
-            Try Again
-          </button>
+          {this.state.retryCount < MAX_RETRIES ? (
+            <button
+              onClick={() =>
+                this.setState((prev) => ({
+                  hasError: false,
+                  error: null,
+                  retryCount: prev.retryCount + 1,
+                }))
+              }
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Try Again ({MAX_RETRIES - this.state.retryCount} left)
+            </button>
+          ) : (
+            <a
+              href="/dashboard"
+              className="inline-flex items-center gap-2 rounded-lg bg-gray-600 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700"
+            >
+              Go to Dashboard
+            </a>
+          )}
         </div>
       );
     }
