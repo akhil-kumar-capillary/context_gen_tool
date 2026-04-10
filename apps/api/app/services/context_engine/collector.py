@@ -3,9 +3,10 @@
 Sources:
   1. Databricks-generated context docs  (ContextDoc, source_type='databricks')
   2. Config APIs-generated context docs  (ContextDoc, source_type='config_apis')
-  3. Live Capillary contexts              (via Capillary REST API)
+  3. Live aiRA contexts                  (via Capillary REST API)
 """
 import base64
+import hashlib
 import logging
 from typing import Any
 
@@ -102,26 +103,92 @@ async def _fetch_capillary_contexts(
     return docs
 
 
-def _deduplicate(
-    generated_docs: list[dict],
-    capillary_docs: list[dict],
-) -> list[dict]:
-    """Remove Capillary contexts that duplicate generated docs (by name match).
+def _normalize_text(text: str) -> str:
+    """Normalize text for comparison: lowercase, collapse whitespace."""
+    return " ".join(text.lower().split())
 
-    When we upload generated docs to Capillary, they appear in both sources.
-    We prefer the generated version (has richer metadata) and skip the
-    Capillary duplicate.
+
+def _content_hash(content: str) -> str:
+    """SHA-256 hash of normalized full content for exact dedup."""
+    return hashlib.sha256(_normalize_text(content).encode()).hexdigest()
+
+
+def _short_hash(content: str) -> str:
+    """MD5 hash of first 500 normalized chars for near-dedup."""
+    return hashlib.md5(_normalize_text(content[:500]).encode()).hexdigest()
+
+
+def _deduplicate_all(docs: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Three-tier deduplication across ALL sources.
+
+    Tiers:
+      1. Exact content match (SHA-256 of full normalized text)
+      2. Near-content match (MD5 of first 500 normalized chars)
+      3. Name match (case-insensitive, stripped)
+
+    When a duplicate is found, the FIRST occurrence is kept (generated docs
+    are listed before Capillary docs, so they win priority).
+
+    Returns: (kept_docs, dropped_docs)
     """
-    gen_names = {d["name"].lower().strip() for d in generated_docs}
+    seen_exact: dict[str, dict] = {}
+    seen_near: dict[str, dict] = {}
+    seen_names: dict[str, dict] = {}
 
-    deduped_capillary = []
-    for doc in capillary_docs:
-        if doc["name"].lower().strip() not in gen_names:
-            deduped_capillary.append(doc)
-        else:
-            logger.debug(f"Skipping Capillary duplicate: {doc['name']}")
+    kept: list[dict] = []
+    dropped: list[dict] = []
 
-    return deduped_capillary
+    for doc in docs:
+        content = doc.get("content", "")
+        name = doc.get("name", "").lower().strip()
+
+        # Tier 1: Exact content match
+        eh = _content_hash(content) if content else ""
+        if eh and eh in seen_exact:
+            dropped.append({
+                **doc,
+                "_dedup_reason": "exact_content",
+                "_duplicate_of": seen_exact[eh].get("name", "?"),
+            })
+            continue
+
+        # Tier 2: Near-content match (first 500 chars)
+        sh = _short_hash(content) if content else ""
+        if sh and sh in seen_near:
+            dropped.append({
+                **doc,
+                "_dedup_reason": "near_content",
+                "_duplicate_of": seen_near[sh].get("name", "?"),
+            })
+            continue
+
+        # Tier 3: Name match
+        if name and name in seen_names:
+            dropped.append({
+                **doc,
+                "_dedup_reason": "name_match",
+                "_duplicate_of": seen_names[name].get("name", "?"),
+            })
+            continue
+
+        # Keep this doc
+        if eh:
+            seen_exact[eh] = doc
+        if sh:
+            seen_near[sh] = doc
+        if name:
+            seen_names[name] = doc
+        kept.append(doc)
+
+    if dropped:
+        logger.info(
+            "Deduplication removed %d/%d docs: %s",
+            len(dropped),
+            len(docs),
+            [(d["name"], d["_dedup_reason"]) for d in dropped[:5]],
+        )
+
+    return kept, dropped
 
 
 async def collect_all_contexts(
@@ -152,36 +219,42 @@ async def collect_all_contexts(
     config_api_docs = await _fetch_generated_docs(db, org_id, "config_apis")
     capillary_docs = await _fetch_capillary_contexts(base_url, capillary_headers)
 
-    # Deduplicate: Capillary may contain previously-uploaded generated docs
-    all_generated = databricks_docs + config_api_docs
-    capillary_unique = _deduplicate(all_generated, capillary_docs)
+    # Combine all sources (generated docs first — they win priority in dedup)
+    all_raw = databricks_docs + config_api_docs + capillary_docs
 
-    all_sources = databricks_docs + config_api_docs + capillary_unique
+    # Skip contexts with empty content before dedup
+    all_raw = [s for s in all_raw if s.get("content", "").strip()]
 
-    # Skip contexts with empty content
-    all_sources = [s for s in all_sources if s.get("content", "").strip()]
+    # Three-tier deduplication across ALL sources
+    all_sources, dropped_docs = _deduplicate_all(all_raw)
+
+    # Recount after dedup (capillary count may have changed)
+    db_count = sum(1 for d in all_sources if d.get("source") == "databricks")
+    ca_count = sum(1 for d in all_sources if d.get("source") == "config_apis")
+    cap_count = sum(1 for d in all_sources if d.get("source") == "capillary")
 
     input_sources = {
-        "databricks": [d["doc_id"] for d in databricks_docs],
-        "config_apis": [d["doc_id"] for d in config_api_docs],
-        "capillary": [d.get("context_id", "") for d in capillary_unique],
+        "databricks": [d["doc_id"] for d in all_sources if d.get("source") == "databricks"],
+        "config_apis": [d["doc_id"] for d in all_sources if d.get("source") == "config_apis"],
+        "capillary": [d.get("context_id", "") for d in all_sources if d.get("source") == "capillary"],
     }
 
     summary = {
-        "databricks": len(databricks_docs),
-        "config_apis": len(config_api_docs),
-        "capillary": len(capillary_unique),
+        "databricks": db_count,
+        "config_apis": ca_count,
+        "capillary": cap_count,
         "total": len(all_sources),
+        "duplicates_removed": len(dropped_docs),
     }
 
     logger.info(
-        f"Collected {summary['total']} contexts for org {org_id}: "
-        f"{summary['databricks']} databricks, {summary['config_apis']} config_apis, "
-        f"{summary['capillary']} capillary"
+        "Collected %d contexts for org %s (%d databricks, %d config_apis, %d capillary, %d duplicates removed)",
+        summary["total"], org_id, db_count, ca_count, cap_count, len(dropped_docs),
     )
 
     return {
         "sources": all_sources,
+        "dropped": dropped_docs,
         "input_sources": input_sources,
         "summary": summary,
     }

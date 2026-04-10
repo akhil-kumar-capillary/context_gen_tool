@@ -190,12 +190,15 @@ async def run_tree_generation(
             )
 
         summary = collected["summary"]
+        dedup_msg = ""
+        if summary.get("duplicates_removed", 0) > 0:
+            dedup_msg = f", {summary['duplicates_removed']} duplicates removed"
         await track(
             "collecting",
             f"Collected {summary['total']} contexts "
             f"({summary['databricks']} databricks, "
             f"{summary['config_apis']} config_apis, "
-            f"{summary['capillary']} capillary)",
+            f"{summary['capillary']} capillary{dedup_msg})",
             "done",
         )
 
@@ -208,6 +211,39 @@ async def run_tree_generation(
                 "error": "No contexts found for this organization",
             }, org_id=org_id)
             return
+
+        # ─── Phase 1b: Conflict Detection ─────────────────────────
+        if cancel_event and cancel_event.is_set():
+            raise asyncio.CancelledError()
+
+        await track("conflicts", "Checking for contradictions between contexts...", "running")
+
+        try:
+            from app.services.context_engine.conflict_resolver import detect_conflicts as find_conflicts
+
+            conflicts = await find_conflicts(
+                collected["sources"],
+                progress_cb=builder_progress,
+            )
+
+            if conflicts:
+                await track(
+                    "conflicts",
+                    f"Found {len(conflicts)} contradiction(s) — review recommended",
+                    "done",
+                )
+                # Send conflicts to frontend for visibility
+                await ws_manager.send_to_user(user_id, {
+                    "type": "context_engine_conflicts",
+                    "run_id": run_id,
+                    "conflicts": [c.to_dict() for c in conflicts],
+                    "count": len(conflicts),
+                }, org_id=org_id)
+            else:
+                await track("conflicts", "No contradictions detected", "done")
+        except Exception as e:
+            logger.warning("Conflict detection failed (non-fatal): %s", e)
+            await track("conflicts", f"Conflict detection skipped: {e}", "done")
 
         # ─── Phase 2: Analyzing (LLM tree building) ───────────────
         if cancel_event and cancel_event.is_set():
