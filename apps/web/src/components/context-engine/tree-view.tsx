@@ -44,7 +44,18 @@ const SOURCE_LABELS: Record<string, { label: string; className: string }> = {
   config_apis: { label: "CA", className: "bg-blue-50 text-blue-700" },
   capillary: { label: "AC", className: "bg-purple-50 text-purple-700" },
   manual: { label: "M", className: "bg-gray-50 text-gray-600" },
+  optimized: { label: "OPT", className: "bg-green-50 text-green-700" },
 };
+
+function getSourceBadges(node: ContextTreeNode) {
+  // Prefer explicit sources array (set by optimized/standard builder)
+  const sources: string[] =
+    (node as Record<string, unknown>).sources as string[] ||
+    (node.source ? [node.source] : []);
+  return [...new Set(sources)]
+    .map((s) => SOURCE_LABELS[s])
+    .filter(Boolean);
+}
 
 // ── TreeRow component ──
 
@@ -66,7 +77,7 @@ function TreeRow({
   const attachments = node.attachments || [];
   const secretRefs = node.secretRefs || [];
   const h = healthColors(node.health);
-  const source = node.source ? SOURCE_LABELS[node.source] : null;
+  const badges = getSourceBadges(node);
 
   return (
     <div>
@@ -107,17 +118,18 @@ function TreeRow({
           {node.name}
         </span>
 
-        {/* Source badge */}
-        {source && (
+        {/* Source badges — may show multiple for merged nodes */}
+        {badges.map((badge) => (
           <span
+            key={badge.label}
             className={cn(
               "rounded px-1.5 py-0.5 text-[10px] font-medium",
-              source.className
+              badge.className,
             )}
           >
-            {source.label}
+            {badge.label}
           </span>
-        )}
+        ))}
 
         {/* Visibility icon */}
         {node.visibility === "private" ? (

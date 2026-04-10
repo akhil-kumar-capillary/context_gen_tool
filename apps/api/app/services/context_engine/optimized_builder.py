@@ -72,13 +72,16 @@ not a summary. This is the final content that will be used.
 - children: array of child nodes (for root and cat types)
 
 ## For leaf nodes additionally provide:
+- summary: A concise 200-300 character description of what this leaf covers. \
+Used for tree display and quick scanning. NOT the full content.
 - desc: The FULL restructured/optimized content in markdown. This is NOT a \
 summary — it is the complete final document content.
-- source: "optimized" if the leaf was created by merging/restructuring \
-multiple inputs, or the original source ("databricks", "config_apis", \
-"capillary") if the leaf maps 1:1 to a single input context.
-- source_doc_key: original doc key if the leaf maps 1:1 to a single input. \
-Omit this field for merged/optimized leaves.
+- source_doc_keys: array of ALL original doc keys (from the input's "Key" \
+field) that contributed content to this leaf. Single-source leaf: \
+["original_key"]. Merged leaf: ["key1", "key2", ...]. \
+EVERY input doc key MUST appear in exactly one leaf's source_doc_keys.
+- sources: array of unique source types that contributed (e.g., \
+["databricks"] or ["databricks", "capillary"] for merged cross-source leaves).
 
 ## Health Scoring Guidelines (post-optimization):
 - 90-100: Well-structured, no redundancy, clear and actionable

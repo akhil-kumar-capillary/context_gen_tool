@@ -45,13 +45,15 @@ like API keys, test data)
 - children: array of child nodes (for root and cat types)
 
 ## For leaf nodes additionally provide:
-- desc: A concise summary of the context content (2-3 sentences describing \
-what this context covers and its key rules). Do NOT copy the full original \
-text — the system will attach full content automatically after parsing.
-- source: which pipeline generated it ("databricks", "config_apis", \
-"capillary", "manual") — MUST match the Source from the input exactly
-- source_doc_key: original doc key if from a pipeline — MUST match the \
-Key from the input exactly. If no Key was provided, use the Name instead.
+- summary: A concise 200-300 character description of what this context \
+covers. Used for tree display. Do NOT copy the full original text — \
+the system will attach full content automatically after parsing.
+- desc: Leave as empty string "" — full content is injected by the system.
+- source_doc_keys: array containing the original doc key from the input. \
+Always a single-element array: ["the_key"]. MUST match the Key from the \
+input exactly. If no Key was provided, use the Name instead.
+- sources: array containing the source type: ["databricks"], ["config_apis"], \
+["capillary"], or ["manual"]. MUST match the Source from the input exactly.
 
 ## For category nodes additionally provide:
 - secrets: array of detected secrets [{key, scope, type}] if any child \
@@ -157,13 +159,21 @@ def _walk_and_attach(node: dict, content_map: dict[str, str]) -> int:
     """Recursively walk tree and replace desc with full content."""
     count = 0
     if node.get("type") == "leaf":
-        # Try matching by source_doc_key first, then name
-        key = (node.get("source_doc_key") or "").lower().strip()
-        name = (node.get("name") or "").lower().strip()
-        full = content_map.get(key) or content_map.get(name)
-        if full:
-            node["desc"] = full
-            count += 1
+        # Try matching by source_doc_keys (array) first, then legacy source_doc_key, then name
+        keys_to_try = []
+        for k in (node.get("source_doc_keys") or []):
+            keys_to_try.append(k.lower().strip())
+        legacy_key = (node.get("source_doc_key") or "").lower().strip()
+        if legacy_key:
+            keys_to_try.append(legacy_key)
+        keys_to_try.append((node.get("name") or "").lower().strip())
+
+        for k in keys_to_try:
+            full = content_map.get(k)
+            if full:
+                node["desc"] = full
+                count += 1
+                break
 
     for child in node.get("children", []):
         if isinstance(child, dict):
