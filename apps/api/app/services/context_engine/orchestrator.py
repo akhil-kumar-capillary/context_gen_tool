@@ -385,8 +385,27 @@ async def run_tree_generation(
         error_msg = str(e)
         await track("error", f"Failed: {error_msg}", "failed")
         await _save_failure(run_id, error_msg, progress_entries)
+
+        # Graceful degradation: check if a previous successful tree exists
+        # so the frontend can still show useful data.
+        has_fallback = False
+        try:
+            async with async_session() as db:
+                prev = await db.execute(
+                    select(ContextTreeRun.id)
+                    .where(
+                        ContextTreeRun.org_id == org_id,
+                        ContextTreeRun.status == "completed",
+                    )
+                    .limit(1)
+                )
+                has_fallback = prev.scalar_one_or_none() is not None
+        except Exception:
+            pass
+
         await ws_manager.send_to_user(user_id, {
             "type": "context_engine_failed",
             "run_id": run_id,
             "error": error_msg,
+            "has_previous_tree": has_fallback,
         }, org_id=org_id)
