@@ -1,3 +1,4 @@
+import time
 import logging
 
 from fastapi import FastAPI, Request
@@ -8,11 +9,18 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from app.config import settings
+from app.logging_config import setup_logging
+from app.middleware.request_id import RequestIDMiddleware
 from app.core.websocket import websocket_endpoint
 from app.core.task_registry import task_registry
 from app.routers import auth, contexts, databricks, confluence, config_apis, llm, admin, chat, context_engine
 
+# Initialize structured logging before anything else
+setup_logging()
+
 logger = logging.getLogger(__name__)
+
+_startup_time = time.monotonic()
 
 # Rate limiter — keyed by remote IP address
 limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
@@ -40,6 +48,9 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
 
+# Request ID middleware — adds X-Request-ID header and binds to structlog context
+app.add_middleware(RequestIDMiddleware)
+
 # Routers
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(contexts.router, prefix="/api/contexts", tags=["contexts"])
@@ -65,4 +76,26 @@ async def shutdown_event():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "aira-context-gen"}
+    return {
+        "status": "ok",
+        "service": "aira-context-gen",
+        "version": app.version,
+        "env": settings.env,
+        "uptime_seconds": round(time.monotonic() - _startup_time),
+    }
+
+
+@app.get("/ready")
+async def readiness():
+    """Readiness probe — checks DB connectivity."""
+    from app.database import async_session
+    try:
+        async with async_session() as db:
+            await db.execute(__import__("sqlalchemy").text("SELECT 1"))
+        return {"status": "ready"}
+    except Exception as e:
+        logger.warning("Readiness check failed: %s", e)
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "detail": "Database unavailable"},
+        )

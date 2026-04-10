@@ -348,6 +348,21 @@ async def run_tree_generation(
 
         await track("saving", "Tree saved to database", "done")
 
+        # Log LLM usage for cost tracking
+        logger.info(
+            "LLM call completed",
+            extra={
+                "event": "llm_call",
+                "provider": result.get("provider_used"),
+                "model": result.get("model_used"),
+                "input_tokens": result.get("token_usage", {}).get("input_tokens", 0),
+                "output_tokens": result.get("token_usage", {}).get("output_tokens", 0),
+                "user_id": user_id,
+                "org_id": org_id,
+                "run_id": run_id,
+            },
+        )
+
         # ─── Complete ────────────────────────────────────────────
         await track("complete", f"Tree generated with {summary['total']} contexts", "done")
 
