@@ -22,6 +22,67 @@ const PRESET_ORDER = [
   { id: "amber", label: "Amber" },
 ];
 
+// ── HSL ↔ Hex converters ───────────────────────────────────────────
+
+function hslToHex(hslStr: string): string {
+  const parts = hslStr.match(/[\d.]+/g);
+  if (!parts || parts.length < 3) return "#6366f1";
+  const h = parseFloat(parts[0]) / 360;
+  const s = parseFloat(parts[1]) / 100;
+  const l = parseFloat(parts[2]) / 100;
+
+  const hue2rgb = (p: number, q: number, t: number) => {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+
+  let r: number, g: number, b: number;
+  if (s === 0) {
+    r = g = b = l;
+  } else {
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1 / 3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1 / 3);
+  }
+
+  const toHex = (x: number) => Math.round(x * 255).toString(16).padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+function hexToHsl(hex: string): string {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return "215 70% 55%";
+  const r = parseInt(result[1], 16) / 255;
+  const g = parseInt(result[2], 16) / 255;
+  const b = parseInt(result[3], 16) / 255;
+
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+      case g: h = ((b - r) / d + 2) / 6; break;
+      case b: h = ((r - g) / d + 4) / 6; break;
+    }
+  }
+
+  return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
+}
+
+// ── Component ──────────────────────────────────────────────────────
+
 export function CustomizationPanel() {
   const { token } = useAuthStore();
 
@@ -35,10 +96,8 @@ export function CustomizationPanel() {
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
 
-  // Original values for cancel/revert
   const [original, setOriginal] = useState({ preset: "", light: "", dark: "", darkMode: false });
 
-  // Load current theme
   useEffect(() => {
     if (!token) return;
     apiClient
@@ -74,18 +133,19 @@ export function CustomizationPanel() {
     setLightHsl(p.light);
     setDarkHsl(p.dark);
     setIsCustom(false);
-    applyThemePreview(p.light, p.dark);
+    // NO live preview — only apply on save
   };
 
-  const handleCustomChange = (field: "light" | "dark", value: string) => {
+  const handleHslChange = (field: "light" | "dark", value: string) => {
     if (field === "light") setLightHsl(value);
     else setDarkHsl(value);
     setIsCustom(true);
     setActivePreset("custom");
-    applyThemePreview(
-      field === "light" ? value : lightHsl,
-      field === "dark" ? value : darkHsl,
-    );
+  };
+
+  const handleColorPicker = (field: "light" | "dark", hex: string) => {
+    const hsl = hexToHsl(hex);
+    handleHslChange(field, hsl);
   };
 
   const handleSave = async () => {
@@ -102,8 +162,10 @@ export function CustomizationPanel() {
         },
         { token },
       );
+      // Apply globally ONLY after successful save
+      applyThemePreview(lightHsl, darkHsl);
       setOriginal({ preset: activePreset, light: lightHsl, dark: darkHsl, darkMode: darkModeDefault });
-      toast.success("Theme saved");
+      toast.success("Theme saved — all users will see this change");
     } catch {
       toast.error("Failed to save theme");
     }
@@ -151,7 +213,7 @@ export function CustomizationPanel() {
       {/* Presets */}
       <div>
         <h3 className="text-sm font-semibold text-foreground mb-1">Color Presets</h3>
-        <p className="text-xs text-muted-foreground mb-4">Choose a primary color for the platform. Changes are live-previewed.</p>
+        <p className="text-xs text-muted-foreground mb-4">Choose a primary color for the platform. Click Save to apply.</p>
         <div className="grid grid-cols-3 gap-3">
           {PRESET_ORDER.map((p) => {
             const preset = presets[p.id];
@@ -164,8 +226,8 @@ export function CustomizationPanel() {
                 className={cn(
                   "flex items-center gap-3 rounded-xl border p-3 transition-all text-left",
                   isActive
-                    ? "border-primary ring-2 ring-primary/20 bg-primary/5"
-                    : "border-border hover:border-primary/30 hover:bg-muted/50",
+                    ? "border-foreground/30 ring-2 ring-foreground/10 bg-muted/50"
+                    : "border-border hover:border-foreground/20 hover:bg-muted/30",
                 )}
               >
                 <div
@@ -176,45 +238,61 @@ export function CustomizationPanel() {
                   <p className="text-sm font-medium text-foreground">{p.label}</p>
                   <p className="text-xs text-muted-foreground font-mono">{preset.light}</p>
                 </div>
-                {isActive && <Check className="h-4 w-4 text-primary ml-auto shrink-0" />}
+                {isActive && <Check className="h-4 w-4 text-foreground ml-auto shrink-0" />}
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Custom Color */}
+      {/* Custom Color with Picker */}
       <div>
         <h3 className="text-sm font-semibold text-foreground mb-1">Custom Color</h3>
-        <p className="text-xs text-muted-foreground mb-3">Enter HSL values for a custom primary color (hue saturation% lightness%).</p>
-        <div className="flex gap-4">
+        <p className="text-xs text-muted-foreground mb-3">Use the color picker or enter HSL values manually.</p>
+        <div className="flex gap-6">
           <div className="flex-1">
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Light Mode</label>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Light Mode</label>
             <div className="flex items-center gap-2">
-              <div
-                className="h-8 w-8 rounded-lg shrink-0 border border-border"
-                style={{ backgroundColor: `hsl(${lightHsl})` }}
-              />
+              <label className="relative cursor-pointer">
+                <input
+                  type="color"
+                  value={hslToHex(lightHsl)}
+                  onChange={(e) => handleColorPicker("light", e.target.value)}
+                  className="absolute inset-0 opacity-0 cursor-pointer"
+                />
+                <div
+                  className="h-9 w-9 rounded-lg shrink-0 border-2 border-border hover:border-foreground/30 transition-colors"
+                  style={{ backgroundColor: `hsl(${lightHsl})` }}
+                />
+              </label>
               <input
                 type="text"
                 value={lightHsl}
-                onChange={(e) => handleCustomChange("light", e.target.value)}
+                onChange={(e) => handleHslChange("light", e.target.value)}
                 placeholder="215 70% 55%"
                 className="flex-1 rounded-lg border border-input bg-background px-3 py-1.5 text-sm font-mono"
               />
             </div>
           </div>
           <div className="flex-1">
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Dark Mode</label>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Dark Mode</label>
             <div className="flex items-center gap-2">
-              <div
-                className="h-8 w-8 rounded-lg shrink-0 border border-border"
-                style={{ backgroundColor: `hsl(${darkHsl})` }}
-              />
+              <label className="relative cursor-pointer">
+                <input
+                  type="color"
+                  value={hslToHex(darkHsl)}
+                  onChange={(e) => handleColorPicker("dark", e.target.value)}
+                  className="absolute inset-0 opacity-0 cursor-pointer"
+                />
+                <div
+                  className="h-9 w-9 rounded-lg shrink-0 border-2 border-border hover:border-foreground/30 transition-colors"
+                  style={{ backgroundColor: `hsl(${darkHsl})` }}
+                />
+              </label>
               <input
                 type="text"
                 value={darkHsl}
-                onChange={(e) => handleCustomChange("dark", e.target.value)}
+                onChange={(e) => handleHslChange("dark", e.target.value)}
                 placeholder="215 70% 65%"
                 className="flex-1 rounded-lg border border-input bg-background px-3 py-1.5 text-sm font-mono"
               />
@@ -249,7 +327,7 @@ export function CustomizationPanel() {
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-3 pt-2 border-t border-border">
+      <div className="flex items-center gap-3 pt-4 border-t border-border">
         <button
           onClick={handleReset}
           disabled={resetting}
