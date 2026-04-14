@@ -9,7 +9,9 @@ from app.database import get_db
 from app.core.auth import require_admin
 from app.models.user import User, Role, Permission, UserRole, UserPermission
 from app.models.audit_log import AuditLog
+from app.models.platform_settings import PlatformSettings
 from app.config import settings
+from pydantic import BaseModel
 from app.schemas.admin import (
     GrantRoleRequest, RevokeRoleRequest,
     GrantPermissionRequest, RevokePermissionRequest,
@@ -413,3 +415,115 @@ async def get_audit_logs(
             for log in logs
         ]
     }
+
+
+# ── Theme Customization ─────────────────────────────────────────────
+
+THEME_PRESETS = {
+    "slate_blue": {"light": "215 70% 55%", "dark": "215 70% 65%"},
+    "indigo":     {"light": "239 84% 67%", "dark": "239 84% 74%"},
+    "teal":       {"light": "172 66% 50%", "dark": "172 66% 60%"},
+    "emerald":    {"light": "160 84% 39%", "dark": "160 84% 49%"},
+    "rose":       {"light": "346 77% 50%", "dark": "346 77% 60%"},
+    "amber":      {"light": "38 92% 50%",  "dark": "38 92% 60%"},
+}
+
+DEFAULT_THEME = THEME_PRESETS["slate_blue"]
+
+
+class ThemeUpdateRequest(BaseModel):
+    theme_preset: str = "slate_blue"
+    primary_hsl_light: str = DEFAULT_THEME["light"]
+    primary_hsl_dark: str = DEFAULT_THEME["dark"]
+    dark_mode_default: bool = False
+
+
+@router.get("/theme")
+async def get_theme(db: AsyncSession = Depends(get_db)):
+    """Public endpoint — returns current platform theme. No auth required."""
+    result = await db.execute(select(PlatformSettings).where(PlatformSettings.id == 1))
+    s = result.scalar_one_or_none()
+    if not s:
+        return {
+            "theme_preset": "slate_blue",
+            "primary_hsl_light": DEFAULT_THEME["light"],
+            "primary_hsl_dark": DEFAULT_THEME["dark"],
+            "dark_mode_default": False,
+            "presets": THEME_PRESETS,
+        }
+    return {
+        "theme_preset": s.theme_preset,
+        "primary_hsl_light": s.primary_hsl_light,
+        "primary_hsl_dark": s.primary_hsl_dark,
+        "dark_mode_default": s.dark_mode_default,
+        "presets": THEME_PRESETS,
+    }
+
+
+@router.put("/theme")
+async def update_theme(
+    req: ThemeUpdateRequest,
+    request: Request,
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin only — update platform theme."""
+    result = await db.execute(select(PlatformSettings).where(PlatformSettings.id == 1))
+    s = result.scalar_one_or_none()
+    if not s:
+        s = PlatformSettings(id=1)
+        db.add(s)
+
+    s.theme_preset = req.theme_preset
+    s.primary_hsl_light = req.primary_hsl_light
+    s.primary_hsl_dark = req.primary_hsl_dark
+    s.dark_mode_default = req.dark_mode_default
+    s.updated_by = current_user["user_id"]
+
+    await _audit(
+        db,
+        user_id=current_user["user_id"],
+        user_email=current_user.get("email", ""),
+        action="update_theme",
+        module="admin",
+        resource_type="platform_settings",
+        resource_id="theme",
+        details={"preset": req.theme_preset, "dark_mode_default": req.dark_mode_default},
+        ip_address=request.client.host if request.client else None,
+    )
+    await db.commit()
+    return {"message": "Theme updated", "theme_preset": s.theme_preset}
+
+
+@router.post("/theme/reset")
+async def reset_theme(
+    request: Request,
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin only — reset theme to Slate Blue defaults."""
+    result = await db.execute(select(PlatformSettings).where(PlatformSettings.id == 1))
+    s = result.scalar_one_or_none()
+    if not s:
+        s = PlatformSettings(id=1)
+        db.add(s)
+
+    s.theme_preset = "slate_blue"
+    s.primary_hsl_light = DEFAULT_THEME["light"]
+    s.primary_hsl_dark = DEFAULT_THEME["dark"]
+    s.dark_mode_default = False
+    s.updated_by = current_user["user_id"]
+
+    await _audit(
+        db,
+        user_id=current_user["user_id"],
+        user_email=current_user.get("email", ""),
+        action="reset_theme",
+        module="admin",
+        resource_type="platform_settings",
+        resource_id="theme",
+        details={},
+        ip_address=request.client.host if request.client else None,
+    )
+    await db.commit()
+    return {"message": "Theme reset to Slate Blue"}

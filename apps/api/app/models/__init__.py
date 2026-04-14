@@ -8,6 +8,7 @@ from app.models.audit_log import AuditLog
 from app.models.chat import ChatConversation, ChatMessage
 from app.models.context_tree import ContextTreeRun
 from app.models.content_version import ContentVersion
+from app.models.platform_settings import PlatformSettings
 
 __all__ = [
     "User", "Role", "Permission", "UserRole", "UserPermission",
@@ -21,4 +22,5 @@ __all__ = [
     "ChatConversation", "ChatMessage",
     "ContextTreeRun",
     "ContentVersion",
+    "PlatformSettings",
 ]

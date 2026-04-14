@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { ThemeToggleFloating } from "@/components/shared/theme-toggle";
+import { ThemeLoader } from "@/components/shared/theme-loader";
 import { Toaster } from "sonner";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -25,6 +26,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <Providers>
+          <ThemeLoader />
           {children}
           <ThemeToggleFloating />
           <Toaster position="bottom-right" richColors />
