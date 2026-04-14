@@ -14,25 +14,11 @@ import {
   History,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import dynamic from "next/dynamic";
 import { cn, formatDate } from "@/lib/utils";
 import { useContextStore } from "@/stores/context-store";
 import { useVersionHistory } from "@/hooks/use-version-history";
+import { SplitDiffViewer, UnifiedDiffViewer } from "@/components/shared/split-diff-viewer";
 import type { VersionSummary, VersionDetail } from "@/types";
-
-const ReactDiffViewer = dynamic(() => import("react-diff-viewer-continued"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex items-center justify-center h-full text-muted-foreground">
-      <Loader2 className="h-5 w-5 animate-spin mr-2" />
-      Loading diff viewer...
-    </div>
-  ),
-});
-
-enum DiffMethod {
-  WORDS_WITH_SPACE = "diffWordsWithSpace",
-}
 
 function looksLikeHtml(text: string): boolean {
   return /^\s*<[a-z][\s\S]*>/i.test(text.trim());
@@ -76,49 +62,6 @@ function ChangeBadge({ type }: { type: string }) {
     </span>
   );
 }
-
-const diffStyles = {
-  variables: {
-    light: {
-      diffViewerBackground: "#ffffff",
-      addedBackground: "#ecfdf5",
-      addedColor: "#065f46",
-      removedBackground: "#fef2f2",
-      removedColor: "#991b1b",
-      wordAddedBackground: "#bbf7d0",
-      wordRemovedBackground: "#fecaca",
-      addedGutterBackground: "#d1fae5",
-      removedGutterBackground: "#fee2e2",
-      gutterBackground: "#f9fafb",
-      gutterColor: "#9ca3af",
-      codeFoldBackground: "#f3f4f6",
-      codeFoldGutterBackground: "#e5e7eb",
-      codeFoldContentColor: "#6b7280",
-      emptyLineBackground: "#f9fafb",
-    },
-  },
-  contentText: {
-    fontSize: "13px",
-    lineHeight: "1.6",
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    wordBreak: "break-word" as const,
-    whiteSpace: "pre-wrap" as const,
-  },
-  content: {
-    width: "100%",
-    wordBreak: "break-word" as const,
-    overflow: "hidden" as const,
-  },
-  line: {
-    padding: "2px 10px",
-    wordBreak: "break-word" as const,
-    whiteSpace: "pre-wrap" as const,
-  },
-  diffContainer: {
-    tableLayout: "fixed" as const,
-    width: "100%",
-  },
-};
 
 function VersionSelector({
   versions,
@@ -175,6 +118,7 @@ export function ContextVersionDialog() {
   } = useVersionHistory("aira_context", versionHistoryContextId);
 
   const [mode, setMode] = useState<"browse" | "compare">("browse");
+  const [expandAll, setExpandAll] = useState(false);
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<VersionDetail | null>(null);
   const [loadingSelected, setLoadingSelected] = useState(false);
@@ -345,6 +289,9 @@ export function ContextVersionDialog() {
               {splitView ? <Rows2 className="h-3.5 w-3.5" /> : <Columns2 className="h-3.5 w-3.5" />}
               {splitView ? "Unified" : "Split"}
             </button>
+            <button onClick={() => setExpandAll(!expandAll)} className={cn("flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors", expandAll ? "border-primary/30 bg-primary/5 text-primary" : "border-input text-muted-foreground hover:bg-muted hover:text-foreground")}>
+              {expandAll ? "Collapse" : "Expand All"}
+            </button>
             <button onClick={handleExitCompare} className="flex items-center gap-1.5 rounded-lg border border-input px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
               <X className="h-3.5 w-3.5" />
               Exit
@@ -446,44 +393,28 @@ export function ContextVersionDialog() {
               </motion.div>
             ) : (
               <motion.div key="compare" variants={fadeVariants} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.12 }} className="flex-1 flex flex-col overflow-hidden min-w-0">
-                {compareLeftDetail && compareRightDetail && (
-                  <div className="flex border-b border-border bg-muted/30 shrink-0">
-                    <div className="flex-1 px-5 py-2 border-r border-border">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono font-bold text-muted-foreground">v{compareLeftDetail.version_number}</span>
-                        <ChangeBadge type={compareLeftDetail.change_type} />
-                        <span className="text-xs text-muted-foreground">{formatDate(compareLeftDetail.created_at)}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5 truncate">{compareLeftDetail.change_summary}</p>
-                    </div>
-                    <div className="flex-1 px-5 py-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono font-bold text-muted-foreground">v{compareRightDetail.version_number}</span>
-                        <ChangeBadge type={compareRightDetail.change_type} />
-                        <span className="text-xs text-muted-foreground">{formatDate(compareRightDetail.created_at)}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5 truncate">{compareRightDetail.change_summary}</p>
-                    </div>
-                  </div>
-                )}
-                <div className="flex-1 overflow-y-auto overflow-x-hidden min-w-0">
+                <div className="flex-1 overflow-auto min-w-0">
                   {loadingCompareLeft || loadingCompareRight ? (
                     <div className="flex items-center justify-center h-full">
                       <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                       <span className="ml-2 text-sm text-muted-foreground">Loading versions...</span>
                     </div>
                   ) : compareLeftDetail && compareRightDetail ? (
-                    <ReactDiffViewer
-                      oldValue={leftDiffContent}
-                      newValue={rightDiffContent}
-                      splitView={splitView}
-                      useDarkTheme={false}
-                      leftTitle={`Version ${compareLeft}`}
-                      rightTitle={`Version ${compareRight}`}
-                      compareMethod={DiffMethod.WORDS_WITH_SPACE}
-                      styles={diffStyles}
-                      hideLineNumbers={false}
-                    />
+                    splitView ? (
+                      <SplitDiffViewer
+                        oldValue={leftDiffContent}
+                        newValue={rightDiffContent}
+                        oldTitle={`Version ${compareLeft}`}
+                        newTitle={`Version ${compareRight}`}
+                        contextLines={expandAll ? Infinity : 3}
+                      />
+                    ) : (
+                      <UnifiedDiffViewer
+                        oldValue={leftDiffContent}
+                        newValue={rightDiffContent}
+                        contextLines={expandAll ? Infinity : 3}
+                      />
+                    )
                   ) : (
                     <div className="flex items-center justify-center h-full text-muted-foreground">
                       <p className="text-sm">Select versions to compare</p>

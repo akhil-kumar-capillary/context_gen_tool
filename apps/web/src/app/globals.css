@@ -99,21 +99,6 @@
   50% { opacity: 0; }
 }
 
-/* ── react-diff-viewer: force word wrap ── */
-[class*="diff-viewer"] table {
-  table-layout: fixed;
-  width: 100%;
-}
-[class*="diff-viewer"] td {
-  word-break: break-word;
-  white-space: pre-wrap !important;
-  overflow-wrap: break-word;
-}
-[class*="diff-viewer"] pre {
-  white-space: pre-wrap !important;
-  word-break: break-word;
-  overflow-wrap: break-word;
-}
 
 /* ── Animations ── */
 @keyframes fadeIn {

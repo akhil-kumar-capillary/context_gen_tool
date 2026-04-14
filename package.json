@@ -20,6 +20,8 @@
   },
   "packageManager": "npm@10.0.0",
   "dependencies": {
+    "@types/diff": "^7.0.2",
+    "diff": "^9.0.0",
     "isomorphic-dompurify": "^3.8.0"
   }
 }
