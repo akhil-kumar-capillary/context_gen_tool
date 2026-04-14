@@ -31,7 +31,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             }
             return (
               <code
-                className={`block overflow-x-auto rounded-lg bg-foreground p-4 text-sm font-mono text-muted ${className || ""}`}
+                className={`block overflow-x-auto rounded-lg bg-zinc-900 p-4 text-sm font-mono text-zinc-100 ${className || ""}`}
                 {...props}
               >
                 {children}

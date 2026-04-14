@@ -290,7 +290,7 @@ export function ExtractionResultsViewer({ runId }: { runId: string }) {
                                       </span>
                                     )}
                                   </div>
-                                  <pre className="max-h-80 overflow-auto rounded-lg bg-foreground p-4 text-xs text-muted-foreground leading-relaxed font-mono">
+                                  <pre className="max-h-80 overflow-auto rounded-lg bg-zinc-900 p-4 text-xs text-zinc-100 leading-relaxed font-mono">
                                     {formatJson(rawApiResponse)}
                                   </pre>
                                 </div>

@@ -50,7 +50,7 @@ PATTERNS = [
         "AWS Access Key",
     ),
     (
-        r"sk-[a-zA-Z0-9]{20,}",
+        r"sk-[a-zA-Z0-9_-]{20,}",
         "openai_key",
         "OpenAI API Key",
     ),
@@ -61,8 +61,12 @@ PATTERNS = [
     ),
 ]
 
-# Compile patterns
-_COMPILED = [(re.compile(p, re.IGNORECASE), name, secret_type) for p, name, secret_type in PATTERNS]
+# Compile patterns (AWS keys must be case-sensitive — they're strictly uppercase)
+_CASE_SENSITIVE = {"aws_access_key"}
+_COMPILED = [
+    (re.compile(p, 0 if name in _CASE_SENSITIVE else re.IGNORECASE), name, secret_type)
+    for p, name, secret_type in PATTERNS
+]
 
 
 def _find_secrets_in_text(text: str) -> list[dict]:

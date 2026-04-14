@@ -13,7 +13,7 @@ export function ThemeToggleFloating() {
 
   useEffect(() => setMounted(true), []);
   if (!mounted) return null;
-  if (pathname.startsWith("/dashboard")) return null;
+  if (pathname?.startsWith("/dashboard")) return null;
 
   return (
     <button

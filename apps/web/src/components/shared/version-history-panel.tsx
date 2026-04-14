@@ -123,7 +123,7 @@ export function VersionHistoryPanel({
                     )}
                     <div className="flex gap-1 mt-2">
                       <button
-                        onClick={() => handleRestore(v)}
+                        onClick={(e) => { e.stopPropagation(); handleRestore(v); }}
                         disabled={isRestoring}
                         className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-primary hover:bg-primary/5 transition-colors disabled:opacity-50"
                       >

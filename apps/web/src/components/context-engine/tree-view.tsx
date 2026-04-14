@@ -69,10 +69,11 @@ function TreeRow({
   depth: number;
   searchFilter?: (node: ContextTreeNode) => boolean;
 }) {
-  // Skip nodes that don't match the search filter
-  if (searchFilter && !searchFilter(node)) return null;
   const { selectedNodeId, expandedNodes, selectNode, toggleExpand } =
     useContextEngineStore();
+
+  // Skip nodes that don't match the search filter (after hooks)
+  if (searchFilter && !searchFilter(node)) return null;
 
   const isSelected = selectedNodeId === node.id;
   const isExpanded = expandedNodes[node.id];
@@ -234,6 +235,7 @@ function TreeRow({
 
 export function TreeView() {
   const { treeData, expandAll, collapseAll } = useContextEngineStore();
+  const [search, setSearch] = useState("");
 
   if (!treeData) {
     return (
@@ -242,8 +244,6 @@ export function TreeView() {
       </div>
     );
   }
-
-  const [search, setSearch] = useState("");
 
   // Filter logic: node matches if name/desc contains query, or any descendant matches
   const matchesSearch = (node: ContextTreeNode, query: string): boolean => {

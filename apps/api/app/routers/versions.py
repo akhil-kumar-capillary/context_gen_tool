@@ -188,18 +188,23 @@ async def restore_version(
             "Content-Type": "application/x-www-form-urlencoded",
         }
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.put(
-                f"{base_url}/ask-aira/context/update_context",
-                params={"context_id": entity_id},
-                headers=headers,
-                data={"name": name, "context": encoded, "scope": scope},
-            )
-            if not resp.is_success:
-                raise HTTPException(resp.status_code, "Failed to restore context in Capillary")
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.put(
+                    f"{base_url}/ask-aira/context/update_context",
+                    params={"context_id": entity_id},
+                    headers=headers,
+                    data={"name": name, "context": encoded, "scope": scope},
+                )
+                if not resp.is_success:
+                    raise HTTPException(resp.status_code, "Failed to restore context in Capillary")
+        except httpx.RequestError as e:
+            logger.error("Network error restoring context %s: %s", entity_id, e)
+            raise HTTPException(502, "Failed to connect to Capillary service")
 
         # Create version record for the restore
         new_snapshot = {"name": name, "content": content, "scope": scope}
+        version_recorded = True
         try:
             async with async_session() as db:
                 await ver_svc.create_version(
@@ -216,5 +221,6 @@ async def restore_version(
                 await db.commit()
         except Exception:
             logger.warning("Failed to create version for context restore %s", entity_id, exc_info=True)
+            version_recorded = False
 
-        return {"success": True, "restored_version": version_number}
+        return {"success": True, "restored_version": version_number, "version_recorded": version_recorded}

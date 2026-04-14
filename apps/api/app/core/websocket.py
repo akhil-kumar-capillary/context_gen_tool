@@ -175,7 +175,7 @@ async def websocket_endpoint(websocket: WebSocket):
             _rate_count += 1
             if _rate_count > 20:
                 logger.debug("WebSocket rate limit hit for connection %s", connection_id)
-                await websocket.send_json({"type": "error", "message": "Rate limit exceeded, please slow down"})
+                await ws_manager.send_to_connection(connection_id, {"type": "error", "message": "Rate limit exceeded, please slow down"})
                 continue
 
             ws_manager.touch(connection_id)

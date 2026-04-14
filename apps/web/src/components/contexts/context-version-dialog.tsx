@@ -232,6 +232,7 @@ export function ContextVersionDialog() {
 
   useEffect(() => {
     if (compareRight === null) { setCompareRightDetail(null); return; }
+    if (compareRightDetail?.version_number === compareRight) return;
     let cancelled = false;
     setLoadingCompareRight(true);
     fetchVersionDetail(compareRight).then((d) => {

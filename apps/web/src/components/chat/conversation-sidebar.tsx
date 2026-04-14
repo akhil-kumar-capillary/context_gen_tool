@@ -126,26 +126,30 @@ export function ConversationSidebar({
               {group.label}
             </p>
             {group.items.map((conv) => (
-              <button
+              <div
                 key={conv.id}
-                onClick={() => handleSelect(conv.id)}
                 className={cn(
-                  "group flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors",
+                  "group flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition-colors",
                   activeConversationId === conv.id
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-muted"
                 )}
               >
-                <MessageSquare className="h-3.5 w-3.5 shrink-0 opacity-50" />
-                <span className="flex-1 truncate">{conv.title}</span>
+                <button
+                  onClick={() => handleSelect(conv.id)}
+                  className="flex flex-1 items-center gap-2 text-left min-w-0"
+                >
+                  <MessageSquare className="h-3.5 w-3.5 shrink-0 opacity-50" />
+                  <span className="flex-1 truncate">{conv.title}</span>
+                </button>
                 <button
                   onClick={(e) => handleDelete(conv.id, e)}
-                  className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-red-100 hover:text-red-600 group-hover:block"
+                  className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive group-hover:block"
                   aria-label="Delete conversation"
                 >
                   <Trash2 className="h-3 w-3" />
                 </button>
-              </button>
+              </div>
             ))}
           </div>
         ))}

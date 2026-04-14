@@ -16,10 +16,14 @@ export function ChatMessage({ message }: ChatMessageProps) {
   const isAssistant = message.role === "assistant";
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(message.content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard unavailable (non-HTTPS or permission denied)
+    }
   };
 
   return (

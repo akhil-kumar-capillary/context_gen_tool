@@ -88,6 +88,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # WARNING: This downgrade is DESTRUCTIVE. All content_versions data
+    # (version history) will be lost and cannot be migrated back to
+    # context_tree_checkpoints due to schema differences.
+    # Only run this in development/testing.
+
     # Recreate checkpoints table
     op.create_table(
         'context_tree_checkpoints',
