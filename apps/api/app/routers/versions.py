@@ -125,6 +125,50 @@ async def get_version(
     }
 
 
+# ── Backfill initial version ──────────────────────────────────────────
+
+class BackfillRequest(BaseModel):
+    snapshot: dict = Field(..., description="Current state to store as version 1")
+
+
+@router.post("/{entity_type}/{entity_id}/backfill")
+async def backfill_initial_version(
+    entity_type: str,
+    entity_id: str,
+    req: BackfillRequest,
+    org_id: int = Depends(require_org_member),
+    current_user: dict = Depends(require_permission("context_management", "edit")),
+):
+    """Create version 1 for a context that predates the versioning system.
+
+    Only creates a version if none exist yet. Idempotent — safe to call multiple times.
+    """
+    _validate_entity_type(entity_type)
+
+    async with async_session() as db:
+        versions, total = await ver_svc.get_version_history(
+            db, entity_type, entity_id, org_id, limit=1, offset=0,
+        )
+        if total > 0:
+            return {"created": False, "message": "Versions already exist"}
+
+        await ver_svc.create_version(
+            db,
+            entity_type=entity_type,
+            entity_id=str(entity_id),
+            org_id=org_id,
+            snapshot=req.snapshot,
+            previous_snapshot=None,
+            change_type="create",
+            change_summary="Initial version (backfill)",
+            changed_fields=list(req.snapshot.keys()),
+            user_id=current_user.get("user_id"),
+        )
+        await db.commit()
+
+    return {"created": True, "message": "Version 1 created"}
+
+
 # ── Restore a version ────────────────────────────────────────────────
 
 class RestoreRequest(BaseModel):

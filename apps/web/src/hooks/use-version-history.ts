@@ -15,6 +15,7 @@ interface UseVersionHistoryReturn {
   fetchHistory: (reset?: boolean) => Promise<void>;
   fetchVersionDetail: (versionNumber: number) => Promise<VersionDetail | null>;
   restoreVersion: (versionNumber: number, currentVersion?: number) => Promise<boolean>;
+  backfillVersion: (snapshot: Record<string, unknown>) => Promise<boolean>;
 }
 
 const PAGE_SIZE = 50;
@@ -105,6 +106,25 @@ export function useVersionHistory(
     [entityType, entityId],
   );
 
+  const backfillVersion = useCallback(
+    async (snapshot: Record<string, unknown>): Promise<boolean> => {
+      const { token, orgId } = useAuthStore.getState();
+      if (!token || !orgId || !entityId) return false;
+
+      try {
+        await apiClient.post(
+          `/api/versions/${entityType}/${entityId}/backfill?org_id=${orgId}`,
+          { snapshot },
+          { token },
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [entityType, entityId],
+  );
+
   return {
     versions,
     total,
@@ -115,5 +135,6 @@ export function useVersionHistory(
     fetchHistory,
     fetchVersionDetail,
     restoreVersion,
+    backfillVersion,
   };
 }
