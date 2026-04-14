@@ -122,6 +122,9 @@ export function CustomizationPanel() {
           darkMode: data.dark_mode_default,
         });
       })
+      .catch(() => {
+        toast.error("Failed to load theme settings");
+      })
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
