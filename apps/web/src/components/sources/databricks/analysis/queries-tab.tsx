@@ -53,7 +53,7 @@ function StructuralFlags({ fp }: { fp: Fingerprint }) {
   ];
   const activeFlags = flags.filter((f) => f.on);
   if (!activeFlags.length)
-    return <span className="text-gray-400 text-[10px]">simple</span>;
+    return <span className="text-muted-foreground text-xs">simple</span>;
   return (
     <div className="flex flex-wrap gap-0.5">
       {activeFlags.map((f) => (
@@ -120,7 +120,7 @@ function QueryDetail({ fp }: { fp: Fingerprint }) {
       transition={{ duration: 0.3, ease: "easeInOut" }}
       className="overflow-hidden"
     >
-      <div className="border-t border-gray-100 bg-gray-50 p-4 space-y-3">
+      <div className="border-t border-border bg-muted/50 p-4 space-y-3">
         {/* Section tabs */}
         <div className="flex gap-1 overflow-x-auto pb-1">
           {sections.map((s) => (
@@ -132,8 +132,8 @@ function QueryDetail({ fp }: { fp: Fingerprint }) {
                 transition-all duration-200
                 ${
                   activeSection === s.id
-                    ? "bg-violet-600 text-white shadow-md"
-                    : "bg-white hover:bg-gray-100 text-gray-500 hover:text-gray-700 border border-gray-200"
+                    ? "bg-primary text-primary-foreground shadow-md"
+                    : "bg-background hover:bg-muted text-muted-foreground hover:text-foreground border border-border"
                 }
               `}
             >
@@ -145,8 +145,8 @@ function QueryDetail({ fp }: { fp: Fingerprint }) {
                   text-[9px] px-1 rounded-full
                   ${
                     activeSection === s.id
-                      ? "bg-white/20"
-                      : "bg-gray-200"
+                      ? "bg-background/20"
+                      : "bg-muted"
                   }
                 `}
                 >
@@ -167,8 +167,8 @@ function QueryDetail({ fp }: { fp: Fingerprint }) {
             transition={{ duration: 0.15 }}
           >
             {activeSection === "sql" && (
-              <div className="rounded-lg bg-white border border-gray-200 p-3">
-                <pre className="text-xs font-mono text-gray-700 whitespace-pre-wrap break-all leading-relaxed max-h-[300px] overflow-y-auto">
+              <div className="rounded-lg bg-background border border-border p-3">
+                <pre className="text-xs font-mono text-foreground whitespace-pre-wrap break-all leading-relaxed max-h-[300px] overflow-y-auto">
                   {fp.raw_sql || fp.canonical_sql}
                 </pre>
               </div>
@@ -179,10 +179,10 @@ function QueryDetail({ fp }: { fp: Fingerprint }) {
                 {fp.tables.map((t) => (
                   <div
                     key={t}
-                    className="bg-white border border-gray-200 rounded-lg px-3 py-2 flex items-center gap-2"
+                    className="bg-background border border-border rounded-lg px-3 py-2 flex items-center gap-2"
                   >
                     <Table2 className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
-                    <span className="text-xs font-mono truncate text-gray-700">
+                    <span className="text-xs font-mono truncate text-foreground">
                       {t}
                     </span>
                   </div>
@@ -190,7 +190,7 @@ function QueryDetail({ fp }: { fp: Fingerprint }) {
                 {fp.alias_map &&
                   Object.keys(fp.alias_map).length > 0 && (
                     <div className="col-span-full mt-2">
-                      <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider mb-1">
+                      <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1">
                         Aliases
                       </div>
                       <div className="flex flex-wrap gap-1">
@@ -222,9 +222,9 @@ function QueryDetail({ fp }: { fp: Fingerprint }) {
                   ).map(([table, cols]) => (
                     <div
                       key={table}
-                      className="bg-white border border-gray-200 rounded-lg p-3"
+                      className="bg-background border border-border rounded-lg p-3"
                     >
-                      <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider mb-1.5">
+                      <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1.5">
                         {table}
                       </div>
                       <div className="flex flex-wrap gap-1">
@@ -237,12 +237,12 @@ function QueryDetail({ fp }: { fp: Fingerprint }) {
                     </div>
                   ))
                 ) : (
-                  <div className="text-xs text-gray-400 text-center py-4">
+                  <div className="text-xs text-muted-foreground text-center py-4">
                     No column data
                   </div>
                 )}
                 {fp.select_col_count > 0 && (
-                  <div className="text-[10px] text-gray-400 text-right">
+                  <div className="text-xs text-muted-foreground text-right">
                     {fp.select_col_count} SELECT columns
                   </div>
                 )}
@@ -252,29 +252,29 @@ function QueryDetail({ fp }: { fp: Fingerprint }) {
             {activeSection === "joins" && (
               <div className="space-y-2">
                 {!fp.join_graph?.length ? (
-                  <div className="text-xs text-gray-400 text-center py-4">
+                  <div className="text-xs text-muted-foreground text-center py-4">
                     No joins in this query
                   </div>
                 ) : (
                   fp.join_graph.map((j, i) => (
                     <div
                       key={i}
-                      className="bg-white border border-gray-200 rounded-lg p-3 space-y-1.5"
+                      className="bg-background border border-border rounded-lg p-3 space-y-1.5"
                     >
                       <div className="flex items-center gap-2">
                         <Badge variant="blue">
                           {j.join_type || "JOIN"}
                         </Badge>
-                        <span className="text-xs font-mono font-bold text-gray-700">
+                        <span className="text-xs font-mono font-bold text-foreground">
                           {j.left}
                         </span>
-                        <GitBranch className="h-3 w-3 text-gray-400 rotate-90" />
-                        <span className="text-xs font-mono font-bold text-gray-700">
+                        <GitBranch className="h-3 w-3 text-muted-foreground rotate-90" />
+                        <span className="text-xs font-mono font-bold text-foreground">
                           {j.right}
                         </span>
                       </div>
                       {j.on_condition && (
-                        <div className="text-[11px] font-mono text-gray-500 bg-gray-50 rounded px-2 py-1">
+                        <div className="text-xs font-mono text-muted-foreground bg-muted/50 rounded px-2 py-1">
                           ON {j.on_condition}
                         </div>
                       )}
@@ -287,16 +287,16 @@ function QueryDetail({ fp }: { fp: Fingerprint }) {
             {activeSection === "filters" && (
               <div className="space-y-2">
                 {!fp.where_conditions?.length ? (
-                  <div className="text-xs text-gray-400 text-center py-4">
+                  <div className="text-xs text-muted-foreground text-center py-4">
                     No WHERE conditions
                   </div>
                 ) : (
                   fp.where_conditions.map((w, i) => (
                     <div
                       key={i}
-                      className="bg-white border border-gray-200 rounded-lg px-3 py-2"
+                      className="bg-background border border-border rounded-lg px-3 py-2"
                     >
-                      <span className="text-xs font-mono text-gray-700">
+                      <span className="text-xs font-mono text-foreground">
                         {w}
                       </span>
                     </div>
@@ -304,15 +304,15 @@ function QueryDetail({ fp }: { fp: Fingerprint }) {
                 )}
                 {fp.having_conditions && fp.having_conditions.length > 0 && (
                   <>
-                    <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider mt-3">
+                    <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mt-3">
                       HAVING
                     </div>
                     {fp.having_conditions.map((h, i) => (
                       <div
                         key={i}
-                        className="bg-white border border-gray-200 rounded-lg px-3 py-2"
+                        className="bg-background border border-border rounded-lg px-3 py-2"
                       >
-                        <span className="text-xs font-mono text-gray-700">
+                        <span className="text-xs font-mono text-foreground">
                           {h}
                         </span>
                       </div>
@@ -326,7 +326,7 @@ function QueryDetail({ fp }: { fp: Fingerprint }) {
               <div className="space-y-3">
                 {fp.functions && fp.functions.length > 0 && (
                   <div>
-                    <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider mb-1.5">
+                    <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1.5">
                       Functions
                     </div>
                     <div className="flex flex-wrap gap-1">
@@ -340,7 +340,7 @@ function QueryDetail({ fp }: { fp: Fingerprint }) {
                 )}
                 {fp.group_by && fp.group_by.length > 0 && (
                   <div>
-                    <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider mb-1.5">
+                    <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1.5">
                       GROUP BY
                     </div>
                     <div className="flex flex-wrap gap-1">
@@ -354,7 +354,7 @@ function QueryDetail({ fp }: { fp: Fingerprint }) {
                 )}
                 {fp.order_by && fp.order_by.length > 0 && (
                   <div>
-                    <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider mb-1.5">
+                    <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1.5">
                       ORDER BY
                     </div>
                     <div className="flex flex-wrap gap-1">
@@ -373,15 +373,15 @@ function QueryDetail({ fp }: { fp: Fingerprint }) {
               <div className="space-y-3">
                 {fp.case_when_blocks && fp.case_when_blocks.length > 0 && (
                   <div>
-                    <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider mb-1.5">
+                    <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1.5">
                       CASE WHEN Blocks
                     </div>
                     {fp.case_when_blocks.map((c, i) => (
                       <div
                         key={i}
-                        className="bg-white border border-gray-200 rounded-lg px-3 py-2 mt-1"
+                        className="bg-background border border-border rounded-lg px-3 py-2 mt-1"
                       >
-                        <pre className="text-xs font-mono whitespace-pre-wrap max-h-[100px] overflow-y-auto text-gray-700">
+                        <pre className="text-xs font-mono whitespace-pre-wrap max-h-[100px] overflow-y-auto text-foreground">
                           {c}
                         </pre>
                       </div>
@@ -390,15 +390,15 @@ function QueryDetail({ fp }: { fp: Fingerprint }) {
                 )}
                 {fp.window_exprs && fp.window_exprs.length > 0 && (
                   <div>
-                    <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider mb-1.5">
+                    <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1.5">
                       Window Expressions
                     </div>
                     {fp.window_exprs.map((w, i) => (
                       <div
                         key={i}
-                        className="bg-white border border-gray-200 rounded-lg px-3 py-2 mt-1"
+                        className="bg-background border border-border rounded-lg px-3 py-2 mt-1"
                       >
-                        <span className="text-xs font-mono text-gray-700">
+                        <span className="text-xs font-mono text-foreground">
                           {w}
                         </span>
                       </div>
@@ -407,16 +407,16 @@ function QueryDetail({ fp }: { fp: Fingerprint }) {
                 )}
                 {(!fp.case_when_blocks || fp.case_when_blocks.length === 0) &&
                   (!fp.window_exprs || fp.window_exprs.length === 0) && (
-                    <div className="text-xs text-gray-400 text-center py-4">
+                    <div className="text-xs text-muted-foreground text-center py-4">
                       No CASE/WINDOW patterns
                     </div>
                   )}
                 {fp.nl_question && (
                   <div>
-                    <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider mb-1.5">
+                    <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1.5">
                       Natural Language Question
                     </div>
-                    <div className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-700">
+                    <div className="bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground">
                       {fp.nl_question}
                     </div>
                   </div>
@@ -473,12 +473,12 @@ export function QueriesTab() {
               e.stopPropagation();
               toggleRow(row.original.id);
             }}
-            className="p-1 hover:bg-gray-200 rounded transition-colors"
+            className="p-1 hover:bg-muted rounded transition-colors"
           >
             {expandedRows.has(row.original.id) ? (
-              <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
             ) : (
-              <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
             )}
           </button>
         ),
@@ -508,8 +508,8 @@ export function QueriesTab() {
         size: 60,
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
-            <Hash className="h-3 w-3 text-gray-400" />
-            <span className="font-mono text-xs font-bold tabular-nums text-gray-700">
+            <Hash className="h-3 w-3 text-muted-foreground" />
+            <span className="font-mono text-xs font-bold tabular-nums text-foreground">
               {row.original.frequency}
             </span>
           </div>
@@ -543,7 +543,7 @@ export function QueriesTab() {
         cell: ({ row }) => {
           const fp = row.original;
           return (
-            <div className="flex items-center gap-2 text-[10px] text-gray-400">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
               {fp.qualified_columns && fp.qualified_columns.length > 0 && (
                 <span className="flex items-center gap-0.5">
                   <Columns3 className="h-3 w-3" />{" "}
@@ -577,7 +577,7 @@ export function QueriesTab() {
         header: "SQL Preview",
         size: 300,
         cell: ({ row }) => (
-          <div className="text-xs font-mono text-gray-400 truncate max-w-[300px]">
+          <div className="text-xs font-mono text-muted-foreground truncate max-w-[300px]">
             {(
               row.original.raw_sql ||
               row.original.canonical_sql ||
@@ -612,14 +612,14 @@ export function QueriesTab() {
 
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-medium text-gray-500">Query Explorer</h3>
-      <p className="text-xs text-gray-400">
+      <h3 className="text-sm font-medium text-muted-foreground">Query Explorer</h3>
+      <p className="text-xs text-muted-foreground">
         Browse all extracted query fingerprints. Expand any row to see full
         component breakdown.
       </p>
 
       {!fingerprints.length ? (
-        <div className="h-[400px] flex items-center justify-center text-sm text-gray-400">
+        <div className="h-[400px] flex items-center justify-center text-sm text-muted-foreground">
           No fingerprints loaded
         </div>
       ) : (
@@ -632,15 +632,15 @@ export function QueriesTab() {
           {/* Search + stats */}
           <div className="flex items-center gap-3">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <input
                 value={globalFilter}
                 onChange={(e) => setGlobalFilter(e.target.value)}
                 placeholder="Search queries by table, SQL content..."
-                className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 bg-white text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-300"
+                className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
             </div>
-            <div className="text-xs text-gray-400 whitespace-nowrap">
+            <div className="text-xs text-muted-foreground whitespace-nowrap">
               {table.getFilteredRowModel().rows.length} of{" "}
               {totalFingerprints} queries
               {selectedTable && (
@@ -653,19 +653,19 @@ export function QueriesTab() {
           </div>
 
           {/* Table */}
-          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+          <div className="rounded-xl border border-border bg-background overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   {table.getHeaderGroups().map((hg) => (
                     <tr
                       key={hg.id}
-                      className="border-b border-gray-100 bg-gray-50"
+                      className="border-b border-border bg-muted/50"
                     >
                       {hg.headers.map((header) => (
                         <th
                           key={header.id}
-                          className="px-3 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700 transition-colors"
+                          className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-foreground transition-colors"
                           style={{ width: header.getSize() }}
                           onClick={header.column.getToggleSortingHandler()}
                         >
@@ -688,10 +688,10 @@ export function QueriesTab() {
                     <Fragment key={row.id}>
                       <tr
                         className={`
-                          border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors
+                          border-b border-border hover:bg-muted/50 cursor-pointer transition-colors
                           ${
                             expandedRows.has(row.original.id)
-                              ? "bg-violet-50/30"
+                              ? "bg-primary/5/30"
                               : ""
                           }
                         `}
@@ -726,8 +726,8 @@ export function QueriesTab() {
             </div>
 
             {/* Pagination */}
-            <div className="flex items-center justify-between border-t border-gray-100 px-4 py-3 bg-gray-50">
-              <div className="text-xs text-gray-400">
+            <div className="flex items-center justify-between border-t border-border px-4 py-3 bg-muted/50">
+              <div className="text-xs text-muted-foreground">
                 Page {table.getState().pagination.pageIndex + 1} of{" "}
                 {table.getPageCount()}
               </div>
@@ -735,21 +735,21 @@ export function QueriesTab() {
                 <button
                   onClick={() => table.setPageIndex(0)}
                   disabled={!table.getCanPreviousPage()}
-                  className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-30 transition-colors"
+                  className="p-1.5 rounded hover:bg-muted disabled:opacity-30 transition-colors"
                 >
                   <ChevronsLeft className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => table.previousPage()}
                   disabled={!table.getCanPreviousPage()}
-                  className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-30 transition-colors"
+                  className="p-1.5 rounded hover:bg-muted disabled:opacity-30 transition-colors"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => table.nextPage()}
                   disabled={!table.getCanNextPage()}
-                  className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-30 transition-colors"
+                  className="p-1.5 rounded hover:bg-muted disabled:opacity-30 transition-colors"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
@@ -758,7 +758,7 @@ export function QueriesTab() {
                     table.setPageIndex(table.getPageCount() - 1)
                   }
                   disabled={!table.getCanNextPage()}
-                  className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-30 transition-colors"
+                  className="p-1.5 rounded hover:bg-muted disabled:opacity-30 transition-colors"
                 >
                   <ChevronsRight className="h-4 w-4" />
                 </button>

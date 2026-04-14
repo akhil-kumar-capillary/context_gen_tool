@@ -45,14 +45,14 @@ export class ErrorBoundary extends React.Component<Props, State> {
             <AlertTriangle className="h-8 w-8 text-red-500" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">
+            <h2 className="text-lg font-semibold text-foreground">
               Something went wrong
             </h2>
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-muted-foreground">
               An unexpected error occurred. Please try again.
             </p>
             {this.state.error && (
-              <p className="mt-2 max-w-md text-xs text-gray-400">
+              <p className="mt-2 max-w-md text-xs text-muted-foreground">
                 {this.state.error.message}
               </p>
             )}
@@ -66,7 +66,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
                   retryCount: prev.retryCount + 1,
                 }))
               }
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
             >
               <RotateCcw className="h-4 w-4" />
               Try Again ({MAX_RETRIES - this.state.retryCount} left)
@@ -74,7 +74,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
           ) : (
             <a
               href="/dashboard"
-              className="inline-flex items-center gap-2 rounded-lg bg-gray-600 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700"
+              className="inline-flex items-center gap-2 rounded-lg bg-muted-foreground px-4 py-2 text-sm font-medium text-white hover:bg-muted-foreground/90"
             >
               Go to Dashboard
             </a>

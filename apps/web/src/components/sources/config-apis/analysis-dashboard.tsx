@@ -35,7 +35,7 @@ const ENTITY_LABELS: Record<string, string> = {
 };
 
 const BAR_COLORS = [
-  "bg-violet-500",
+  "bg-primary/50",
   "bg-blue-500",
   "bg-emerald-500",
   "bg-amber-500",
@@ -68,14 +68,14 @@ export function AnalysisDashboard() {
     | undefined;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+    <div className="rounded-xl border border-border bg-background overflow-hidden">
+      <div className="px-4 py-3 border-b border-border bg-muted/50">
         <div className="flex items-center gap-2">
-          <BarChart3 className="h-4 w-4 text-violet-500" />
-          <h3 className="text-sm font-medium text-gray-700">
+          <BarChart3 className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-medium text-foreground">
             Analysis Overview
           </h3>
-          <span className="text-xs text-gray-400 ml-auto">
+          <span className="text-xs text-muted-foreground ml-auto">
             {totalConfigs} total configs across {Object.keys(entityTypeCounts).length} types
           </span>
         </div>
@@ -85,8 +85,8 @@ export function AnalysisDashboard() {
         {/* Entity counts bar chart */}
         <div>
           <div className="flex items-center gap-1.5 mb-3">
-            <Hash className="h-3.5 w-3.5 text-gray-400" />
-            <span className="text-xs font-medium text-gray-600 uppercase tracking-wide">
+            <Hash className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               Entity Counts
             </span>
           </div>
@@ -95,10 +95,10 @@ export function AnalysisDashboard() {
               const pct = Math.max(2, (count / maxCount) * 100);
               return (
                 <div key={et} className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500 w-28 truncate text-right" title={et}>
+                  <span className="text-xs text-muted-foreground w-28 truncate text-right" title={et}>
                     {ENTITY_LABELS[et] || et}
                   </span>
-                  <div className="flex-1 h-5 bg-gray-100 rounded overflow-hidden">
+                  <div className="flex-1 h-5 bg-muted rounded overflow-hidden">
                     <div
                       className={cn(
                         "h-full rounded transition-all",
@@ -107,7 +107,7 @@ export function AnalysisDashboard() {
                       style={{ width: `${pct}%` }}
                     />
                   </div>
-                  <span className="text-xs font-mono text-gray-600 w-8 text-right">
+                  <span className="text-xs font-mono text-muted-foreground w-8 text-right">
                     {count}
                   </span>
                 </div>
@@ -119,8 +119,8 @@ export function AnalysisDashboard() {
         {/* Cluster summary cards */}
         <div>
           <div className="flex items-center gap-1.5 mb-3">
-            <Layers className="h-3.5 w-3.5 text-gray-400" />
-            <span className="text-xs font-medium text-gray-600 uppercase tracking-wide">
+            <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               Clusters ({clusters?.length || 0})
             </span>
           </div>
@@ -128,26 +128,26 @@ export function AnalysisDashboard() {
             {clusters?.slice(0, 10).map((cluster, i) => (
               <div
                 key={`${cluster.entity_type}-${cluster.entity_subtype}-${i}`}
-                className="flex items-center justify-between p-2 rounded-lg border border-gray-100 bg-gray-50"
+                className="flex items-center justify-between p-2 rounded-lg border border-border bg-muted/50"
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-medium text-gray-700 truncate">
+                    <span className="text-xs font-medium text-foreground truncate">
                       {ENTITY_LABELS[cluster.entity_type] || cluster.entity_type}
                     </span>
                     {cluster.entity_subtype && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-600">
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">
                         {cluster.entity_subtype}
                       </span>
                     )}
                   </div>
                   {cluster.naming_pattern && (
-                    <span className="text-[10px] text-gray-400">
+                    <span className="text-xs text-muted-foreground">
                       Pattern: {cluster.naming_pattern}
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-3 text-[10px] text-gray-400 flex-shrink-0">
+                <div className="flex items-center gap-3 text-xs text-muted-foreground flex-shrink-0">
                   <span>{cluster.count} configs</span>
                   <span>{cluster.template_ids.length} templates</span>
                   <span>depth {cluster.avg_depth}</span>
@@ -161,8 +161,8 @@ export function AnalysisDashboard() {
         {structural && structural.length > 0 && (
           <div className="lg:col-span-2">
             <div className="flex items-center gap-1.5 mb-3">
-              <Settings2 className="h-3.5 w-3.5 text-gray-400" />
-              <span className="text-xs font-medium text-gray-600 uppercase tracking-wide">
+              <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 Structural Features
               </span>
             </div>
@@ -170,10 +170,10 @@ export function AnalysisDashboard() {
               {structural.map(([feature, count]) => (
                 <div
                   key={feature}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100"
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 border border-border"
                 >
-                  <span className="text-xs text-gray-600">{feature}</span>
-                  <span className="text-xs font-mono font-medium text-violet-600">
+                  <span className="text-xs text-muted-foreground">{feature}</span>
+                  <span className="text-xs font-mono font-medium text-primary">
                     {count}
                   </span>
                 </div>

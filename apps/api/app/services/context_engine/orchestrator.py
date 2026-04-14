@@ -64,12 +64,17 @@ async def _save_completion(
     token_usage: dict,
     system_prompt_used: str,
     progress_entries: list[dict],
+    org_id: int,
+    user_id: int | None = None,
 ):
     """Save final tree result and mark run as completed.
 
     Retries once on transient DB errors so a successful generation isn't
-    lost due to a momentary connection hiccup.
+    lost due to a momentary connection hiccup.  Also creates version 1
+    (the initial snapshot) for the auto-versioning system.
     """
+    from app.services.versioning import create_version
+
     max_attempts = 2
     for attempt in range(max_attempts):
         try:
@@ -91,6 +96,21 @@ async def _save_completion(
                         completed_at=utcnow(),
                     )
                 )
+
+                # Create initial version (v1) for the tree
+                await create_version(
+                    db,
+                    entity_type="context_tree",
+                    entity_id=str(run_id),
+                    org_id=org_id,
+                    snapshot=tree_data,
+                    previous_snapshot=None,
+                    change_type="create",
+                    change_summary="Initial tree generation",
+                    changed_fields=["tree_data"],
+                    user_id=user_id,
+                )
+
                 await db.commit()
                 return  # success
         except Exception:
@@ -381,6 +401,8 @@ async def run_tree_generation(
             token_usage=result["token_usage"],
             system_prompt_used=result["system_prompt_used"],
             progress_entries=progress_entries,
+            org_id=org_id,
+            user_id=user_id,
         )
 
         await track("saving", "Tree saved to database", "done")

@@ -126,7 +126,7 @@ async def websocket_endpoint(websocket: WebSocket):
             payload = decode_session_token(token)
             user_id = payload.get("user_id")
         except Exception:
-            pass
+            logger.warning("WebSocket query-param auth failed", exc_info=True)
     else:
         # Message-based auth — first message must be {type: "auth", token: "...", org_id?: N}
         try:
@@ -139,11 +139,16 @@ async def websocket_endpoint(websocket: WebSocket):
                     user_id = payload.get("user_id")
                     # Capture org_id from auth message for org-scoped message routing
                     if auth_msg.get("org_id"):
-                        org_id = int(auth_msg["org_id"])
+                        try:
+                            org_id = int(auth_msg["org_id"])
+                        except (ValueError, TypeError):
+                            logger.warning("WebSocket auth: invalid org_id %r", auth_msg.get("org_id"))
                 except Exception:
-                    pass
-        except (asyncio.TimeoutError, json.JSONDecodeError, Exception):
-            pass
+                    logger.warning("WebSocket message-based auth failed", exc_info=True)
+        except asyncio.TimeoutError:
+            logger.debug("WebSocket auth timed out (no auth message within 10s)")
+        except (json.JSONDecodeError, Exception):
+            logger.warning("WebSocket auth message parse failed", exc_info=True)
 
     if user_id is None:
         await websocket.close(code=4001, reason="Authentication required")
@@ -169,7 +174,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 _rate_window_start = now
             _rate_count += 1
             if _rate_count > 20:
-                continue  # silently drop excess messages
+                logger.debug("WebSocket rate limit hit for connection %s", connection_id)
+                await websocket.send_json({"type": "error", "message": "Rate limit exceeded, please slow down"})
+                continue
 
             ws_manager.touch(connection_id)
             try:

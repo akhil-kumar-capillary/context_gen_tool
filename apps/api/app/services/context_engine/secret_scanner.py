@@ -44,6 +44,21 @@ PATTERNS = [
         "jwt_token",
         "JWT Token",
     ),
+    (
+        r"(?:AKIA|ASIA)[A-Z0-9]{16}",
+        "aws_access_key",
+        "AWS Access Key",
+    ),
+    (
+        r"sk-[a-zA-Z0-9]{20,}",
+        "openai_key",
+        "OpenAI API Key",
+    ),
+    (
+        r"(?:connection[_\-]?string|conn[_\-]?str)\s*[:=]\s*\S{20,}",
+        "connection_string",
+        "Connection String",
+    ),
 ]
 
 # Compile patterns

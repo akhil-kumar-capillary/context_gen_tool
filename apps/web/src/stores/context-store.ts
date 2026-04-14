@@ -1,6 +1,8 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth-store";
+import { useChatStore } from "@/stores/chat-store";
 import type { Context, AiGeneratedContext, LLMUsage } from "@/types";
 
 export type ContextStatusFilter = "active" | "archived" | "all";
@@ -17,6 +19,7 @@ interface ContextState {
   confirmArchiveId: string | null;
   actionLoadingId: string | null;
   isCreating: boolean;
+  versionHistoryContextId: string | null;
 
   // AI Generated (sanitize results)
   aiContexts: AiGeneratedContext[] | null;
@@ -34,6 +37,7 @@ interface ContextState {
   setEditingContextId: (id: string | null) => void;
   setConfirmArchiveId: (id: string | null) => void;
   setIsCreating: (creating: boolean) => void;
+  setVersionHistoryContextId: (id: string | null) => void;
   setError: (error: string | null) => void;
   setStatusFilter: (filter: ContextStatusFilter) => void;
 
@@ -68,6 +72,7 @@ export const useContextStore = create<ContextState>((set, get) => ({
   confirmArchiveId: null,
   actionLoadingId: null,
   isCreating: false,
+  versionHistoryContextId: null,
   aiContexts: null,
   sanitizeUsage: null,
 
@@ -110,6 +115,7 @@ export const useContextStore = create<ContextState>((set, get) => ({
         { token }
       );
       set({ isCreating: false });
+      toast.success("Context created");
       await get().fetchContexts();
     } catch (err) {
       set({
@@ -132,6 +138,7 @@ export const useContextStore = create<ContextState>((set, get) => ({
         { token }
       );
       set({ editingContextId: null });
+      toast.success("Context updated");
       await get().fetchContexts();
     } catch (err) {
       set({
@@ -154,6 +161,7 @@ export const useContextStore = create<ContextState>((set, get) => ({
         { token }
       );
     } catch (err) {
+      toast.error("Failed to archive context");
       set({
         error: err instanceof Error ? err.message : "Failed to archive context",
         actionLoadingId: null,
@@ -161,7 +169,7 @@ export const useContextStore = create<ContextState>((set, get) => ({
       });
       return;
     }
-    // Optimistic local update, then background refetch
+    toast.success("Context archived");
     set((state) => ({
       confirmArchiveId: null,
       actionLoadingId: null,
@@ -187,13 +195,14 @@ export const useContextStore = create<ContextState>((set, get) => ({
         { token }
       );
     } catch (err) {
+      toast.error("Failed to restore context");
       set({
         error: err instanceof Error ? err.message : "Failed to restore context",
         actionLoadingId: null,
       });
       return;
     }
-    // Optimistic local update, then background refetch
+    toast.success("Context restored");
     set((state) => ({
       actionLoadingId: null,
       contexts: applyStatusFilter(
@@ -255,9 +264,12 @@ export const useContextStore = create<ContextState>((set, get) => ({
         }
       }
 
-      // Refresh context list
+      const successCount = result.results.filter((r) => r.status !== "error").length;
+      if (successCount > 0) toast.success(`Uploaded ${successCount} context${successCount !== 1 ? "s" : ""}`);
+
       await get().fetchContexts();
     } catch (err) {
+      toast.error("Bulk upload failed");
       // Mark all as failed
       for (const ctx of toUpload) {
         get().setAiContextUploadStatus(ctx.id, "error", "Upload failed");
@@ -277,15 +289,26 @@ export const useContextStore = create<ContextState>((set, get) => ({
       confirmArchiveId: null,
       actionLoadingId: null,
       isCreating: false,
+      versionHistoryContextId: null,
       aiContexts: null,
       sanitizeUsage: null,
     }),
 
   // --- UI setters ---
 
-  setEditingContextId: (editingContextId) => set({ editingContextId }),
+  setEditingContextId: (editingContextId) => {
+    if (editingContextId) useChatStore.getState().setChatDrawerOpen(false);
+    set({ editingContextId });
+  },
   setConfirmArchiveId: (confirmArchiveId) => set({ confirmArchiveId }),
-  setIsCreating: (isCreating) => set({ isCreating }),
+  setIsCreating: (isCreating) => {
+    if (isCreating) useChatStore.getState().setChatDrawerOpen(false);
+    set({ isCreating });
+  },
+  setVersionHistoryContextId: (versionHistoryContextId) => {
+    if (versionHistoryContextId) useChatStore.getState().setChatDrawerOpen(false);
+    set({ versionHistoryContextId });
+  },
   setError: (error) => set({ error }),
   setStatusFilter: (statusFilter) => set({ statusFilter }),
 

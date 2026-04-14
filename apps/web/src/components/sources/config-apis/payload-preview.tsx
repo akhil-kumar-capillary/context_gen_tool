@@ -17,7 +17,7 @@ export function PayloadPreview({ docKey }: PayloadPreviewProps) {
 
   if (isLoadingPayloads) {
     return (
-      <div className="flex items-center justify-center h-full text-sm text-gray-400">
+      <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
         <div className="animate-pulse">Building payload preview...</div>
       </div>
     );
@@ -25,7 +25,7 @@ export function PayloadPreview({ docKey }: PayloadPreviewProps) {
 
   if (!preview) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-sm text-gray-400 gap-2">
+      <div className="flex flex-col items-center justify-center h-full text-sm text-muted-foreground gap-2">
         <FileJson className="h-8 w-8" />
         <span>No payload generated for this doc type</span>
       </div>
@@ -38,22 +38,22 @@ export function PayloadPreview({ docKey }: PayloadPreviewProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Size indicator bar */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 bg-gray-50">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/50">
         <div className="flex items-center gap-3 text-xs">
-          <span className="text-gray-500">
+          <span className="text-muted-foreground">
             {preview.chars.toLocaleString()} chars
           </span>
-          <span className="text-gray-300">|</span>
+          <span className="text-muted-foreground/50">|</span>
           <span
             className={cn(
               "font-medium",
-              overBudget ? "text-red-600" : "text-gray-600"
+              overBudget ? "text-red-600" : "text-muted-foreground"
             )}
           >
             ~{preview.est_tokens.toLocaleString()} tokens
           </span>
-          <span className="text-gray-300">|</span>
-          <span className="text-gray-500">
+          <span className="text-muted-foreground/50">|</span>
+          <span className="text-muted-foreground">
             budget: {budget.toLocaleString()}
           </span>
         </div>
@@ -67,11 +67,11 @@ export function PayloadPreview({ docKey }: PayloadPreviewProps) {
       </div>
 
       {/* Budget bar */}
-      <div className="h-1 bg-gray-100">
+      <div className="h-1 bg-muted">
         <div
           className={cn(
             "h-full transition-all",
-            overBudget ? "bg-red-500" : budgetPct > 80 ? "bg-amber-400" : "bg-violet-400"
+            overBudget ? "bg-red-500" : budgetPct > 80 ? "bg-amber-400" : "bg-primary"
           )}
           style={{ width: `${Math.min(budgetPct, 100)}%` }}
         />
@@ -79,7 +79,7 @@ export function PayloadPreview({ docKey }: PayloadPreviewProps) {
 
       {/* JSON content */}
       <div className="flex-1 overflow-auto">
-        <pre className="p-3 text-xs text-gray-700 font-mono whitespace-pre-wrap break-all leading-relaxed">
+        <pre className="p-3 text-xs text-foreground font-mono whitespace-pre-wrap break-all leading-relaxed">
           {preview.payload}
         </pre>
       </div>

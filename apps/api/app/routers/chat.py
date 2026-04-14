@@ -130,9 +130,15 @@ async def chat_websocket(websocket: WebSocket):
                 if active_chat_task and not active_chat_task.done():
                     cancel_event.set()
                     try:
-                        await asyncio.wait_for(active_chat_task, timeout=2.0)
-                    except (asyncio.TimeoutError, Exception):
+                        await asyncio.wait_for(active_chat_task, timeout=3.0)
+                    except asyncio.TimeoutError:
                         active_chat_task.cancel()
+                        try:
+                            await active_chat_task
+                        except (asyncio.CancelledError, Exception):
+                            pass
+                    except Exception:
+                        pass
 
                 # Reset cancel event for new message
                 cancel_event.clear()
@@ -199,6 +205,19 @@ async def _handle_chat_message(
     model = msg.get("model", "claude-opus-4-6")
     org_id = msg.get("org_id")
     current_module = msg.get("current_module")  # e.g. "context_engine", "context_management"
+
+    # Validate current_module against user's allowed modules to prevent privilege escalation
+    VALID_MODULES = {"general", "context_management", "databricks", "confluence", "config_apis", "context_engine"}
+    if current_module and current_module not in VALID_MODULES:
+        current_module = None
+    if current_module and not user.get("is_admin"):
+        allowed = user.get("allowed_modules") or []
+        if current_module not in allowed and current_module != "general":
+            current_module = None
+
+    # Log large messages for monitoring (zero data loss — never reject)
+    if len(content) > 1_000_000:
+        logger.info("Large chat message: %d chars from user %s", len(content), user.get("user_id"))
 
     if not org_id:
         await ws_manager.send_to_connection(

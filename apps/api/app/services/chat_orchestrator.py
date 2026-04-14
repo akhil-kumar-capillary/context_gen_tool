@@ -154,7 +154,11 @@ class ChatOrchestrator:
                 await on_tool_start(tool_name, tool_id, display)
 
                 start = time.time()
-                result = await registry.execute_tool(tool_name, self.ctx, tool_input)
+                try:
+                    result = await registry.execute_tool(tool_name, self.ctx, tool_input)
+                except Exception as e:
+                    logger.exception("Tool '%s' crashed", tool_name)
+                    result = f"Error: Tool '{tool_name}' failed — {type(e).__name__}: {str(e)[:200]}"
                 elapsed = time.time() - start
 
                 summary = self._summarize_result(result)

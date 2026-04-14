@@ -18,7 +18,7 @@ function TableTreemap() {
 
   if (!counters?.table?.length) {
     return (
-      <div className="h-[400px] flex items-center justify-center text-sm text-gray-400">
+      <div className="h-[400px] flex items-center justify-center text-sm text-muted-foreground">
         No table data
       </div>
     );
@@ -79,7 +79,7 @@ function FunctionBars() {
 
   if (!counters?.function?.length) {
     return (
-      <div className="h-[300px] flex items-center justify-center text-sm text-gray-400">
+      <div className="h-[300px] flex items-center justify-center text-sm text-muted-foreground">
         No function data
       </div>
     );
@@ -132,7 +132,7 @@ function StructuralBars() {
 
   if (!counters?.structural?.length) {
     return (
-      <div className="h-[250px] flex items-center justify-center text-sm text-gray-400">
+      <div className="h-[250px] flex items-center justify-center text-sm text-muted-foreground">
         No structural data
       </div>
     );
@@ -189,8 +189,8 @@ export function OverviewTab() {
     <div className="space-y-6">
       {/* Treemap */}
       <div className="space-y-2">
-        <h3 className="text-sm font-medium text-gray-500">Table Universe</h3>
-        <p className="text-xs text-gray-400">
+        <h3 className="text-sm font-medium text-muted-foreground">Table Universe</h3>
+        <p className="text-xs text-muted-foreground">
           Click any table to filter all visualizations
         </p>
         <TableTreemap />
@@ -199,16 +199,16 @@ export function OverviewTab() {
       {/* Side-by-side bars */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-2">
-          <h3 className="text-sm font-medium text-gray-500">Top Functions</h3>
-          <div className="rounded-xl border border-gray-200 bg-white p-3">
+          <h3 className="text-sm font-medium text-muted-foreground">Top Functions</h3>
+          <div className="rounded-xl border border-border bg-background p-3">
             <FunctionBars />
           </div>
         </div>
         <div className="space-y-2">
-          <h3 className="text-sm font-medium text-gray-500">
+          <h3 className="text-sm font-medium text-muted-foreground">
             Structural Features
           </h3>
-          <div className="rounded-xl border border-gray-200 bg-white p-3">
+          <div className="rounded-xl border border-border bg-background p-3">
             <StructuralBars />
           </div>
         </div>

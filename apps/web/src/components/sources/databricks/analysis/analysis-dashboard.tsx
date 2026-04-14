@@ -63,15 +63,15 @@ const StatCard = React.memo(function StatCard({
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-xl border border-gray-200 bg-white p-4"
+      className="rounded-xl border border-border bg-background p-4"
     >
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
-      <p className="mt-1 text-2xl font-bold tabular-nums text-gray-900">
+      <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">
         {typeof value === "number" ? value.toLocaleString() : value}
       </p>
-      {sub && <p className="mt-0.5 text-xs text-gray-400">{sub}</p>}
+      {sub && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
     </motion.div>
   );
 });
@@ -109,8 +109,8 @@ export function AnalysisDashboard({ analysisId }: { analysisId: string }) {
   if (isLoading && !isLoaded) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
-        <span className="ml-3 text-sm text-gray-500">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        <span className="ml-3 text-sm text-muted-foreground">
           Loading analysis data...
         </span>
       </div>
@@ -129,7 +129,7 @@ export function AnalysisDashboard({ analysisId }: { analysisId: string }) {
   // Not loaded
   if (!isLoaded) {
     return (
-      <div className="flex items-center justify-center py-20 text-sm text-gray-400">
+      <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">
         Run analysis on an extraction to see visualizations
       </div>
     );
@@ -158,18 +158,18 @@ export function AnalysisDashboard({ analysisId }: { analysisId: string }) {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2"
+            className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2"
           >
-            <Activity className="h-4 w-4 text-violet-500" />
-            <span className="text-sm text-gray-700">
+            <Activity className="h-4 w-4 text-primary" />
+            <span className="text-sm text-foreground">
               Filtering by table:{" "}
-              <span className="font-mono font-bold text-violet-600">
+              <span className="font-mono font-bold text-primary">
                 {selectedTable}
               </span>
             </span>
             <button
               onClick={clearTableFilter}
-              className="ml-auto rounded p-1 text-violet-500 transition-colors hover:bg-violet-100"
+              className="ml-auto rounded p-1 text-primary transition-colors hover:bg-primary/10"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -178,7 +178,7 @@ export function AnalysisDashboard({ analysisId }: { analysisId: string }) {
       </AnimatePresence>
 
       {/* Tab navigation */}
-      <div className="flex items-center gap-1 overflow-x-auto rounded-xl border border-gray-200 bg-gray-50 p-1">
+      <div className="flex items-center gap-1 overflow-x-auto rounded-xl border border-border bg-muted/50 p-1">
         {TABS.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
@@ -190,15 +190,15 @@ export function AnalysisDashboard({ analysisId }: { analysisId: string }) {
                 transition-all duration-200
                 ${
                   isActive
-                    ? "text-gray-900"
-                    : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 }
               `}
             >
               {isActive && (
                 <motion.div
                   layoutId="activeAnalysisTab"
-                  className="absolute inset-0 rounded-lg border border-gray-200 bg-white shadow-sm"
+                  className="absolute inset-0 rounded-lg border border-border bg-background shadow-sm"
                   transition={{ type: "spring", stiffness: 400, damping: 30 }}
                 />
               )}

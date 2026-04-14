@@ -20,7 +20,7 @@ const TOOL_LABELS: Record<string, string> = {
   read_context_tree: "Reading tree structure",
   modify_context_tree: "Modifying context tree",
   remove_from_context_tree: "Removing from tree",
-  save_tree_checkpoint: "Saving checkpoint",
+  save_tree_checkpoint: "Saving version",
   sync_tree_to_capillary: "Syncing to Capillary",
   generate_context_tree: "Generating context tree",
   restructure_tree: "Restructuring tree",
@@ -40,7 +40,7 @@ const TOOL_PREPARING_LABELS: Record<string, string> = {
   read_context_tree: "Loading tree structure...",
   modify_context_tree: "Analyzing tree for modification...",
   remove_from_context_tree: "Preparing removal...",
-  save_tree_checkpoint: "Saving tree checkpoint...",
+  save_tree_checkpoint: "Saving tree version...",
   sync_tree_to_capillary: "Preparing sync to Capillary...",
   generate_context_tree: "Starting tree generation...",
   restructure_tree: "Planning restructure...",
@@ -62,7 +62,7 @@ export function ToolCallIndicator({ toolCall }: ToolCallIndicatorProps) {
     <div
       className={cn(
         "my-2 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium transition-all",
-        isPreparing && "bg-violet-50 text-violet-700 border border-violet-200 animate-pulse",
+        isPreparing && "bg-primary/5 text-primary border border-primary/20 animate-pulse",
         isRunning && "bg-blue-50 text-blue-700 border border-blue-200",
         isDone && "bg-green-50 text-green-700 border border-green-200",
         isError && "bg-red-50 text-red-700 border border-red-200"

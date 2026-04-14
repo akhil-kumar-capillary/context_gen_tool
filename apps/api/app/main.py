@@ -13,7 +13,7 @@ from app.logging_config import setup_logging
 from app.middleware.request_id import RequestIDMiddleware
 from app.core.websocket import websocket_endpoint
 from app.core.task_registry import task_registry
-from app.routers import auth, contexts, databricks, confluence, config_apis, llm, admin, chat, context_engine
+from app.routers import auth, contexts, databricks, confluence, config_apis, llm, admin, chat, context_engine, versions
 
 # Initialize structured logging before anything else
 setup_logging()
@@ -26,8 +26,8 @@ _startup_time = time.monotonic()
 limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
 app = FastAPI(
-    title="aiRA Context Management API",
-    description="Backend API for aiRA Context Management Tool",
+    title="aiRA Context Management Platform API",
+    description="Backend API for aiRA Context Management Platform. Powered by Capillary Pulse.",
     version="1.0.0",
 )
 
@@ -61,6 +61,7 @@ app.include_router(llm.router, prefix="/api/llm", tags=["llm"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(context_engine.router, prefix="/api/context-engine", tags=["context-engine"])
+app.include_router(versions.router, prefix="/api/versions", tags=["versions"])
 
 # WebSocket — general purpose (used by Databricks pipeline progress etc.)
 app.add_api_websocket_route("/api/ws", websocket_endpoint)

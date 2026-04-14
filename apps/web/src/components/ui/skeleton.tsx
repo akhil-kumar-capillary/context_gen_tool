@@ -13,7 +13,7 @@ export function Skeleton({ className }: SkeletonProps) {
   return (
     <div
       className={cn(
-        "animate-pulse rounded-md bg-gray-200",
+        "animate-shimmer rounded-md bg-muted",
         className,
       )}
     />
@@ -36,7 +36,7 @@ export function TableSkeleton({ rows = 5 }: { rows?: number }) {
       </div>
       {/* Rows */}
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex items-center gap-4 rounded-lg border border-gray-100 p-4">
+        <div key={i} className="flex items-center gap-4 rounded-lg border border-border p-4">
           <Skeleton className="h-5 w-5 rounded" />
           <Skeleton className="h-4 w-48" />
           <Skeleton className="h-4 w-24" />
@@ -50,7 +50,7 @@ export function TableSkeleton({ rows = 5 }: { rows?: number }) {
 
 export function CardSkeleton() {
   return (
-    <div className="rounded-lg border border-gray-200 p-6 space-y-4">
+    <div className="rounded-lg border border-border p-6 space-y-4">
       <Skeleton className="h-5 w-40" />
       <Skeleton className="h-4 w-full" />
       <Skeleton className="h-4 w-3/4" />

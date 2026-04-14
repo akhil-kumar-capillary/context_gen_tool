@@ -19,7 +19,7 @@ def _collect_leaves(node: dict) -> list[dict]:
         leaves.append({
             "id": node.get("id", ""),
             "name": node.get("name", ""),
-            "desc": (node.get("desc", "") or "")[:500],  # Truncate for efficiency
+            "desc": (node.get("desc", "") or "")[:1500],  # Truncate for LLM efficiency (full content preserved in tree)
         })
     for child in node.get("children", []):
         leaves.extend(_collect_leaves(child))

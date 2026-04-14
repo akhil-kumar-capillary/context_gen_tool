@@ -17,6 +17,7 @@ from sqlalchemy import select, desc, update
 
 from app.services.tools.registry import registry
 from app.services.tools.tool_context import ToolContext
+from app.utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -52,15 +53,51 @@ async def _load_latest_tree(ctx: ToolContext):
     return run, run.tree_data
 
 
-async def _save_tree(ctx: ToolContext, run_id, tree_data: dict):
-    """Save updated tree to DB and notify frontend via WebSocket."""
+async def _save_tree(
+    ctx: ToolContext,
+    run_id,
+    tree_data: dict,
+    *,
+    change_type: str = "update",
+    change_summary: str = "Tree updated via chat",
+):
+    """Save updated tree to DB with version record and notify frontend."""
     from app.models.context_tree import ContextTreeRun
+    from app.services.versioning import create_version
 
     async with ctx.get_db() as db:
+        # Fetch previous tree for version snapshot (with org_id guard)
+        result = await db.execute(
+            select(ContextTreeRun.tree_data)
+            .where(
+                ContextTreeRun.id == run_id,
+                ContextTreeRun.org_id == ctx.org_id,
+            )
+        )
+        previous_tree = result.scalar_one_or_none()
+
+        # Update tree (with org_id guard)
         await db.execute(
             update(ContextTreeRun)
-            .where(ContextTreeRun.id == run_id)
-            .values(tree_data=tree_data)
+            .where(
+                ContextTreeRun.id == run_id,
+                ContextTreeRun.org_id == ctx.org_id,
+            )
+            .values(tree_data=tree_data, updated_at=utcnow())
+        )
+
+        # Create version record (same transaction)
+        await create_version(
+            db,
+            entity_type="context_tree",
+            entity_id=str(run_id),
+            org_id=ctx.org_id,
+            snapshot=tree_data,
+            previous_snapshot=previous_tree,
+            change_type=change_type,
+            change_summary=change_summary,
+            changed_fields=["tree_data"],
+            user_id=ctx.user_id,
         )
         await db.commit()
 
@@ -295,7 +332,11 @@ async def modify_context_tree(
         return f"Modification failed: {result.summary}"
 
     # Save the updated tree
-    await _save_tree(ctx, run.id, result.updated_tree)
+    await _save_tree(
+        ctx, run.id, result.updated_tree,
+        change_type="update",
+        change_summary=f"Chat: {user_request[:100]}",
+    )
 
     return (
         f"Tree modified successfully.\n\n{result.summary}\n\n"
@@ -370,7 +411,11 @@ async def remove_from_context_tree(
 
     validation = validate_no_info_loss(before, tree, "remove")
 
-    await _save_tree(ctx, run.id, tree)
+    await _save_tree(
+        ctx, run.id, tree,
+        change_type="delete_node",
+        change_summary=f"Chat: removed '{node.get('name', node_id)}'",
+    )
 
     return (
         f"Removed '{node.get('name', node_id)}' from the tree.\n"
@@ -400,11 +445,11 @@ async def save_tree_checkpoint(
     ctx: ToolContext,
     label: str = "",
 ) -> str:
-    """Save a checkpoint of the current tree state.
+    """Save a version snapshot of the current tree state.
 
-    label: Optional label for the checkpoint (e.g. "Before adding UTC rules")
+    label: Optional label for the snapshot (e.g. "Before adding UTC rules")
     """
-    from app.models.context_tree_checkpoint import ContextTreeCheckpoint
+    from app.services.versioning import create_version
     from app.services.context_engine.tree_modifier import count_leaves, total_content_chars
 
     try:
@@ -414,38 +459,28 @@ async def save_tree_checkpoint(
 
     leaf_count = count_leaves(tree)
     char_count = total_content_chars(tree)
-
-    # Auto-generate label if not provided
-    if not label:
-        async with ctx.get_db() as db:
-            count_result = await db.execute(
-                select(ContextTreeCheckpoint)
-                .where(ContextTreeCheckpoint.run_id == run.id)
-            )
-            existing = len(count_result.scalars().all())
-        label = f"Checkpoint #{existing + 1}"
-
-    checkpoint = ContextTreeCheckpoint(
-        id=uuid.uuid4(),
-        run_id=run.id,
-        user_id=ctx.user_id,
-        org_id=ctx.org_id,
-        label=label,
-        tree_data=tree,
-        node_count=leaf_count + _count_categories(tree),
-        leaf_count=leaf_count,
-        health_score=tree.get("health", 0),
-    )
+    summary = label or "Manual snapshot via chat"
 
     async with ctx.get_db() as db:
-        db.add(checkpoint)
+        await create_version(
+            db,
+            entity_type="context_tree",
+            entity_id=str(run.id),
+            org_id=ctx.org_id,
+            snapshot=tree,
+            previous_snapshot=None,
+            change_type="update",
+            change_summary=summary,
+            changed_fields=["tree_data"],
+            user_id=ctx.user_id,
+        )
         await db.commit()
 
     return (
-        f"Checkpoint saved: **{label}**\n"
+        f"Version saved: **{summary}**\n"
         f"- {leaf_count} leaves, {char_count:,} chars\n"
         f"- Health: {tree.get('health', '?')}/100\n"
-        f"You can restore this checkpoint from the Version History panel."
+        f"You can restore this version from the Version History panel."
     )
 
 

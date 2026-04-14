@@ -1,7 +1,8 @@
 "use client";
 
-import { User, Bot, AlertCircle } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { User, Bot, AlertCircle, Copy, Check } from "lucide-react";
+import { useState } from "react";
+import { cn, formatDate } from "@/lib/utils";
 import { MarkdownRenderer } from "./markdown-renderer";
 import { ToolCallIndicator } from "./tool-call-indicator";
 import type { ChatMessage as ChatMessageType, ToolCallStatus } from "@/types";
@@ -13,21 +14,26 @@ interface ChatMessageProps {
 export function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(message.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <div
       className={cn(
-        "flex gap-3 px-4 py-4",
-        isUser ? "bg-white" : "bg-gray-50/50"
+        "group flex gap-3 px-4 py-4",
+        isUser ? "bg-background" : "bg-muted/30",
       )}
     >
       {/* Avatar */}
       <div
         className={cn(
           "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-          isUser
-            ? "bg-blue-600 text-white"
-            : "bg-gradient-to-br from-violet-500 to-purple-600 text-white"
+          isUser ? "bg-primary/10 text-primary" : "bg-primary text-primary-foreground",
         )}
       >
         {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
@@ -35,9 +41,25 @@ export function ChatMessage({ message }: ChatMessageProps) {
 
       {/* Content */}
       <div className="min-w-0 flex-1">
-        <p className="mb-1 text-xs font-medium text-gray-500">
-          {isUser ? "You" : "aiRA"}
-        </p>
+        <div className="mb-1 flex items-center justify-between">
+          <p className="text-xs font-medium text-muted-foreground">
+            {isUser ? "You" : "aiRA"}
+          </p>
+          <div className="flex items-center gap-2">
+            {isAssistant && message.content && (
+              <button
+                onClick={handleCopy}
+                className="rounded p-1 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground hover:bg-muted"
+                aria-label="Copy message"
+              >
+                {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+              </button>
+            )}
+            <span className="text-xs text-muted-foreground/40 group-hover:text-muted-foreground transition-colors">
+              {formatDate(message.createdAt)}
+            </span>
+          </div>
+        </div>
 
         {/* Tool call indicators (before content for assistant) */}
         {isAssistant && message.toolCalls && message.toolCalls.length > 0 && (
@@ -61,21 +83,21 @@ export function ChatMessage({ message }: ChatMessageProps) {
 
         {/* Message content */}
         {isUser ? (
-          <p className="whitespace-pre-wrap text-sm text-gray-800">
+          <p className="whitespace-pre-wrap text-sm text-foreground">
             {message.content}
           </p>
         ) : message.content ? (
           <MarkdownRenderer
             content={message.content}
-            className="prose-sm max-w-none text-gray-800"
+            className="prose-sm max-w-none text-foreground"
           />
         ) : !message.error ? (
-          <p className="text-sm italic text-gray-400">No response</p>
+          <p className="text-sm italic text-muted-foreground">No response</p>
         ) : null}
 
         {/* Token usage */}
         {isAssistant && message.tokenUsage && (
-          <div className="mt-2 flex items-center gap-3 text-[10px] text-gray-400">
+          <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
             <span>
               {message.tokenUsage.input_tokens?.toLocaleString()} in /{" "}
               {message.tokenUsage.output_tokens?.toLocaleString()} out
@@ -97,12 +119,12 @@ interface StreamingMessageProps {
 
 export function StreamingMessage({ text, toolCalls }: StreamingMessageProps) {
   return (
-    <div className="flex gap-3 bg-gray-50/50 px-4 py-4">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-purple-600 text-white">
+    <div className="flex gap-3 bg-muted/50 px-4 py-4">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary text-white">
         <Bot className="h-4 w-4" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="mb-1 text-xs font-medium text-gray-500">aiRA</p>
+        <p className="mb-1 text-xs font-medium text-muted-foreground">aiRA</p>
 
         {/* Active tool calls */}
         {toolCalls.length > 0 && (
@@ -117,13 +139,13 @@ export function StreamingMessage({ text, toolCalls }: StreamingMessageProps) {
         {text ? (
           <MarkdownRenderer
             content={text}
-            className="prose-sm max-w-none text-gray-800"
+            className="prose-sm max-w-none text-foreground"
           />
         ) : (
           <div className="flex items-center gap-1.5">
-            <div className="h-2 w-2 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.3s]" />
-            <div className="h-2 w-2 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.15s]" />
-            <div className="h-2 w-2 animate-bounce rounded-full bg-violet-400" />
+            <div className="h-2 w-2 animate-bounce rounded-full bg-primary [animation-delay:-0.3s]" />
+            <div className="h-2 w-2 animate-bounce rounded-full bg-primary [animation-delay:-0.15s]" />
+            <div className="h-2 w-2 animate-bounce rounded-full bg-primary" />
           </div>
         )}
       </div>

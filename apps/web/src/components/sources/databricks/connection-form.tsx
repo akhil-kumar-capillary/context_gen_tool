@@ -102,35 +102,35 @@ export function ConnectionForm() {
   const canProceed = connectionStatus === "connected";
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-6">
+    <div className="rounded-xl border border-border bg-background p-6">
       <div className="mb-4 flex items-center gap-2">
-        <Link className="h-5 w-5 text-violet-600" />
-        <h2 className="text-lg font-semibold text-gray-900">Databricks Connection</h2>
+        <Link className="h-5 w-5 text-primary" />
+        <h2 className="text-lg font-semibold text-foreground">Databricks Connection</h2>
       </div>
 
       <div className="space-y-4">
         {/* Cluster info (read-only, auto-resolved from login) */}
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">
+          <label className="mb-1 block text-sm font-medium text-foreground">
             Cluster
           </label>
-          <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
-            <span className="font-medium text-gray-900">
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">
               {connection.cluster || authCluster?.toUpperCase() || "—"}
             </span>
-            <span className="text-gray-400">·</span>
-            <span className="text-xs text-gray-400">auto-resolved from login</span>
+            <span className="text-muted-foreground">·</span>
+            <span className="text-xs text-muted-foreground">auto-resolved from login</span>
           </div>
         </div>
 
         {/* Instance URL display (read-only) */}
         {connection.instance && (
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               Workspace URL
             </label>
-            <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
-              <Server className="h-4 w-4 shrink-0 text-gray-400" />
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+              <Server className="h-4 w-4 shrink-0 text-muted-foreground" />
               <span className="truncate">{connection.instance}</span>
             </div>
           </div>
@@ -139,7 +139,7 @@ export function ConnectionForm() {
         {/* Connection status + retry */}
         <div className="flex items-center gap-3">
           {connectionStatus === "testing" && (
-            <span className="flex items-center gap-2 text-sm text-gray-500">
+            <span className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
               Testing connection...
             </span>
@@ -164,8 +164,8 @@ export function ConnectionForm() {
                 className={cn(
                   "rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
                   isTesting || !connection.cluster
-                    ? "bg-gray-100 text-gray-400"
-                    : "bg-violet-600 text-white hover:bg-violet-700 shadow-sm"
+                    ? "bg-muted text-muted-foreground"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
                 )}
               >
                 Retry
@@ -177,7 +177,7 @@ export function ConnectionForm() {
         {canProceed && (
           <button
             onClick={() => setActiveStep("extract")}
-            className="mt-2 w-full rounded-lg bg-violet-600 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-violet-700"
+            className="mt-2 w-full rounded-lg bg-primary py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-primary/90"
           >
             Continue to Extraction
           </button>

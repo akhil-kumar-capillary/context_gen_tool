@@ -22,7 +22,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             if (isInline) {
               return (
                 <code
-                  className="rounded bg-gray-100 px-1.5 py-0.5 text-sm font-mono text-pink-600"
+                  className="rounded bg-muted px-1.5 py-0.5 text-sm font-mono text-pink-600"
                   {...props}
                 >
                   {children}
@@ -31,7 +31,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             }
             return (
               <code
-                className={`block overflow-x-auto rounded-lg bg-gray-900 p-4 text-sm font-mono text-gray-100 ${className || ""}`}
+                className={`block overflow-x-auto rounded-lg bg-foreground p-4 text-sm font-mono text-muted ${className || ""}`}
                 {...props}
               >
                 {children}
@@ -45,24 +45,24 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           table({ children }) {
             return (
               <div className="my-3 overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 border border-gray-200 text-sm">
+                <table className="min-w-full divide-y divide-border border border-border text-sm">
                   {children}
                 </table>
               </div>
             );
           },
           thead({ children }) {
-            return <thead className="bg-gray-50">{children}</thead>;
+            return <thead className="bg-muted/50">{children}</thead>;
           },
           th({ children }) {
             return (
-              <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 {children}
               </th>
             );
           },
           td({ children }) {
-            return <td className="whitespace-nowrap px-3 py-2 text-gray-700">{children}</td>;
+            return <td className="whitespace-nowrap px-3 py-2 text-foreground">{children}</td>;
           },
           // Style other elements
           p({ children }) {
@@ -75,20 +75,20 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             return <ol className="mb-2 list-decimal pl-6 space-y-1 text-sm">{children}</ol>;
           },
           li({ children }) {
-            return <li className="text-sm text-gray-700">{children}</li>;
+            return <li className="text-sm text-foreground">{children}</li>;
           },
           h1({ children }) {
-            return <h1 className="mb-3 text-base font-bold text-gray-900">{children}</h1>;
+            return <h1 className="mb-3 text-base font-bold text-foreground">{children}</h1>;
           },
           h2({ children }) {
-            return <h2 className="mb-2 text-sm font-semibold text-gray-900">{children}</h2>;
+            return <h2 className="mb-2 text-sm font-semibold text-foreground">{children}</h2>;
           },
           h3({ children }) {
-            return <h3 className="mb-2 text-sm font-semibold text-gray-800">{children}</h3>;
+            return <h3 className="mb-2 text-sm font-semibold text-foreground">{children}</h3>;
           },
           blockquote({ children }) {
             return (
-              <blockquote className="my-2 border-l-4 border-blue-300 bg-blue-50 py-2 pl-4 text-sm italic text-gray-700">
+              <blockquote className="my-2 border-l-4 border-blue-300 bg-blue-50 py-2 pl-4 text-sm italic text-foreground">
                 {children}
               </blockquote>
             );
@@ -106,10 +106,10 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             );
           },
           strong({ children }) {
-            return <strong className="font-semibold text-gray-900">{children}</strong>;
+            return <strong className="font-semibold text-foreground">{children}</strong>;
           },
           hr() {
-            return <hr className="my-4 border-gray-200" />;
+            return <hr className="my-4 border-border" />;
           },
         }}
       >

@@ -78,7 +78,13 @@ def create_session_token(
     cluster: str,
     base_url: str,
 ) -> str:
-    """Create a JWT session token for the application."""
+    """Create a JWT session token for the application.
+
+    NOTE: capillary_token is embedded in the JWT so the backend can proxy
+    requests to Capillary APIs on behalf of the user. The JWT is signed
+    (tamper-proof) and has its own expiry. For production hardening,
+    consider migrating to httpOnly cookies instead of localStorage.
+    """
     payload = {
         "user_id": user_id,
         "email": email,

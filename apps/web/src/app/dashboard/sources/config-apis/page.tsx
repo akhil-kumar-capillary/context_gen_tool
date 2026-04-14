@@ -34,10 +34,10 @@ export default function ConfigApisPage() {
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold text-foreground">
             Configuration APIs Source
           </h1>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             Extract Capillary platform configurations, analyze patterns, and
             generate context documents.
           </p>

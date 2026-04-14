@@ -16,7 +16,7 @@ export type BadgeVariant =
   | "cyan";
 
 const BADGE_COLORS: Record<BadgeVariant, string> = {
-  default: "bg-gray-100 text-gray-500 border-gray-200",
+  default: "bg-muted text-muted-foreground border-border",
   blue: "bg-blue-50 text-blue-600 border-blue-200",
   green: "bg-emerald-50 text-emerald-600 border-emerald-200",
   amber: "bg-amber-50 text-amber-600 border-amber-200",
@@ -34,7 +34,7 @@ export const Badge = React.memo(function Badge({
 }) {
   return (
     <span
-      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${BADGE_COLORS[variant]}`}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium border ${BADGE_COLORS[variant]}`}
     >
       {children}
     </span>

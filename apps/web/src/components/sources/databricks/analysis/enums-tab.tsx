@@ -39,16 +39,16 @@ export function EnumsTab() {
 
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-medium text-gray-500">
+      <h3 className="text-sm font-medium text-muted-foreground">
         Enum-Like Values & Aliases
       </h3>
-      <p className="text-xs text-gray-400">
+      <p className="text-xs text-muted-foreground">
         Columns with discrete literal values found across queries, plus table
         alias conventions
       </p>
 
       {!literalVals || Object.keys(literalVals).length === 0 ? (
-        <div className="h-[300px] flex items-center justify-center text-sm text-gray-400">
+        <div className="h-[300px] flex items-center justify-center text-sm text-muted-foreground">
           No enum/literal values found
         </div>
       ) : (
@@ -60,41 +60,41 @@ export function EnumsTab() {
         >
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search columns or values..."
-              className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 bg-white text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-300"
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
 
-          <div className="text-xs text-gray-400">
+          <div className="text-xs text-muted-foreground">
             {totalFiltered > 50
               ? `Showing 50 of ${totalFiltered} columns with enum-like values`
               : `${filteredLiterals.length} columns with enum-like values`}
           </div>
 
           {/* Literal values accordion */}
-          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden divide-y divide-gray-100">
+          <div className="rounded-xl border border-border bg-background overflow-hidden divide-y divide-border">
             {filteredLiterals.map(([col, vals]) => (
               <div key={col}>
                 <button
                   onClick={() => toggleCol(col)}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors"
                 >
                   {expandedCols.has(col) ? (
-                    <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                    <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                   ) : (
-                    <ChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                    <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                   )}
                   <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <Tag className="h-3.5 w-3.5 text-violet-400 flex-shrink-0" />
-                    <span className="text-sm font-mono font-medium truncate text-gray-700">
+                    <Tag className="h-3.5 w-3.5 text-primary/60 flex-shrink-0" />
+                    <span className="text-sm font-mono font-medium truncate text-foreground">
                       {col}
                     </span>
                   </div>
-                  <span className="text-xs text-gray-400 tabular-nums flex-shrink-0">
+                  <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
                     {vals.length} values
                   </span>
                 </button>
@@ -119,16 +119,16 @@ export function EnumsTab() {
                                 delay: Math.min(i * 0.02, 1),
                                 duration: 0.15,
                               }}
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-mono bg-violet-50 text-violet-600 border border-violet-200 hover:bg-violet-100 transition-colors"
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-mono bg-primary/5 text-primary border border-primary/20 hover:bg-primary/10 transition-colors"
                             >
                               {String(value)}
-                              <span className="text-[9px] text-violet-400 ml-0.5">
+                              <span className="text-[9px] text-primary/60 ml-0.5">
                                 ×{count}
                               </span>
                             </motion.span>
                           ))}
                           {vals.length > 100 && (
-                            <span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] text-gray-400">
+                            <span className="inline-flex items-center px-2 py-1 rounded-md text-xs text-muted-foreground">
                               +{vals.length - 100} more values
                             </span>
                           )}
@@ -144,10 +144,10 @@ export function EnumsTab() {
           {/* Alias conventions */}
           {aliasConv && Object.keys(aliasConv).length > 0 && (
             <div className="space-y-2">
-              <h3 className="text-sm font-medium text-gray-500">
+              <h3 className="text-sm font-medium text-muted-foreground">
                 Alias Conventions
               </h3>
-              <div className="rounded-xl border border-gray-200 bg-white overflow-hidden divide-y divide-gray-100">
+              <div className="rounded-xl border border-border bg-background overflow-hidden divide-y divide-border">
                 {Object.entries(aliasConv)
                   .slice(0, 20)
                   .map(([table, aliases]) => (
@@ -156,14 +156,14 @@ export function EnumsTab() {
                       className="px-4 py-3"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-mono font-medium text-gray-700">
+                        <span className="text-xs font-mono font-medium text-foreground">
                           {table}
                         </span>
                         <div className="flex gap-1">
                           {aliases.map(([alias, count], i) => (
                             <span
                               key={i}
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-blue-50 text-blue-600 border border-blue-200"
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-mono bg-blue-50 text-blue-600 border border-blue-200"
                             >
                               {String(alias)}
                               <span className="text-[9px] text-blue-400">

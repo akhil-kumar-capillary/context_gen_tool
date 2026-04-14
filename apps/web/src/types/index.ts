@@ -60,6 +60,22 @@ export const CLUSTERS = [
 
 export type ClusterId = (typeof CLUSTERS)[number]["id"];
 
+// Version history types
+export interface VersionSummary {
+  id: string;
+  version_number: number;
+  change_type: string;
+  change_summary: string | null;
+  changed_fields: string[] | null;
+  changed_by_user_id: number | null;
+  created_at: string | null;
+}
+
+export interface VersionDetail extends VersionSummary {
+  snapshot: Record<string, unknown>;
+  previous_snapshot: Record<string, unknown> | null;
+}
+
 // Chat types
 export interface ChatMessage {
   id: string;

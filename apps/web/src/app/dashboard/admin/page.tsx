@@ -48,8 +48,8 @@ export default function AdminPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Admin Panel</h1>
-        <p className="text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-foreground">Admin Panel</h1>
+        <p className="text-sm text-muted-foreground">
           Manage users, roles, permissions, and view audit logs.
         </p>
       </div>
@@ -82,7 +82,7 @@ export default function AdminPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 rounded-lg bg-gray-100 p-1 w-fit">
+      <div className="flex gap-1 rounded-lg bg-muted p-1 w-fit">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -90,8 +90,8 @@ export default function AdminPage() {
             className={cn(
               "flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-medium transition-colors",
               activeTab === tab.id
-                ? "bg-white text-gray-900 shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
             )}
           >
             <tab.icon className="h-3.5 w-3.5" />

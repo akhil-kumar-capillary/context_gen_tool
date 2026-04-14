@@ -154,14 +154,14 @@ export function DocGenerationPanel() {
     <div className="space-y-4">
       {/* Generation controls — only when an analysis is selected */}
       {activeAnalysisId && (
-        <div className="rounded-xl border border-gray-200 bg-white p-6">
+        <div className="rounded-xl border border-border bg-background p-6">
           <div className="mb-4 flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-violet-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Generate Context Documents</h2>
+            <Sparkles className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-semibold text-foreground">Generate Context Documents</h2>
           </div>
 
           <div className="space-y-4">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               Generate 5 context documents from the analysis results using LLM.
               This will create: Master Rules, Schema Reference, Business Mappings,
               Default Filters, and Query Patterns.
@@ -174,8 +174,8 @@ export function DocGenerationPanel() {
                 className={cn(
                   "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all",
                   isGenerating
-                    ? "bg-gray-100 text-gray-400"
-                    : "bg-violet-600 text-white hover:bg-violet-700 shadow-sm"
+                    ? "bg-muted text-muted-foreground"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
                 )}
               >
                 {isGenerating ? (
@@ -211,10 +211,10 @@ export function DocGenerationPanel() {
                     ) : status === "failed" ? (
                       <XCircle className="h-4 w-4 text-red-500" />
                     ) : (
-                      <Loader2 className="h-4 w-4 animate-spin text-violet-600" />
+                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
                     )}
-                    <span className="font-mono text-xs text-gray-600">{key}</span>
-                    <span className="text-xs text-gray-400">{status}</span>
+                    <span className="font-mono text-xs text-muted-foreground">{key}</span>
+                    <span className="text-xs text-muted-foreground">{status}</span>
                   </div>
                 ))}
               </div>
@@ -222,11 +222,11 @@ export function DocGenerationPanel() {
 
             {/* Full progress log */}
             {generationProgress.length > 0 && (
-              <div className="max-h-40 overflow-y-auto rounded-lg bg-gray-50 p-3">
+              <div className="max-h-40 overflow-y-auto rounded-lg bg-muted/50 p-3">
                 {generationProgress.slice(-15).map((evt, i) => (
-                  <div key={i} className="text-xs text-gray-600">
-                    <span className="font-mono text-gray-400">[{evt.phase}]</span>{" "}
-                    {evt.doc_key && <span className="text-violet-600">{evt.doc_key} </span>}
+                  <div key={i} className="text-xs text-muted-foreground">
+                    <span className="font-mono text-muted-foreground">[{evt.phase}]</span>{" "}
+                    {evt.doc_key && <span className="text-primary">{evt.doc_key} </span>}
                     {evt.status || ""}
                     {evt.word_count ? ` (${evt.word_count} words)` : ""}
                     {evt.error && <span className="text-red-500"> {evt.error}</span>}
@@ -240,8 +240,8 @@ export function DocGenerationPanel() {
 
       {/* Generated Documents */}
       {contextDocs.length > 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white p-6">
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900">
+        <div className="rounded-xl border border-border bg-background p-6">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
             <FileText className="h-4 w-4" />
             Generated Documents ({contextDocs.length})
           </h3>
@@ -256,7 +256,7 @@ export function DocGenerationPanel() {
 
       {isLoadingDocs && (
         <div className="flex items-center justify-center p-8">
-          <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       )}
     </div>
@@ -300,27 +300,27 @@ function DocCard({
   };
 
   return (
-    <div className="rounded-lg border border-gray-200 p-3">
+    <div className="rounded-lg border border-border p-3">
       <div
         className="flex cursor-pointer items-center justify-between"
         onClick={() => setExpanded(!expanded)}
       >
         <div>
-          <span className="text-sm font-medium text-gray-900">
+          <span className="text-sm font-medium text-foreground">
             {doc.doc_key}
           </span>
           {doc.doc_name && (
-            <span className="ml-2 text-xs text-gray-500">{doc.doc_name}</span>
+            <span className="ml-2 text-xs text-muted-foreground">{doc.doc_name}</span>
           )}
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-xs text-gray-400 mr-1">
+          <span className="text-xs text-muted-foreground mr-1">
             {doc.token_count ? `~${doc.token_count} tokens` : ""}
             {doc.model_used ? ` · ${doc.model_used.slice(0, 20)}` : ""}
           </span>
           <button
             onClick={handleCopy}
-            className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+            className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-muted-foreground transition-colors"
             title="Copy content"
           >
             {copied ? (
@@ -335,8 +335,8 @@ function DocCard({
             className={cn(
               "rounded p-1.5 transition-colors disabled:pointer-events-none",
               isArchived
-                ? "text-gray-400 hover:bg-green-50 hover:text-green-600"
-                : "text-gray-400 hover:bg-amber-50 hover:text-amber-600"
+                ? "text-muted-foreground hover:bg-green-50 hover:text-green-600"
+                : "text-muted-foreground hover:bg-amber-50 hover:text-amber-600"
             )}
             title={isArchived ? "Restore document" : "Archive document"}
           >
@@ -352,7 +352,7 @@ function DocCard({
       </div>
 
       {expanded && doc.doc_content && (
-        <div className="mt-3 max-h-96 overflow-y-auto whitespace-pre-wrap rounded-lg bg-gray-50 p-4 text-xs text-gray-700">
+        <div className="mt-3 max-h-96 overflow-y-auto whitespace-pre-wrap rounded-lg bg-muted/50 p-4 text-xs text-foreground">
           {doc.doc_content}
         </div>
       )}

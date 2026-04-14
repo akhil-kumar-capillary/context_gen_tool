@@ -80,7 +80,7 @@ export function InclusionPanel({ docKey }: InclusionPanelProps) {
 
   if (!clusters || clusters.length === 0) {
     return (
-      <div className="p-4 text-sm text-gray-500">
+      <div className="p-4 text-sm text-muted-foreground">
         No clusters available. Run analysis first.
       </div>
     );
@@ -151,32 +151,32 @@ function EntityTypeSection({
   };
 
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden">
+    <div className="border border-border rounded-lg overflow-hidden">
       {/* Section header */}
       <div
-        className="flex items-center justify-between px-3 py-2 bg-gray-50 cursor-pointer hover:bg-gray-100"
+        className="flex items-center justify-between px-3 py-2 bg-muted/50 cursor-pointer hover:bg-muted"
         onClick={() => setExpanded(!expanded)}
       >
         <div className="flex items-center gap-2">
           {expanded ? (
-            <ChevronDown className="h-4 w-4 text-gray-400" />
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
           ) : (
-            <ChevronRight className="h-4 w-4 text-gray-400" />
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
           )}
-          <span className="text-sm font-medium text-gray-700">{label}</span>
-          <span className="text-xs text-gray-400">({totalCount})</span>
+          <span className="text-sm font-medium text-foreground">{label}</span>
+          <span className="text-xs text-muted-foreground">({totalCount})</span>
         </div>
 
         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           <button
-            className="text-xs text-violet-600 hover:text-violet-800"
+            className="text-xs text-primary hover:text-primary"
             onClick={() => handleSelectAll(true)}
           >
             All
           </button>
-          <span className="text-xs text-gray-300">|</span>
+          <span className="text-xs text-muted-foreground/50">|</span>
           <button
-            className="text-xs text-gray-500 hover:text-gray-700"
+            className="text-xs text-muted-foreground hover:text-foreground"
             onClick={() => handleSelectAll(false)}
           >
             None
@@ -186,7 +186,7 @@ function EntityTypeSection({
 
       {/* Cluster items */}
       {expanded && (
-        <div className="divide-y divide-gray-100">
+        <div className="divide-y divide-border">
           {clusters.map((cluster) => {
             const etKey = cluster.entity_subtype
               ? `${entityType}:${cluster.entity_subtype}`
@@ -203,25 +203,25 @@ function EntityTypeSection({
                       className="flex-shrink-0"
                     >
                       {isClusterIncluded ? (
-                        <ToggleRight className="h-5 w-5 text-violet-600" />
+                        <ToggleRight className="h-5 w-5 text-primary" />
                       ) : (
-                        <ToggleLeft className="h-5 w-5 text-gray-300" />
+                        <ToggleLeft className="h-5 w-5 text-muted-foreground/50" />
                       )}
                     </button>
                     <span
                       className={cn(
                         "text-sm truncate",
-                        isClusterIncluded ? "text-gray-700" : "text-gray-400"
+                        isClusterIncluded ? "text-foreground" : "text-muted-foreground"
                       )}
                     >
                       {cluster.entity_subtype || entityType}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-muted-foreground">
                       {cluster.count} configs
                     </span>
-                    <span className="text-xs text-violet-500">
+                    <span className="text-xs text-primary">
                       {cluster.template_ids.length} templates
                     </span>
                   </div>
@@ -252,15 +252,15 @@ function EntityTypeSection({
                               onClick={() => setInclusion(docKey, tmplKey, !isIncluded)}
                             >
                               {isIncluded ? (
-                                <ToggleRight className="h-4 w-4 text-violet-500" />
+                                <ToggleRight className="h-4 w-4 text-primary" />
                               ) : (
-                                <ToggleLeft className="h-4 w-4 text-gray-300" />
+                                <ToggleLeft className="h-4 w-4 text-muted-foreground/50" />
                               )}
                             </button>
                             <span
                               className={cn(
                                 "text-xs truncate max-w-[200px]",
-                                isIncluded ? "text-gray-600" : "text-gray-300"
+                                isIncluded ? "text-muted-foreground" : "text-muted-foreground/50"
                               )}
                               title={tmplName}
                             >
@@ -276,7 +276,7 @@ function EntityTypeSection({
                 {/* Cluster metadata */}
                 {isClusterIncluded && cluster.naming_pattern && (
                   <div className="ml-7 mt-1">
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-muted-foreground">
                       Pattern: {cluster.naming_pattern}
                     </span>
                   </div>

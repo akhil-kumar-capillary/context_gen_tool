@@ -58,9 +58,6 @@ export default function ContextEnginePage() {
     setSyncResults,
     selectNode,
     setIsEditing,
-    setCheckpoints,
-    setIsLoadingCheckpoints,
-    setIsSavingCheckpoint,
   } = useContextEngineStore();
 
   // Reset context engine state when org changes (skip hydration: null → number)
@@ -76,9 +73,6 @@ export default function ContextEnginePage() {
       setIsEditing(false);
       setIsSyncing(false);
       setIsGenerating(false);
-      setCheckpoints([]);
-      setIsLoadingCheckpoints(false);
-      setIsSavingCheckpoint(false);
     }
     prevOrgIdRef.current = orgId;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -302,20 +296,20 @@ export default function ContextEnginePage() {
     <ModuleGuard module="context_engine">
     <div className="flex h-[calc(100vh-3.5rem)] -m-6 overflow-hidden">
       {/* Left panel: Controls + History */}
-      <div className="w-72 flex-shrink-0 border-r border-gray-200 flex flex-col bg-white overflow-y-auto">
+      <div className="w-72 flex-shrink-0 border-r border-border flex flex-col bg-background overflow-y-auto">
         {/* Header */}
-        <div className="border-b border-gray-200 p-4">
+        <div className="border-b border-border p-4">
           <div className="flex items-center gap-2 mb-1">
-            <GitBranch className="h-5 w-5 text-violet-600" />
-            <h1 className="text-lg font-bold text-gray-900">Context Engine</h1>
+            <GitBranch className="h-5 w-5 text-primary" />
+            <h1 className="text-lg font-bold text-foreground">Context Engine</h1>
           </div>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-muted-foreground">
             Organize all contexts into an intelligent tree structure.
           </p>
         </div>
 
         {/* Generate button */}
-        <div className="p-4 border-b border-gray-200">
+        <div className="p-4 border-b border-border">
           {/* Sanitize toggle */}
           <label className="flex items-center gap-2 mb-3 cursor-pointer group">
             <input
@@ -323,10 +317,10 @@ export default function ContextEnginePage() {
               checked={sanitizeEnabled}
               onChange={(e) => setSanitizeEnabled(e.target.checked)}
               disabled={isGenerating}
-              className="h-3.5 w-3.5 rounded border-gray-300 text-violet-600 focus:ring-violet-500 disabled:opacity-50"
+              className="h-3.5 w-3.5 rounded border-input text-primary focus:ring-primary disabled:opacity-50"
             />
-            <span className="flex items-center gap-1 text-xs text-gray-600 group-hover:text-gray-800 transition-colors">
-              <Sparkles className="h-3 w-3 text-violet-500" />
+            <span className="flex items-center gap-1 text-xs text-muted-foreground group-hover:text-foreground transition-colors">
+              <Sparkles className="h-3 w-3 text-primary" />
               Sanitize content
             </span>
           </label>
@@ -335,7 +329,7 @@ export default function ContextEnginePage() {
             <button
               onClick={handleGenerate}
               disabled={generatingLockRef.current}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-violet-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Play className="h-4 w-4" />
               Generate Tree
@@ -355,7 +349,7 @@ export default function ContextEnginePage() {
             <button
               onClick={handleSync}
               disabled={isSyncing}
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100 transition-colors disabled:opacity-50"
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
             >
               {isSyncing ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -369,7 +363,7 @@ export default function ContextEnginePage() {
 
         {/* Conflict Review */}
         {conflicts.length > 0 && (
-          <div className="border-b border-gray-200 p-4">
+          <div className="border-b border-border p-4">
             <ConflictReview
               conflicts={conflicts as never[]}
               onResolveAll={(resolutions) => {
@@ -386,8 +380,8 @@ export default function ContextEnginePage() {
 
         {/* Progress */}
         {generationProgress.length > 0 && (
-          <div className="border-b border-gray-200 p-4">
-            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
+          <div className="border-b border-border p-4">
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
               Progress
               {isGenerating && (
                 <Loader2 className="ml-1.5 inline h-3 w-3 animate-spin" />
@@ -398,12 +392,12 @@ export default function ContextEnginePage() {
                 <div
                   key={i}
                   className={cn(
-                    "flex items-start gap-1.5 text-[11px]",
+                    "flex items-start gap-1.5 text-xs",
                     p.status === "failed"
                       ? "text-red-600"
                       : p.phase === "complete"
                         ? "text-green-600"
-                        : "text-gray-600"
+                        : "text-muted-foreground"
                   )}
                 >
                   {p.status === "done" || p.phase === "complete" ? (
@@ -411,7 +405,7 @@ export default function ContextEnginePage() {
                   ) : p.status === "failed" ? (
                     <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-red-500" />
                   ) : (
-                    <Clock className="mt-0.5 h-3 w-3 shrink-0 text-gray-400" />
+                    <Clock className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
                   )}
                   <span className="break-words">{p.detail || p.phase}</span>
                 </div>
@@ -422,13 +416,13 @@ export default function ContextEnginePage() {
 
         {/* Sync results */}
         {syncResults && (
-          <div className="border-b border-gray-200 p-4">
-            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
+          <div className="border-b border-border p-4">
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
               Sync Results
             </h3>
             <div className="space-y-1 max-h-32 overflow-y-auto">
               {syncResults.map((r, i) => (
-                <div key={i} className="flex items-center gap-1.5 text-[11px]">
+                <div key={i} className="flex items-center gap-1.5 text-xs">
                   {r.status === "uploaded" ? (
                     <Check className="h-3 w-3 text-green-500" />
                   ) : (
@@ -449,12 +443,12 @@ export default function ContextEnginePage() {
           </div>
         )}
 
-        {/* Version History (checkpoints) */}
+        {/* Version History */}
         {activeRunId && treeData && <VersionHistory />}
 
         {/* Run history */}
         <div className="flex-1 p-4">
-          <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
             History
           </h3>
           {isLoadingRuns ? (
@@ -467,7 +461,7 @@ export default function ContextEnginePage() {
               ))}
             </div>
           ) : treeRuns.length === 0 ? (
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-muted-foreground">
               No tree runs yet. Click &quot;Generate Tree&quot; to get started.
             </p>
           ) : (
@@ -478,8 +472,8 @@ export default function ContextEnginePage() {
                   className={cn(
                     "group flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-colors cursor-pointer",
                     activeRunId === run.id
-                      ? "bg-violet-50 border border-violet-200"
-                      : "hover:bg-gray-50 border border-transparent"
+                      ? "bg-primary/5 border border-primary/20"
+                      : "hover:bg-muted/50 border border-transparent"
                   )}
                   onClick={() => {
                     if (activeRunId === run.id) {
@@ -493,7 +487,7 @@ export default function ContextEnginePage() {
                     <div className="flex items-center gap-2">
                       <span
                         className={cn(
-                          "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                          "rounded-full px-2 py-0.5 text-xs font-medium",
                           run.status === "completed"
                             ? "bg-green-100 text-green-700"
                             : run.status === "running"
@@ -504,12 +498,12 @@ export default function ContextEnginePage() {
                         {run.status}
                       </span>
                       {run.input_context_count && (
-                        <span className="text-[10px] text-gray-400">
+                        <span className="text-xs text-muted-foreground">
                           {run.input_context_count} contexts
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] text-gray-400 mt-0.5">
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       {formatDate(run.created_at)}
                     </p>
                   </div>
@@ -519,12 +513,12 @@ export default function ContextEnginePage() {
                         e.stopPropagation();
                         handleDeleteRun(run.id);
                       }}
-                      className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                      className="rounded p-1 text-muted-foreground hover:bg-red-50 hover:text-red-500 transition-colors"
                       title="Delete run"
                     >
                       <Trash2 className="h-3 w-3" />
                     </button>
-                    <ChevronRight className="h-3.5 w-3.5 text-gray-300" />
+                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50" />
                   </div>
                 </div>
               ))}
@@ -541,8 +535,8 @@ export default function ContextEnginePage() {
           </div>
         ) : !treeData ? (
           <div className="flex flex-col items-center justify-center flex-1">
-            <GitBranch className="h-12 w-12 text-gray-200 mb-3" />
-            <p className="text-sm text-gray-400">
+            <GitBranch className="h-12 w-12 text-muted-foreground mb-3" />
+            <p className="text-sm text-muted-foreground">
               {activeRunId
                 ? "Tree data not available for this run."
                 : "Generate a tree to visualize your contexts."}
@@ -553,7 +547,7 @@ export default function ContextEnginePage() {
             {/* Tree */}
             <div
               className={cn(
-                "border-r border-gray-200 bg-white overflow-hidden flex flex-col",
+                "border-r border-border bg-background overflow-hidden flex flex-col",
                 showDetailPanel ? "w-1/2" : "w-full"
               )}
             >
@@ -562,7 +556,7 @@ export default function ContextEnginePage() {
 
             {/* Detail panel */}
             {showDetailPanel && (
-              <div className="w-1/2 bg-white overflow-hidden flex flex-col">
+              <div className="w-1/2 bg-background overflow-hidden flex flex-col">
                 {showSecretPanel ? <SecretDetail /> : <NodeDetail />}
               </div>
             )}

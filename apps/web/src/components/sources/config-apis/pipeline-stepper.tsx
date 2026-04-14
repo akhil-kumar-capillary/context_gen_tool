@@ -25,33 +25,35 @@ export function PipelineStepper() {
   const isRunning = isExtracting || isAnalyzing || isGenerating || isLoadingReviewData;
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1">
       {STEPS.map((step, i) => {
         const Icon = step.icon;
         const isActive = step.id === activeStep;
         const isCompleted = i < stepIndex;
+        const enabled = !isRunning;
 
         return (
-          <div key={step.id} className="flex items-center gap-2">
+          <div key={step.id} className="flex items-center">
             {i > 0 && (
               <div
                 className={cn(
-                  "h-px w-8",
-                  isCompleted ? "bg-violet-400" : "bg-gray-200"
+                  "mx-1.5 h-px w-6 transition-colors",
+                  isCompleted ? "bg-primary" : "bg-border",
                 )}
               />
             )}
             <button
-              onClick={() => !isRunning && setActiveStep(step.id)}
-              disabled={isRunning}
+              onClick={() => enabled && setActiveStep(step.id)}
+              disabled={!enabled}
               className={cn(
-                "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all",
                 isActive
-                  ? "bg-violet-100 text-violet-700"
+                  ? "bg-primary text-primary-foreground shadow-sm ring-2 ring-primary/30"
                   : isCompleted
-                  ? "bg-green-50 text-green-700 hover:bg-green-100"
-                  : "bg-gray-100 text-gray-500 hover:bg-gray-200",
-                isRunning && "cursor-not-allowed opacity-60"
+                    ? "bg-primary/10 text-primary hover:bg-primary/15"
+                    : enabled
+                      ? "bg-muted text-muted-foreground hover:bg-muted/80"
+                      : "bg-muted/50 text-muted-foreground/50 cursor-not-allowed",
               )}
             >
               {isCompleted ? (

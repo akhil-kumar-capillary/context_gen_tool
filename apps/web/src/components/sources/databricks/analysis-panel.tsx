@@ -195,36 +195,36 @@ export function AnalysisPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-gray-200 bg-white p-6">
+      <div className="rounded-xl border border-border bg-background p-6">
         <div className="mb-4 flex items-center gap-2">
-          <BarChart3 className="h-5 w-5 text-violet-600" />
-          <h2 className="text-lg font-semibold text-gray-900">Analyze SQL Patterns</h2>
+          <BarChart3 className="h-5 w-5 text-primary" />
+          <h2 className="text-lg font-semibold text-foreground">Analyze SQL Patterns</h2>
         </div>
 
         {!activeExtractionId ? (
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             Select an extraction run first, or go back to the extraction step.
           </p>
         ) : (
           <div className="space-y-4">
             {/* Org ID selector */}
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
+              <label className="mb-1 block text-sm font-medium text-foreground">
                 Organization ID
               </label>
               {isLoadingOrgs ? (
-                <div className="flex items-center gap-2 text-sm text-gray-400">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Loading org IDs...
                 </div>
               ) : orgIds.length === 0 ? (
-                <p className="text-sm text-gray-500">No org IDs found in extracted SQLs.</p>
+                <p className="text-sm text-muted-foreground">No org IDs found in extracted SQLs.</p>
               ) : (
                 <select
                   value={selectedOrgId || ""}
                   onChange={(e) => setSelectedOrgId(e.target.value)}
                   disabled={isAnalyzing}
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100 disabled:opacity-50"
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/10 disabled:opacity-50"
                 >
                   {orgIds.map((org) => (
                     <option key={org.org_id} value={org.org_id}>
@@ -243,8 +243,8 @@ export function AnalysisPanel() {
                 className={cn(
                   "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all",
                   isAnalyzing || !selectedOrgId
-                    ? "bg-gray-100 text-gray-400"
-                    : "bg-violet-600 text-white hover:bg-violet-700 shadow-sm"
+                    ? "bg-muted text-muted-foreground"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
                 )}
               >
                 {isAnalyzing ? (
@@ -270,7 +270,7 @@ export function AnalysisPanel() {
               )}
 
               {lastProgress && (
-                <span className="text-sm text-gray-500">
+                <span className="text-sm text-muted-foreground">
                   {lastProgress.detail || lastProgress.phase || ""}
                 </span>
               )}
@@ -278,10 +278,10 @@ export function AnalysisPanel() {
 
             {/* Progress log */}
             {analysisProgress.length > 0 && (
-              <div className="max-h-40 overflow-y-auto rounded-lg bg-gray-50 p-3">
+              <div className="max-h-40 overflow-y-auto rounded-lg bg-muted/50 p-3">
                 {analysisProgress.slice(-10).map((evt, i) => (
-                  <div key={i} className="text-xs text-gray-600">
-                    <span className="font-mono text-gray-400">[{evt.phase}]</span>{" "}
+                  <div key={i} className="text-xs text-muted-foreground">
+                    <span className="font-mono text-muted-foreground">[{evt.phase}]</span>{" "}
                     {evt.detail || evt.status || ""}
                     {evt.error && (
                       <span className="text-red-500"> {evt.error}</span>
@@ -294,7 +294,7 @@ export function AnalysisPanel() {
             {isComplete && (
               <button
                 onClick={handleContinueToGenerate}
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-violet-600 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-violet-700"
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-primary/90"
               >
                 Continue to Doc Generation
                 <ChevronRight className="h-4 w-4" />
@@ -306,8 +306,8 @@ export function AnalysisPanel() {
 
       {/* Analysis history */}
       {analysisRuns.length > 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white p-6">
-          <h3 className="mb-3 text-sm font-semibold text-gray-900">Analysis History</h3>
+        <div className="rounded-xl border border-border bg-background p-6">
+          <h3 className="mb-3 text-sm font-semibold text-foreground">Analysis History</h3>
           <div className="space-y-2">
             {analysisRuns.map((run) => {
               const isActive = activeAnalysisId === run.id;
@@ -318,27 +318,27 @@ export function AnalysisPanel() {
                   className={cn(
                     "flex items-center justify-between rounded-lg border p-3 cursor-pointer transition-all",
                     isActive
-                      ? "border-violet-300 bg-violet-50 ring-1 ring-violet-200"
-                      : "border-gray-200 hover:bg-gray-50"
+                      ? "border-primary/30 bg-primary/5 ring-1 ring-primary/20"
+                      : "border-border hover:bg-muted/50"
                   )}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <BarChart3 className={cn(
                       "h-4 w-4 flex-shrink-0",
-                      isActive ? "text-violet-600" : "text-gray-400"
+                      isActive ? "text-primary" : "text-muted-foreground"
                     )} />
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-900">
+                        <span className="text-sm font-medium text-foreground">
                           org={run.org_id} v{run.version}
                         </span>
                         {isActive && (
-                          <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700">
+                          <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
                             Viewing
                           </span>
                         )}
                       </div>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-muted-foreground">
                         {run.fingerprint_count ?? 0} fingerprints · {run.notebook_count ?? 0} notebooks
                         {run.created_at && (
                           <> · {new Date(run.created_at).toLocaleDateString()}</>
@@ -352,7 +352,7 @@ export function AnalysisPanel() {
                         e.stopPropagation();
                         handleSelectAnalysis(run.id);
                       }}
-                      className="rounded-md px-3 py-1.5 text-xs font-medium text-violet-600 hover:bg-violet-100 transition-colors"
+                      className="rounded-md px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
                     >
                       Generate Docs
                     </button>
@@ -361,14 +361,14 @@ export function AnalysisPanel() {
                         e.stopPropagation();
                         handleDeleteAnalysis(run.id);
                       }}
-                      className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                      className="rounded p-1 text-muted-foreground hover:bg-red-50 hover:text-red-500 transition-colors"
                       title="Delete analysis run"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                     <ChevronRight className={cn(
                       "h-4 w-4 transition-transform",
-                      isActive ? "text-violet-500 rotate-90" : "text-gray-400"
+                      isActive ? "text-primary rotate-90" : "text-muted-foreground"
                     )} />
                   </div>
                 </div>

@@ -18,9 +18,9 @@ export function ChatMessageList() {
   if (messages.length === 0 && !isStreaming) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-100 to-purple-100">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/10 to-primary/10">
           <svg
-            className="h-8 w-8 text-violet-600"
+            className="h-8 w-8 text-primary"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -33,10 +33,10 @@ export function ChatMessageList() {
             />
           </svg>
         </div>
-        <h3 className="mb-2 text-lg font-semibold text-gray-800">
+        <h3 className="mb-2 text-lg font-semibold text-foreground">
           Start a conversation
         </h3>
-        <p className="max-w-sm text-sm text-gray-500">
+        <p className="max-w-sm text-sm text-muted-foreground">
           Ask me about your context documents, or tell me to list, create,
           update, or refactor them. I can also answer general questions.
         </p>
@@ -49,7 +49,7 @@ export function ChatMessageList() {
           ].map((suggestion) => (
             <button
               key={suggestion}
-              className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-600 transition-colors hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700"
+              className="rounded-full border border-border bg-background px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
               onClick={() => {
                 // Find the chat input and set its value
                 const input = document.querySelector(
@@ -79,7 +79,7 @@ export function ChatMessageList() {
   return (
     <div
       ref={containerRef}
-      className="flex-1 overflow-y-auto divide-y divide-gray-100"
+      className="flex-1 overflow-y-auto divide-y divide-border"
     >
       {messages.map((msg) => (
         <ChatMessage key={msg.id} message={msg} />

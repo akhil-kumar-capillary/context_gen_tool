@@ -16,13 +16,13 @@ export function RolesPanel() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-muted-foreground">
           Roles define groups of permissions. Users are assigned roles to get access.
         </p>
         <button
           onClick={() => fetchRoles()}
           disabled={rolesLoading}
-          className="rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50"
+          className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-muted/50"
         >
           <RefreshCw className={cn("h-4 w-4", rolesLoading && "animate-spin")} />
         </button>
@@ -36,14 +36,14 @@ export function RolesPanel() {
 
       {rolesLoading && (
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       )}
 
       {!rolesLoading && roles.length === 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white px-5 py-12 text-center">
-          <Shield className="mx-auto h-8 w-8 text-gray-300" />
-          <p className="mt-2 text-sm text-gray-400">
+        <div className="rounded-xl border border-border bg-background px-5 py-12 text-center">
+          <Shield className="mx-auto h-8 w-8 text-muted-foreground/50" />
+          <p className="mt-2 text-sm text-muted-foreground">
             No roles defined yet. Create roles via the API or seed script.
           </p>
         </div>
@@ -54,18 +54,18 @@ export function RolesPanel() {
           {roles.map((r) => (
             <div
               key={r.id}
-              className="rounded-xl border border-gray-200 bg-white p-4 transition-shadow hover:shadow-sm"
+              className="rounded-xl border border-border bg-background p-4 transition-shadow hover:shadow-sm"
             >
               <div className="flex items-center gap-2 mb-2">
-                <Shield className="h-4 w-4 text-violet-500" />
-                <h4 className="text-sm font-semibold text-gray-900">
+                <Shield className="h-4 w-4 text-primary" />
+                <h4 className="text-sm font-semibold text-foreground">
                   {r.name}
                 </h4>
               </div>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-muted-foreground">
                 {r.description || "No description"}
               </p>
-              <p className="mt-2 text-[10px] text-gray-400">ID: {r.id}</p>
+              <p className="mt-2 text-xs text-muted-foreground">ID: {r.id}</p>
             </div>
           ))}
         </div>

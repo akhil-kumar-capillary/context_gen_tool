@@ -198,19 +198,19 @@ export default function ConfluencePage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Confluence Source</h1>
-        <p className="text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-foreground">Confluence Source</h1>
+        <p className="text-sm text-muted-foreground">
           Browse spaces, search pages, and extract content from Confluence.
         </p>
       </div>
 
       {/* Connection test */}
-      <div className="rounded-xl border border-gray-200 bg-white p-5">
+      <div className="rounded-xl border border-border bg-background p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Plug className="h-5 w-5 text-gray-400" />
+            <Plug className="h-5 w-5 text-muted-foreground" />
             <div>
-              <p className="text-sm font-medium text-gray-700">Connection</p>
+              <p className="text-sm font-medium text-foreground">Connection</p>
               {connected === true && (
                 <p className="text-xs text-green-600">Connected to {connUrl}</p>
               )}
@@ -222,7 +222,7 @@ export default function ConfluencePage() {
           <button
             onClick={testConnection}
             disabled={connLoading}
-            className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
             {connLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />}
             Test Connection
@@ -231,7 +231,7 @@ export default function ConfluencePage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 rounded-lg bg-gray-100 p-1 w-fit">
+      <div className="flex gap-1 rounded-lg bg-muted p-1 w-fit">
         {(["browse", "search", "extract"] as const).map((tab) => (
           <button
             key={tab}
@@ -239,8 +239,8 @@ export default function ConfluencePage() {
             className={cn(
               "rounded-md px-4 py-1.5 text-sm font-medium capitalize transition-colors",
               activeTab === tab
-                ? "bg-white text-gray-900 shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
             )}
           >
             {tab}
@@ -252,26 +252,26 @@ export default function ConfluencePage() {
       {activeTab === "browse" && (
         <div className="grid grid-cols-3 gap-4">
           {/* Spaces column */}
-          <div className="rounded-xl border border-gray-200 bg-white">
-            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-              <h3 className="text-sm font-semibold text-gray-700">Spaces</h3>
+          <div className="rounded-xl border border-border bg-background">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <h3 className="text-sm font-semibold text-foreground">Spaces</h3>
               <button
                 onClick={loadSpaces}
                 disabled={spacesLoading}
-                className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-muted-foreground"
               >
                 <RefreshCw className={cn("h-3.5 w-3.5", spacesLoading && "animate-spin")} />
               </button>
             </div>
             <div className="max-h-[500px] overflow-y-auto">
               {spaces.length === 0 && !spacesLoading && (
-                <p className="px-4 py-8 text-center text-xs text-gray-400">
+                <p className="px-4 py-8 text-center text-xs text-muted-foreground">
                   Click refresh to load spaces
                 </p>
               )}
               {spacesLoading && (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 </div>
               )}
               {spaces.map((s) => (
@@ -279,32 +279,32 @@ export default function ConfluencePage() {
                   key={s.key}
                   onClick={() => browseSpace(s)}
                   className={cn(
-                    "flex w-full items-center justify-between border-b border-gray-50 px-4 py-2.5 text-left text-sm transition-colors hover:bg-violet-50",
-                    selectedSpace?.key === s.key && "bg-violet-50 text-violet-700"
+                    "flex w-full items-center justify-between border-b border-border px-4 py-2.5 text-left text-sm transition-colors hover:bg-primary/5",
+                    selectedSpace?.key === s.key && "bg-primary/5 text-primary"
                   )}
                 >
                   <span className="truncate font-medium">{s.name}</span>
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-gray-300" />
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
                 </button>
               ))}
             </div>
           </div>
 
           {/* Pages column */}
-          <div className="rounded-xl border border-gray-200 bg-white">
-            <div className="border-b border-gray-200 px-4 py-3">
-              <h3 className="text-sm font-semibold text-gray-700">
+          <div className="rounded-xl border border-border bg-background">
+            <div className="border-b border-border px-4 py-3">
+              <h3 className="text-sm font-semibold text-foreground">
                 {selectedSpace ? `Pages in ${selectedSpace.name}` : "Pages"}
               </h3>
             </div>
             <div className="max-h-[500px] overflow-y-auto">
               {browseLoading && (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 </div>
               )}
               {!browseLoading && spacePages.length === 0 && (
-                <p className="px-4 py-8 text-center text-xs text-gray-400">
+                <p className="px-4 py-8 text-center text-xs text-muted-foreground">
                   Select a space to browse pages
                 </p>
               )}
@@ -313,11 +313,11 @@ export default function ConfluencePage() {
                   key={p.id}
                   onClick={() => loadPage(p.id)}
                   className={cn(
-                    "flex w-full items-center gap-2 border-b border-gray-50 px-4 py-2.5 text-left text-sm transition-colors hover:bg-gray-50",
-                    pageDetail?.id === p.id && "bg-violet-50 text-violet-700"
+                    "flex w-full items-center gap-2 border-b border-border px-4 py-2.5 text-left text-sm transition-colors hover:bg-muted/50",
+                    pageDetail?.id === p.id && "bg-primary/5 text-primary"
                   )}
                 >
-                  <FileText className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   <span className="truncate">{p.title}</span>
                 </button>
               ))}
@@ -325,43 +325,43 @@ export default function ConfluencePage() {
           </div>
 
           {/* Page detail column */}
-          <div className="rounded-xl border border-gray-200 bg-white">
-            <div className="border-b border-gray-200 px-4 py-3">
-              <h3 className="text-sm font-semibold text-gray-700">Page Content</h3>
+          <div className="rounded-xl border border-border bg-background">
+            <div className="border-b border-border px-4 py-3">
+              <h3 className="text-sm font-semibold text-foreground">Page Content</h3>
             </div>
             <div className="max-h-[500px] overflow-y-auto p-4">
               {pageLoading && (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 </div>
               )}
               {!pageLoading && !pageDetail && (
-                <p className="py-8 text-center text-xs text-gray-400">
+                <p className="py-8 text-center text-xs text-muted-foreground">
                   Select a page to preview
                 </p>
               )}
               {pageDetail && (
                 <div>
-                  <h4 className="mb-1 text-base font-semibold text-gray-900">
+                  <h4 className="mb-1 text-base font-semibold text-foreground">
                     {pageDetail.title}
                   </h4>
-                  <p className="mb-3 text-xs text-gray-400">
+                  <p className="mb-3 text-xs text-muted-foreground">
                     {pageDetail.space_name} &middot; v{pageDetail.version}
                     {pageDetail.url && (
                       <a
                         href={pageDetail.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="ml-2 inline-flex items-center gap-0.5 text-violet-600 hover:underline"
+                        className="ml-2 inline-flex items-center gap-0.5 text-primary hover:underline"
                       >
                         Open <ExternalLink className="h-3 w-3" />
                       </a>
                     )}
                   </p>
-                  <div className="prose prose-sm max-w-none whitespace-pre-wrap text-xs text-gray-700">
+                  <div className="prose prose-sm max-w-none whitespace-pre-wrap text-xs text-foreground">
                     {pageDetail.content.slice(0, 5000)}
                     {pageDetail.content.length > 5000 && (
-                      <p className="mt-2 italic text-gray-400">
+                      <p className="mt-2 italic text-muted-foreground">
                         [Showing first 5000 chars of {pageDetail.content.length}]
                       </p>
                     )}
@@ -383,35 +383,35 @@ export default function ConfluencePage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && doSearch()}
               placeholder="Search Confluence pages..."
-              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
+              className="flex-1 rounded-lg border border-input px-3 py-2 text-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/10"
             />
             <button
               onClick={doSearch}
               disabled={searchLoading || !searchQuery.trim()}
-              className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
               {searchLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
               Search
             </button>
           </div>
-          <div className="rounded-xl border border-gray-200 bg-white">
+          <div className="rounded-xl border border-border bg-background">
             {searchResults.length === 0 && !searchLoading && (
-              <p className="px-4 py-8 text-center text-sm text-gray-400">
+              <p className="px-4 py-8 text-center text-sm text-muted-foreground">
                 Search for Confluence pages by keyword
               </p>
             )}
             {searchResults.map((r) => (
               <div
                 key={r.id}
-                className="flex items-start gap-3 border-b border-gray-100 px-4 py-3 last:border-0"
+                className="flex items-start gap-3 border-b border-border px-4 py-3 last:border-0"
               >
-                <FileText className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+                <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900">{r.title}</p>
+                  <p className="text-sm font-medium text-foreground">{r.title}</p>
                   {r.excerpt && (
-                    <p className="mt-0.5 truncate text-xs text-gray-500">{r.excerpt}</p>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{r.excerpt}</p>
                   )}
-                  <p className="mt-0.5 text-[10px] text-gray-400">
+                  <p className="mt-0.5 text-xs text-muted-foreground">
                     Space: {r.space_key} &middot; ID: {r.id}
                   </p>
                 </div>
@@ -424,34 +424,34 @@ export default function ConfluencePage() {
       {/* Extract Tab */}
       {activeTab === "extract" && (
         <div className="space-y-4">
-          <div className="rounded-xl border border-gray-200 bg-white p-5">
-            <h3 className="mb-3 text-sm font-semibold text-gray-700">Extract Pages from Space</h3>
+          <div className="rounded-xl border border-border bg-background p-5">
+            <h3 className="mb-3 text-sm font-semibold text-foreground">Extract Pages from Space</h3>
             <div className="flex items-end gap-3">
               <div className="flex-1">
-                <label className="mb-1 block text-xs font-medium text-gray-600">Space Key</label>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Space Key</label>
                 <input
                   type="text"
                   value={extractSpace}
                   onChange={(e) => setExtractSpace(e.target.value.toUpperCase())}
                   placeholder="e.g. PROJ"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                  className="w-full rounded-lg border border-input px-3 py-2 text-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/10"
                 />
               </div>
               <div className="w-32">
-                <label className="mb-1 block text-xs font-medium text-gray-600">Max Pages</label>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Max Pages</label>
                 <input
                   type="number"
                   value={extractMaxPages}
                   onChange={(e) => setExtractMaxPages(Number(e.target.value))}
                   min={1}
                   max={100}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                  className="w-full rounded-lg border border-input px-3 py-2 text-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/10"
                 />
               </div>
               <button
                 onClick={doExtract}
                 disabled={extracting || !extractSpace.trim()}
-                className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
                 {extracting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                 Extract
@@ -476,7 +476,7 @@ export default function ConfluencePage() {
                   </div>
                 ))}
               </div>
-              <p className="mt-3 text-[10px] text-green-600">
+              <p className="mt-3 text-xs text-green-600">
                 Run ID: {extraction.run_id}
               </p>
             </div>

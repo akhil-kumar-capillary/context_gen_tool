@@ -31,7 +31,7 @@ def _collect_leaves(node: dict, category: str = "") -> list[dict]:
     return leaves
 
 
-def _build_comparison_pairs(leaves: list[dict], max_pairs: int = 20) -> list[tuple[dict, dict]]:
+def _build_comparison_pairs(leaves: list[dict], max_pairs: int = 50) -> list[tuple[dict, dict]]:
     """Build pairs of leaves to compare.
 
     Strategy: compare within same category + cross-category for rule-like content.

@@ -153,7 +153,7 @@ export function DocGenerationPanel() {
             {!isGenerating ? (
               <button
                 onClick={handleGenerate}
-                className="flex items-center gap-2 rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-violet-700"
+                className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
               >
                 <Play className="h-4 w-4" />
                 Generate Context Documents
@@ -171,9 +171,9 @@ export function DocGenerationPanel() {
 
           {/* Progress log */}
           {generationProgress.length > 0 && (
-            <div className="rounded-xl border border-gray-200 bg-white">
-              <div className="border-b border-gray-200 px-5 py-3">
-                <h3 className="text-sm font-semibold text-gray-700">
+            <div className="rounded-xl border border-border bg-background">
+              <div className="border-b border-border px-5 py-3">
+                <h3 className="text-sm font-semibold text-foreground">
                   Generation Progress
                   {isGenerating && <Loader2 className="ml-2 inline h-3.5 w-3.5 animate-spin" />}
                 </h3>
@@ -184,7 +184,7 @@ export function DocGenerationPanel() {
                     key={i}
                     className={cn(
                       "flex items-start gap-2 py-1 text-xs",
-                      p.status === "failed" ? "text-red-600" : p.phase === "complete" ? "text-green-600" : "text-gray-600"
+                      p.status === "failed" ? "text-red-600" : p.phase === "complete" ? "text-green-600" : "text-muted-foreground"
                     )}
                   >
                     {p.status === "done" || p.phase === "complete" ? (
@@ -192,7 +192,7 @@ export function DocGenerationPanel() {
                     ) : p.status === "failed" ? (
                       <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-red-500" />
                     ) : (
-                      <Clock className="mt-0.5 h-3 w-3 shrink-0 text-gray-400" />
+                      <Clock className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
                     )}
                     <span>{p.detail || p.error || p.phase || "..."}</span>
                   </div>
@@ -206,33 +206,33 @@ export function DocGenerationPanel() {
       {/* Loading indicator */}
       {isLoadingDocs && (
         <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
-          <span className="ml-2 text-sm text-gray-400">Loading documents...</span>
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          <span className="ml-2 text-sm text-muted-foreground">Loading documents...</span>
         </div>
       )}
 
       {/* Generated docs */}
       {contextDocs.length > 0 && (
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-gray-700">
+          <h3 className="text-sm font-semibold text-foreground">
             Generated Documents ({contextDocs.length})
           </h3>
           {contextDocs.map((doc) => (
             <div
               key={doc.id}
-              className="rounded-xl border border-gray-200 bg-white overflow-hidden"
+              className="rounded-xl border border-border bg-background overflow-hidden"
             >
               <button
                 onClick={() => setExpandedDoc(expandedDoc === doc.id ? null : doc.id)}
-                className="flex w-full items-center justify-between px-5 py-3 text-left hover:bg-gray-50 transition-colors"
+                className="flex w-full items-center justify-between px-5 py-3 text-left hover:bg-muted/50 transition-colors"
               >
                 <div className="flex items-center gap-3">
-                  <FileText className="h-4 w-4 text-violet-500" />
+                  <FileText className="h-4 w-4 text-primary" />
                   <div>
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-sm font-medium text-foreground">
                       {doc.doc_name || doc.doc_key}
                     </p>
-                    <p className="text-[11px] text-gray-400">
+                    <p className="text-xs text-muted-foreground">
                       {doc.model_used} &middot; {doc.token_count?.toLocaleString() || "?"} tokens
                       &middot; {formatDate(doc.created_at || null)}
                     </p>
@@ -244,7 +244,7 @@ export function DocGenerationPanel() {
                       e.stopPropagation();
                       handleCopy(doc.id, doc.doc_content || "");
                     }}
-                    className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                    className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-muted-foreground transition-colors"
                     title="Copy content"
                   >
                     {copied === doc.id ? (
@@ -266,8 +266,8 @@ export function DocGenerationPanel() {
                     className={cn(
                       "rounded p-1.5 transition-colors disabled:pointer-events-none",
                       doc.status === "archived"
-                        ? "text-gray-400 hover:bg-green-50 hover:text-green-600"
-                        : "text-gray-400 hover:bg-amber-50 hover:text-amber-600"
+                        ? "text-muted-foreground hover:bg-green-50 hover:text-green-600"
+                        : "text-muted-foreground hover:bg-amber-50 hover:text-amber-600"
                     )}
                     title={doc.status === "archived" ? "Restore document" : "Archive document"}
                   >
@@ -282,8 +282,8 @@ export function DocGenerationPanel() {
                 </div>
               </button>
               {expandedDoc === doc.id && doc.doc_content && (
-                <div className="border-t border-gray-200 bg-gray-50 p-5">
-                  <pre className="whitespace-pre-wrap text-xs text-gray-700 font-mono max-h-96 overflow-y-auto">
+                <div className="border-t border-border bg-muted/50 p-5">
+                  <pre className="whitespace-pre-wrap text-xs text-foreground font-mono max-h-96 overflow-y-auto">
                     {doc.doc_content}
                   </pre>
                 </div>
@@ -295,9 +295,9 @@ export function DocGenerationPanel() {
 
       {/* Empty state */}
       {!isLoadingDocs && contextDocs.length === 0 && !isGenerating && generationProgress.length === 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white px-6 py-12 text-center">
-          <FileText className="mx-auto h-8 w-8 text-gray-300" />
-          <p className="mt-2 text-sm text-gray-400">
+        <div className="rounded-xl border border-border bg-background px-6 py-12 text-center">
+          <FileText className="mx-auto h-8 w-8 text-muted-foreground/50" />
+          <p className="mt-2 text-sm text-muted-foreground">
             No documents generated yet. Click &quot;Generate&quot; to create context documents.
           </p>
         </div>

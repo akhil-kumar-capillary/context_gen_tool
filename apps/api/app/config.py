@@ -175,7 +175,11 @@ class Settings(BaseSettings):
         """Parse CORS origins — handles JSON array or comma-separated plain URLs."""
         raw = self.cors_origins_raw.strip()
         if raw.startswith("["):
-            return json.loads(raw)
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError:
+                logger.error("Invalid CORS_ORIGINS JSON: %s — falling back to raw value", raw)
+                return [raw.strip("[]\" ")]
         return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
     # Primary admin email
@@ -196,12 +200,7 @@ class Settings(BaseSettings):
     filter_table_default_pct: float = 0.30
     filter_common_pct: float = 0.10
     max_enum_distinct: int = 30
-    top_tables_schema: int = 25
-    top_join_pairs: int = 15
-    top_clusters: int = 15
     top_glossary_cols: int = 20
-    top_filter_tables: int = 20
-    top_filters_per_table: int = 5
     dialect: str = "spark"
 
     # Sanitize/Refactoring

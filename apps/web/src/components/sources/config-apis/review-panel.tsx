@@ -145,7 +145,7 @@ export function ReviewPanel() {
   // ── No analysis selected ──
   if (!activeAnalysisId) {
     return (
-      <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
+      <div className="rounded-xl border border-border bg-background p-8 text-center text-sm text-muted-foreground">
         Run analysis first to review and select items for LLM generation.
       </div>
     );
@@ -154,7 +154,7 @@ export function ReviewPanel() {
   // ── Loading ──
   if (isLoadingReviewData) {
     return (
-      <div className="rounded-xl border border-gray-200 bg-white p-8 flex items-center justify-center gap-2 text-sm text-gray-500">
+      <div className="rounded-xl border border-border bg-background p-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
         Loading review data...
       </div>
@@ -177,9 +177,9 @@ export function ReviewPanel() {
       )}
 
       {/* Review & Select card */}
-      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <div className="rounded-xl border border-border bg-background overflow-hidden">
         {/* Doc tabs */}
-        <div className="flex border-b border-gray-200 bg-gray-50 overflow-x-auto">
+        <div className="flex border-b border-border bg-muted/50 overflow-x-auto">
           {DOC_TABS.map((tab) => (
             <button
               key={tab.key}
@@ -187,8 +187,8 @@ export function ReviewPanel() {
               className={cn(
                 "px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors",
                 activeTab === tab.key
-                  ? "border-violet-500 text-violet-700 bg-white"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                  ? "border-primary text-primary bg-background"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted"
               )}
             >
               {tab.shortLabel}
@@ -197,7 +197,7 @@ export function ReviewPanel() {
         </div>
 
         {/* Control mode switcher */}
-        <div className="flex items-center gap-1 px-4 py-2 border-b border-gray-100">
+        <div className="flex items-center gap-1 px-4 py-2 border-b border-border">
           {[
             { mode: "inclusions" as ControlMode, icon: ListChecks, label: "Inclusions" },
             { mode: "prompt" as ControlMode, icon: FileCode, label: "System Prompt" },
@@ -209,8 +209,8 @@ export function ReviewPanel() {
               className={cn(
                 "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
                 controlMode === mode
-                  ? "bg-violet-100 text-violet-700"
-                  : "text-gray-500 hover:bg-gray-100"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-muted"
               )}
             >
               <Icon className="h-3.5 w-3.5" />
@@ -224,7 +224,7 @@ export function ReviewPanel() {
           {controlMode === "inclusions" && (
             <>
               {/* Left: inclusion toggles */}
-              <div className="w-1/2 border-r border-gray-200 overflow-auto p-3">
+              <div className="w-1/2 border-r border-border overflow-auto p-3">
                 <InclusionPanel docKey={activeTab} />
               </div>
               {/* Right: payload preview */}
@@ -237,7 +237,7 @@ export function ReviewPanel() {
           {controlMode === "prompt" && (
             <div className="flex-1 p-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">
+                <span className="text-sm font-medium text-foreground">
                   System Prompt for {DOC_TABS.find((t) => t.key === activeTab)?.label}
                 </span>
                 {customPrompts[activeTab] && (
@@ -246,14 +246,14 @@ export function ReviewPanel() {
                       const store = useConfigApisStore.getState();
                       store.resetPrompt(activeTab);
                     }}
-                    className="text-xs text-violet-600 hover:text-violet-800"
+                    className="text-xs text-primary hover:text-primary"
                   >
                     Reset to default
                   </button>
                 )}
               </div>
               <textarea
-                className="w-full h-[420px] p-3 border border-gray-200 rounded-lg text-xs font-mono text-gray-700 resize-none focus:outline-none focus:ring-2 focus:ring-violet-300"
+                className="w-full h-[420px] p-3 border border-border rounded-lg text-xs font-mono text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
                 value={customPrompts[activeTab] || defaultPrompts[activeTab] || ""}
                 onChange={(e) => setCustomPrompt(activeTab, e.target.value)}
                 placeholder="System prompt will appear here..."
@@ -269,8 +269,8 @@ export function ReviewPanel() {
         </div>
 
         {/* Footer: size summary + continue button */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
-          <div className="flex items-center gap-4 text-xs text-gray-500">
+        <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/50">
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <span>
               Total: {totalChars.toLocaleString()} chars /
               ~{totalTokens.toLocaleString()} tokens across {
@@ -281,7 +281,7 @@ export function ReviewPanel() {
 
           <button
             onClick={() => setActiveStep("generate")}
-            className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors"
           >
             Continue to Generate
             <ArrowRight className="h-4 w-4" />

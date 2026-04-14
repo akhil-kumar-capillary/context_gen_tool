@@ -1,11 +1,18 @@
 "use client";
 
+import { SafeHtml } from "@/components/shared/safe-html";
+
 import { useState } from "react";
-import { X, Loader2 } from "lucide-react";
+import { X, Loader2, AlertCircle } from "lucide-react";
+import { motion } from "framer-motion";
 import { cn, CONTEXT_NAME_REGEX, CONTEXT_NAME_ERROR } from "@/lib/utils";
 import { useContextStore } from "@/stores/context-store";
 import { MarkdownRenderer } from "@/components/chat/markdown-renderer";
 import type { Context } from "@/types";
+
+function looksLikeHtml(text: string): boolean {
+  return /^\s*<[a-z][\s\S]*>/i.test(text.trim());
+}
 
 interface EditContextDialogProps {
   ctx: Context;
@@ -22,22 +29,10 @@ export function EditContextDialog({ ctx }: EditContextDialogProps) {
   const [error, setError] = useState<string | null>(null);
 
   const handleSave = async () => {
-    if (!name.trim()) {
-      setError("Name is required");
-      return;
-    }
-    if (!CONTEXT_NAME_REGEX.test(name)) {
-      setError(CONTEXT_NAME_ERROR);
-      return;
-    }
-    if (name.length > 100) {
-      setError("Name must be 100 characters or less");
-      return;
-    }
-    if (!content.trim()) {
-      setError("Content is required");
-      return;
-    }
+    if (!name.trim()) { setError("Name is required"); return; }
+    if (!CONTEXT_NAME_REGEX.test(name)) { setError(CONTEXT_NAME_ERROR); return; }
+    if (name.length > 100) { setError("Name must be 100 characters or less"); return; }
+    if (!content.trim()) { setError("Content is required"); return; }
 
     setSaving(true);
     setError(null);
@@ -50,61 +45,73 @@ export function EditContextDialog({ ctx }: EditContextDialogProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-3xl rounded-xl bg-white shadow-2xl">
+    <div className="fixed inset-0 z-[60] flex justify-end bg-black/30 backdrop-blur-[2px]">
+      {/* Backdrop click to close */}
+      <div className="flex-1" onClick={() => setEditingContextId(null)} />
+
+      {/* Drawer */}
+      <motion.div
+        initial={{ x: "100%" }}
+        animate={{ x: 0 }}
+        exit={{ x: "100%" }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        className="flex w-full sm:w-3/4 lg:w-1/2 flex-col bg-background shadow-2xl"
+      >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <h2 className="text-lg font-semibold text-gray-900">Edit Context</h2>
+        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+          <h2 className="text-base font-semibold text-foreground">Edit Context</h2>
           <button
             onClick={() => setEditingContextId(null)}
-            className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="Close"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Body */}
-        <div className="space-y-4 px-6 py-5">
-          {/* Name */}
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={100}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
-            />
-            <p className="mt-1 text-xs text-gray-400">
-              Letters, numbers, spaces, _ : # ( ) - , &middot; Max 100 chars
-            </p>
+        {/* Body — flex column so content area fills remaining height */}
+        <div className="flex flex-1 flex-col overflow-hidden px-6 py-4 gap-3">
+          {/* Name + Scope row (compact) */}
+          <div className="flex gap-3 shrink-0">
+            <div className="flex-1">
+              <label htmlFor="edit-name" className="mb-1 block text-xs font-medium text-foreground">
+                Name
+              </label>
+              <input
+                id="edit-name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={100}
+                className="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm transition-colors"
+              />
+            </div>
+            <div className="w-36 shrink-0">
+              <label htmlFor="edit-scope" className="mb-1 block text-xs font-medium text-foreground">
+                Scope
+              </label>
+              <select
+                id="edit-scope"
+                value={scope}
+                onChange={(e) => setScope(e.target.value as "org" | "private")}
+                className="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm transition-colors"
+              >
+                <option value="org">Organization</option>
+                <option value="private">Private</option>
+              </select>
+            </div>
           </div>
 
-          {/* Scope */}
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Scope</label>
-            <select
-              value={scope}
-              onChange={(e) => setScope(e.target.value as "org" | "private")}
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
-            >
-              <option value="org">Organization</option>
-              <option value="private">Private</option>
-            </select>
-          </div>
-
-          {/* Content with edit/preview tabs */}
-          <div>
-            <div className="mb-1 flex items-center justify-between">
-              <label className="text-sm font-medium text-gray-700">Content</label>
-              <div className="flex gap-1 rounded-lg bg-gray-100 p-0.5">
+          {/* Content — fills all remaining vertical space */}
+          <div className="flex flex-1 flex-col min-h-0">
+            <div className="mb-1.5 flex items-center justify-between shrink-0">
+              <label className="text-xs font-medium text-foreground">Content</label>
+              <div className="flex rounded-lg border border-border bg-muted/50 p-0.5">
                 <button
                   onClick={() => setTab("edit")}
                   className={cn(
-                    "rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                    tab === "edit"
-                      ? "bg-white text-gray-900 shadow-sm"
-                      : "text-gray-500 hover:text-gray-700"
+                    "rounded-md px-3 py-1 text-xs font-medium transition-all",
+                    tab === "edit" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   Edit
@@ -112,10 +119,8 @@ export function EditContextDialog({ ctx }: EditContextDialogProps) {
                 <button
                   onClick={() => setTab("preview")}
                   className={cn(
-                    "rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                    tab === "preview"
-                      ? "bg-white text-gray-900 shadow-sm"
-                      : "text-gray-500 hover:text-gray-700"
+                    "rounded-md px-3 py-1 text-xs font-medium transition-all",
+                    tab === "preview" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   Preview
@@ -127,14 +132,18 @@ export function EditContextDialog({ ctx }: EditContextDialogProps) {
               <textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                className="h-72 w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                className="flex-1 w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm font-mono transition-colors"
               />
             ) : (
-              <div className="h-72 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm">
+              <div className="flex-1 overflow-y-auto rounded-lg border border-border bg-muted/30 p-4 text-sm">
                 {content ? (
-                  <MarkdownRenderer content={content} />
+                  looksLikeHtml(content) ? (
+                    <SafeHtml html={content} className="prose prose-sm max-w-none text-foreground" />
+                  ) : (
+                    <MarkdownRenderer content={content} />
+                  )
                 ) : (
-                  <p className="italic text-gray-400">Nothing to preview</p>
+                  <p className="italic text-muted-foreground">Nothing to preview</p>
                 )}
               </div>
             )}
@@ -142,24 +151,25 @@ export function EditContextDialog({ ctx }: EditContextDialogProps) {
 
           {/* Error */}
           {error && (
-            <div className="rounded-lg bg-red-50 px-4 py-2.5 text-sm text-red-600">
+            <div className="flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-2.5 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4 shrink-0" />
               {error}
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4">
+        <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4">
           <button
             onClick={() => setEditingContextId(null)}
-            className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100"
+            className="rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-700 disabled:opacity-70 disabled:pointer-events-none"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-70 disabled:pointer-events-none"
           >
             {saving ? (
               <span className="flex items-center gap-2">
@@ -171,7 +181,7 @@ export function EditContextDialog({ ctx }: EditContextDialogProps) {
             )}
           </button>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

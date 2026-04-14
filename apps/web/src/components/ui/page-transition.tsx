@@ -1,18 +1,15 @@
 "use client";
 
-/**
- * Wraps page content with a subtle fade-in animation on mount.
- * Uses a CSS @keyframes animation that runs once on render.
- */
+import { motion } from "framer-motion";
+
 export function PageTransition({ children }: { children: React.ReactNode }) {
   return (
-    <div
-      className="opacity-0"
-      style={{
-        animation: "fadeIn 200ms ease-out forwards",
-      }}
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.15, ease: "easeOut" }}
     >
       {children}
-    </div>
+    </motion.div>
   );
 }

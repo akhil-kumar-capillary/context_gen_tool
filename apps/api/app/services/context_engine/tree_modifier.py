@@ -455,7 +455,7 @@ def _apply_create_leaf(tree: dict, plan: ModificationPlan) -> dict:
     if "children" not in parent:
         parent["children"] = []
 
-    node_id = f"leaf_{uuid.uuid4().hex[:8]}"
+    node_id = f"leaf_{uuid.uuid4().hex}"
     new_node: dict = {
         "id": node_id,
         "name": plan.new_name or plan.new_content[:60].strip(),
@@ -500,8 +500,8 @@ def _apply_create_category(tree: dict, plan: ModificationPlan) -> dict:
     if "children" not in parent:
         parent["children"] = []
 
-    cat_id = f"cat_{uuid.uuid4().hex[:8]}"
-    leaf_id = f"leaf_{uuid.uuid4().hex[:8]}"
+    cat_id = f"cat_{uuid.uuid4().hex}"
+    leaf_id = f"leaf_{uuid.uuid4().hex}"
 
     new_cat: dict = {
         "id": cat_id,

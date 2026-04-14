@@ -39,17 +39,17 @@ function FilterRow({
     <div>
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full text-left px-4 py-2.5 hover:bg-gray-50 transition-colors flex items-center gap-2"
+        className="w-full text-left px-4 py-2.5 hover:bg-muted/50 transition-colors flex items-center gap-2"
       >
         {expanded ? (
-          <ChevronDown className="h-3 w-3 text-gray-400 flex-shrink-0" />
+          <ChevronDown className="h-3 w-3 text-muted-foreground flex-shrink-0" />
         ) : (
-          <ChevronRight className="h-3 w-3 text-gray-400 flex-shrink-0" />
+          <ChevronRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
         )}
         <span className="text-xs font-mono truncate flex-1">
           {filter.condition}
         </span>
-        <span className="text-[10px] text-gray-400 tabular-nums flex-shrink-0">
+        <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
           {filter.count.toLocaleString()} ·{" "}
           {Math.round(filter.global_pct * 100)}% ·{" "}
           {Object.keys(filter.table_pcts || {}).length} tables
@@ -68,7 +68,7 @@ function FilterRow({
                 {tables.map(([table, pct]) => (
                   <span
                     key={table}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono bg-gray-50 text-gray-500 border border-gray-200"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono bg-muted/50 text-muted-foreground border border-border"
                   >
                     {table}
                     <span className="text-[9px] opacity-60">
@@ -77,7 +77,7 @@ function FilterRow({
                   </span>
                 ))}
                 {Object.keys(filter.table_pcts || {}).length > 20 && (
-                  <span className="inline-flex items-center px-2 py-0.5 text-[10px] text-gray-400">
+                  <span className="inline-flex items-center px-2 py-0.5 text-xs text-muted-foreground">
                     +{Object.keys(filter.table_pcts).length - 20} more
                   </span>
                 )}
@@ -131,10 +131,10 @@ export function FiltersTab() {
   if (!filters?.length) {
     return (
       <div className="space-y-2">
-        <h3 className="text-sm font-medium text-gray-500">
+        <h3 className="text-sm font-medium text-muted-foreground">
           Filter Classification
         </h3>
-        <div className="h-[400px] flex items-center justify-center text-sm text-gray-400">
+        <div className="h-[400px] flex items-center justify-center text-sm text-muted-foreground">
           No filter classification data
         </div>
       </div>
@@ -145,10 +145,10 @@ export function FiltersTab() {
 
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-medium text-gray-500">
+      <h3 className="text-sm font-medium text-muted-foreground">
         Filter Classification
       </h3>
-      <p className="text-xs text-gray-400">
+      <p className="text-xs text-muted-foreground">
         WHERE conditions classified by frequency into tiers: Mandatory (&gt;50%),
         Table-Default (&gt;30%), Common (&gt;10%), Situational
       </p>
@@ -170,8 +170,8 @@ export function FiltersTab() {
                 onClick={() =>
                   setExpandedTier(expandedTier === tier ? null : tier)
                 }
-                className={`rounded-lg border border-gray-200 p-3 text-left transition-all hover:scale-[1.02] bg-white ${
-                  expandedTier === tier ? "ring-2 ring-violet-300" : ""
+                className={`rounded-lg border border-border p-3 text-left transition-all hover:scale-[1.02] bg-background ${
+                  expandedTier === tier ? "ring-2 ring-primary/30" : ""
                 }`}
               >
                 <div className="flex items-center gap-2">
@@ -179,14 +179,14 @@ export function FiltersTab() {
                     className="w-3 h-3 rounded-sm flex-shrink-0"
                     style={{ background: TIER_COLORS[tier] }}
                   />
-                  <span className="text-xs font-semibold text-gray-700">
+                  <span className="text-xs font-semibold text-foreground">
                     {tier}
                   </span>
                 </div>
-                <p className="text-xl font-bold tabular-nums mt-1 text-gray-900">
+                <p className="text-xl font-bold tabular-nums mt-1 text-foreground">
                   {count}
                 </p>
-                <p className="text-[10px] text-gray-400">conditions</p>
+                <p className="text-xs text-muted-foreground">conditions</p>
               </button>
             );
           })}
@@ -202,33 +202,33 @@ export function FiltersTab() {
               exit={{ opacity: 0, height: 0 }}
               className="overflow-hidden"
             >
-              <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-                <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+              <div className="rounded-xl border border-border bg-background overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-border bg-muted/50 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div
                       className="w-3 h-3 rounded-sm"
                       style={{ background: TIER_COLORS[expandedTier] }}
                     />
-                    <span className="text-sm font-semibold text-gray-700">
+                    <span className="text-sm font-semibold text-foreground">
                       {expandedTier}
                     </span>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-muted-foreground">
                       ({tierCounts[expandedTier]} conditions)
                     </span>
                   </div>
                   <button
                     onClick={() => setExpandedTier(null)}
-                    className="text-xs text-gray-400 hover:text-gray-700"
+                    className="text-xs text-muted-foreground hover:text-foreground"
                   >
                     Close
                   </button>
                 </div>
-                <div className="divide-y divide-gray-100 max-h-[400px] overflow-y-auto">
+                <div className="divide-y divide-border max-h-[400px] overflow-y-auto">
                   {tierGroups[expandedTier].slice(0, 50).map((f, i) => (
                     <FilterRow key={i} filter={f} />
                   ))}
                   {tierGroups[expandedTier].length > 50 && (
-                    <div className="px-4 py-2 text-xs text-gray-400 text-center">
+                    <div className="px-4 py-2 text-xs text-muted-foreground text-center">
                       +{tierGroups[expandedTier].length - 50} more conditions
                     </div>
                   )}
@@ -240,27 +240,27 @@ export function FiltersTab() {
 
         {/* Top tables bar chart */}
         {topTableBars.length > 0 && (
-          <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
-            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+          <div className="rounded-xl border border-border bg-background p-4 space-y-3">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Top Tables by Filter Frequency
             </h4>
             <div className="space-y-1.5">
               {topTableBars.map(([table, count]) => (
                 <div key={table} className="flex items-center gap-3">
-                  <span className="text-[11px] font-mono text-gray-500 w-[140px] truncate text-right flex-shrink-0">
+                  <span className="text-xs font-mono text-muted-foreground w-[140px] truncate text-right flex-shrink-0">
                     {table}
                   </span>
-                  <div className="flex-1 h-5 rounded bg-gray-100 overflow-hidden">
+                  <div className="flex-1 h-5 rounded bg-muted overflow-hidden">
                     <motion.div
                       initial={{ width: 0 }}
                       animate={{
                         width: `${(count / maxTableCount) * 100}%`,
                       }}
                       transition={{ duration: 0.5, ease: "easeOut" }}
-                      className="h-full rounded bg-violet-300"
+                      className="h-full rounded bg-primary/40"
                     />
                   </div>
-                  <span className="text-[10px] font-mono text-gray-400 tabular-nums w-[50px] text-right">
+                  <span className="text-xs font-mono text-muted-foreground tabular-nums w-[50px] text-right">
                     {count.toLocaleString()}
                   </span>
                 </div>
@@ -270,23 +270,23 @@ export function FiltersTab() {
         )}
 
         {/* Full filter table */}
-        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+        <div className="rounded-xl border border-border bg-background overflow-hidden">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50">
-                <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+              <tr className="border-b border-border bg-muted/50">
+                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Condition
                 </th>
-                <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Tier
                 </th>
-                <th className="px-3 py-2 text-right text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-2 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Count
                 </th>
-                <th className="px-3 py-2 text-right text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-2 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Global %
                 </th>
-                <th className="px-3 py-2 text-right text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-2 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Tables
                 </th>
               </tr>
@@ -295,27 +295,27 @@ export function FiltersTab() {
               {filters.slice(0, 50).map((f, i) => (
                 <tr
                   key={i}
-                  className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors"
+                  className="border-b border-border last:border-0 hover:bg-muted/50 transition-colors"
                 >
-                  <td className="px-3 py-2 text-xs font-mono truncate max-w-[300px] text-gray-700">
+                  <td className="px-3 py-2 text-xs font-mono truncate max-w-[300px] text-foreground">
                     {f.condition}
                   </td>
                   <td className="px-3 py-2">
                     <span
-                      className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
+                      className={`inline-flex px-1.5 py-0.5 rounded text-xs font-semibold border ${
                         TIER_BG[f.tier] || ""
                       }`}
                     >
                       {f.tier}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-xs text-right font-mono tabular-nums text-gray-600">
+                  <td className="px-3 py-2 text-xs text-right font-mono tabular-nums text-muted-foreground">
                     {f.count.toLocaleString()}
                   </td>
-                  <td className="px-3 py-2 text-xs text-right font-mono tabular-nums text-gray-600">
+                  <td className="px-3 py-2 text-xs text-right font-mono tabular-nums text-muted-foreground">
                     {Math.round(f.global_pct * 100)}%
                   </td>
-                  <td className="px-3 py-2 text-xs text-right font-mono tabular-nums text-gray-600">
+                  <td className="px-3 py-2 text-xs text-right font-mono tabular-nums text-muted-foreground">
                     {Object.keys(f.table_pcts || {}).length}
                   </td>
                 </tr>
@@ -323,7 +323,7 @@ export function FiltersTab() {
             </tbody>
           </table>
           {filters.length > 50 && (
-            <div className="px-3 py-2 text-xs text-gray-400 text-center border-t border-gray-100">
+            <div className="px-3 py-2 text-xs text-muted-foreground text-center border-t border-border">
               Showing 50 of {filters.length} conditions
             </div>
           )}

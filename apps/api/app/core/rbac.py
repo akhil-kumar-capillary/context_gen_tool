@@ -5,8 +5,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from fastapi import Query
+
 from app.core.auth import get_current_user
-from app.models.user import User, Role, UserRole, UserPermission, RolePermission, Permission
+from app.models.user import User, Role, UserRole, UserPermission, RolePermission, Permission, UserOrg
 
 # ---------------------------------------------------------------------------
 # Role x Module matrix
@@ -117,3 +119,25 @@ def require_permission(module: str, operation: str) -> Callable:
         return current_user
 
     return dependency
+
+
+async def require_org_member(
+    org_id: int = Query(...),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> int:
+    """Validate the user belongs to the requested org. Returns validated org_id.
+
+    Admins bypass the check (they can access any org).
+    """
+    if current_user.get("is_admin"):
+        return org_id
+    result = await db.execute(
+        select(UserOrg.org_id).where(
+            UserOrg.user_id == current_user["user_id"],
+            UserOrg.org_id == org_id,
+        )
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(403, "You do not belong to this organization")
+    return org_id

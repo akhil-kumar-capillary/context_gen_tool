@@ -67,24 +67,24 @@ export function ContextPanel({ onSendChatMessage }: ContextPanelProps) {
   }, [onSendChatMessage]);
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col h-full gap-4">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Context Management</h1>
-        <p className="text-sm text-gray-500">
+      <div className="shrink-0">
+        <h1 className="text-xl font-semibold text-foreground">Context Management</h1>
+        <p className="text-sm text-muted-foreground">
           Manage, create, and refactor context documents for your organization.
         </p>
       </div>
 
       {/* Tab toggle */}
-      <div className="flex items-center gap-1 rounded-lg bg-gray-100 p-1 w-fit">
+      <div className="flex items-center rounded-lg border border-border bg-muted/50 p-0.5 w-fit shrink-0">
         <button
           onClick={() => setViewMode("contexts")}
           className={cn(
-            "rounded-md px-4 py-1.5 text-sm font-medium transition-colors",
+            "rounded-md px-4 py-1.5 text-sm font-medium transition-all",
             viewMode === "contexts"
-              ? "bg-white text-gray-900 shadow-sm"
-              : "text-gray-500 hover:text-gray-700"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
           )}
         >
           Contexts
@@ -92,24 +92,26 @@ export function ContextPanel({ onSendChatMessage }: ContextPanelProps) {
         <button
           onClick={() => setViewMode("ai-generated")}
           className={cn(
-            "relative rounded-md px-4 py-1.5 text-sm font-medium transition-colors",
+            "relative rounded-md px-4 py-1.5 text-sm font-medium transition-all",
             viewMode === "ai-generated"
-              ? "bg-white text-gray-900 shadow-sm"
-              : "text-gray-500 hover:text-gray-700"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
           )}
         >
           AI Generated
           {aiContexts && aiContexts.length > 0 && (
-            <span className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-violet-600 text-[10px] text-white">
+            <span className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground">
               {aiContexts.length}
             </span>
           )}
         </button>
       </div>
 
-      {/* Tab content */}
+      {/* Tab content — fills remaining height */}
       {viewMode === "contexts" ? (
-        <ContextTable />
+        <div className="flex-1 min-h-0 flex flex-col">
+          <ContextTable />
+        </div>
       ) : (
         <div className="space-y-4">
           {/* Actions bar */}
@@ -118,7 +120,7 @@ export function ContextPanel({ onSendChatMessage }: ContextPanelProps) {
               <button
                 onClick={handleSanitize}
                 disabled={isStreaming || !onSendChatMessage}
-                className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-700 disabled:opacity-50"
+                className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
                 {isStreaming && activeAction === "sanitize" ? (
                   <>
@@ -135,7 +137,7 @@ export function ContextPanel({ onSendChatMessage }: ContextPanelProps) {
               <button
                 onClick={handleAddSummary}
                 disabled={isStreaming || !onSendChatMessage}
-                className="flex items-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
+                className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
               >
                 {isStreaming && activeAction === "summary" ? (
                   <>
@@ -157,7 +159,7 @@ export function ContextPanel({ onSendChatMessage }: ContextPanelProps) {
                   <button
                     onClick={() => bulkUpload()}
                     disabled={someUploading || pendingCount === 0}
-                    className="flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
+                    className="flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
                   >
                     <Upload className="h-3.5 w-3.5" />
                     Upload All ({pendingCount})
@@ -165,7 +167,7 @@ export function ContextPanel({ onSendChatMessage }: ContextPanelProps) {
                 )}
                 <button
                   onClick={dismissAiContexts}
-                  className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                  className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
                   <X className="h-3.5 w-3.5" />
                   Dismiss
@@ -176,31 +178,31 @@ export function ContextPanel({ onSendChatMessage }: ContextPanelProps) {
 
           {/* Token usage */}
           {sanitizeUsage && (
-            <div className="flex items-center gap-4 rounded-lg bg-gray-50 px-4 py-2 text-xs text-gray-500">
+            <div className="flex items-center gap-4 rounded-lg bg-muted/50 px-4 py-2 text-xs text-muted-foreground">
               <span>
-                Input: <strong className="text-gray-700">{sanitizeUsage.input_tokens.toLocaleString()}</strong> tokens
+                Input: <strong className="text-foreground">{sanitizeUsage.input_tokens.toLocaleString()}</strong> tokens
               </span>
               <span>
-                Output: <strong className="text-gray-700">{sanitizeUsage.output_tokens.toLocaleString()}</strong> tokens
+                Output: <strong className="text-foreground">{sanitizeUsage.output_tokens.toLocaleString()}</strong> tokens
               </span>
             </div>
           )}
 
           {/* AI context list */}
           {aiContexts && aiContexts.length > 0 ? (
-            <div className="rounded-lg border border-gray-200 bg-white">
+            <div className="rounded-lg border border-border bg-background">
               {/* Column headers */}
-              <div className="grid grid-cols-[1fr_70px_100px_140px] gap-3 border-b border-gray-200 bg-gray-50 px-4 py-2">
-                <span className="text-xs font-medium uppercase tracking-wider text-gray-500">
+              <div className="grid grid-cols-[1fr_70px_100px_140px] gap-3 border-b border-border bg-muted/50 px-4 py-2">
+                <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   Name
                 </span>
-                <span className="text-xs font-medium uppercase tracking-wider text-gray-500">
+                <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   Scope
                 </span>
-                <span className="text-xs font-medium uppercase tracking-wider text-gray-500">
+                <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   Status
                 </span>
-                <span className="text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                <span className="text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   Actions
                 </span>
               </div>
@@ -210,10 +212,10 @@ export function ContextPanel({ onSendChatMessage }: ContextPanelProps) {
               ))}
             </div>
           ) : (
-            <div className="rounded-xl border border-gray-200 bg-white py-16 text-center">
-              <Sparkles className="mx-auto mb-3 h-8 w-8 text-gray-300" />
-              <p className="text-sm font-medium text-gray-500">No AI-generated contexts yet</p>
-              <p className="mt-1 text-xs text-gray-400">
+            <div className="rounded-xl border border-border bg-background py-16 text-center">
+              <Sparkles className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
+              <p className="text-sm font-medium text-muted-foreground">No AI-generated contexts yet</p>
+              <p className="mt-1 text-xs text-muted-foreground">
                 Click &ldquo;Sanitize All Contexts&rdquo; to refactor your existing contexts
                 using AI, or ask the chat assistant to help.
               </p>

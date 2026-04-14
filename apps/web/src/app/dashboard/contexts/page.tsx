@@ -23,7 +23,9 @@ export default function ContextsPage() {
 
   return (
     <ModuleGuard module="context_management">
-      <ContextPanel onSendChatMessage={queueMessage} />
+      <div className="absolute inset-0 px-4 pt-4 pb-4 lg:px-6 lg:pt-6 lg:pb-6 overflow-hidden">
+        <ContextPanel onSendChatMessage={queueMessage} />
+      </div>
     </ModuleGuard>
   );
 }

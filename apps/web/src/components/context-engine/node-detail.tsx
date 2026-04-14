@@ -7,7 +7,6 @@ import {
   Globe,
   Lock,
   Key,
-  Paperclip,
   FileText,
   AlertTriangle,
   Copy,
@@ -65,7 +64,7 @@ export function NodeDetail() {
 
   if (!treeData || !selectedNodeId) {
     return (
-      <div className="flex items-center justify-center h-full text-sm text-gray-400">
+      <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
         Select a node to view details
       </div>
     );
@@ -79,7 +78,7 @@ export function NodeDetail() {
   const node = findNode(treeData, selectedNodeId);
   if (!node) {
     return (
-      <div className="flex items-center justify-center h-full text-sm text-gray-400">
+      <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
         Node not found
       </div>
     );
@@ -124,32 +123,32 @@ export function NodeDetail() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-2 min-w-0">
-          <h3 className="text-sm font-semibold text-gray-900 truncate">
+          <h3 className="text-sm font-semibold text-foreground truncate">
             {node.name}
           </h3>
-          <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 uppercase">
+          <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground uppercase">
             {node.type}
           </span>
           {node.visibility === "private" ? (
-            <Lock className="h-3 w-3 text-gray-400 shrink-0" />
+            <Lock className="h-3 w-3 text-muted-foreground shrink-0" />
           ) : (
-            <Globe className="h-3 w-3 text-gray-300 shrink-0" />
+            <Globe className="h-3 w-3 text-muted-foreground/50 shrink-0" />
           )}
         </div>
         <button
           onClick={() => selectNode(null)}
-          className="shrink-0 rounded p-1 hover:bg-gray-100"
+          className="shrink-0 rounded p-1 hover:bg-muted"
         >
-          <X className="h-4 w-4 text-gray-400" />
+          <X className="h-4 w-4 text-muted-foreground" />
         </button>
       </div>
 
       {/* Summary (if present — shown as subtitle) */}
       {node.summary && (
-        <div className="border-b border-gray-100 px-4 py-2">
-          <p className="text-xs text-gray-500 italic">{node.summary}</p>
+        <div className="border-b border-border px-4 py-2">
+          <p className="text-xs text-muted-foreground italic">{node.summary}</p>
         </div>
       )}
 
@@ -157,7 +156,7 @@ export function NodeDetail() {
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Health score */}
         <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-500">Health</span>
+          <span className="text-xs text-muted-foreground">Health</span>
           <span
             className={cn(
               "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold",
@@ -173,10 +172,10 @@ export function NodeDetail() {
         {/* Source */}
         {node.source && (
           <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-500">Source</span>
-            <span className="text-xs text-gray-700">{node.source}</span>
+            <span className="text-xs text-muted-foreground">Source</span>
+            <span className="text-xs text-foreground">{node.source}</span>
             {node.source_doc_key && (
-              <span className="font-mono text-[10px] text-gray-400">
+              <span className="font-mono text-xs text-muted-foreground">
                 ({node.source_doc_key})
               </span>
             )}
@@ -187,12 +186,12 @@ export function NodeDetail() {
         {(node.used || node.hits) && (
           <div className="flex items-center gap-4">
             {node.used && (
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-muted-foreground">
                 Last used: {node.used}
               </span>
             )}
             {node.hits && (
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-muted-foreground">
                 {node.hits} retrievals
               </span>
             )}
@@ -203,13 +202,13 @@ export function NodeDetail() {
         {isLeaf && (
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-gray-500">
+              <span className="text-xs font-medium text-muted-foreground">
                 Content
               </span>
               <div className="flex items-center gap-1">
                 <button
                   onClick={handleCopy}
-                  className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                  className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-muted-foreground"
                   title="Copy content"
                 >
                   {copied ? (
@@ -221,7 +220,7 @@ export function NodeDetail() {
                 {!isEditing ? (
                   <button
                     onClick={handleStartEdit}
-                    className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                    className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-muted-foreground"
                     title="Edit content"
                   >
                     <Pencil className="h-3.5 w-3.5" />
@@ -241,17 +240,17 @@ export function NodeDetail() {
               <textarea
                 value={editedDesc}
                 onChange={(e) => setEditedDesc(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 bg-white p-3 text-xs font-mono text-gray-700 min-h-[200px] focus:border-violet-300 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                className="w-full rounded-lg border border-border bg-background p-3 text-xs font-mono text-foreground min-h-[200px] focus:border-primary/30 focus:outline-none focus:ring-1 focus:ring-primary/30"
               />
             ) : node.desc ? (
-              <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 max-h-[400px] overflow-y-auto">
+              <div className="rounded-lg bg-muted/50 border border-border p-3 max-h-[400px] overflow-y-auto">
                 <MarkdownRenderer
                   content={node.desc}
-                  className="prose-compact text-xs text-gray-700 [&_p]:text-xs [&_p]:mb-1.5 [&_li]:text-xs [&_code]:text-[11px] [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs [&_pre]:my-2 [&_table]:text-xs [&_th]:text-[10px] [&_th]:px-2 [&_th]:py-1 [&_td]:text-xs [&_td]:px-2 [&_td]:py-1 [&_ul]:text-xs [&_ol]:text-xs [&_blockquote]:text-xs"
+                  className="prose-compact text-xs text-foreground [&_p]:text-xs [&_p]:mb-1.5 [&_li]:text-xs [&_code]:text-xs [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs [&_pre]:my-2 [&_table]:text-xs [&_th]:text-xs [&_th]:px-2 [&_th]:py-1 [&_td]:text-xs [&_td]:px-2 [&_td]:py-1 [&_ul]:text-xs [&_ol]:text-xs [&_blockquote]:text-xs"
                 />
               </div>
             ) : (
-              <p className="text-xs text-gray-400 italic">No content</p>
+              <p className="text-xs text-muted-foreground italic">No content</p>
             )}
           </div>
         )}
@@ -259,7 +258,7 @@ export function NodeDetail() {
         {/* Analysis section */}
         {analysis && (
           <div className="space-y-3">
-            <h4 className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Analysis
             </h4>
 
@@ -272,11 +271,11 @@ export function NodeDetail() {
                     Redundancy: {analysis.redundancy.score}%
                   </span>
                 </div>
-                <p className="text-[11px] text-amber-700">
+                <p className="text-xs text-amber-700">
                   {analysis.redundancy.detail}
                 </p>
                 {analysis.redundancy.overlaps_with.length > 0 && (
-                  <p className="text-[11px] text-amber-600 mt-1">
+                  <p className="text-xs text-amber-600 mt-1">
                     Overlaps with:{" "}
                     {analysis.redundancy.overlaps_with.join(", ")}
                   </p>
@@ -287,9 +286,9 @@ export function NodeDetail() {
             {/* Conflicts */}
             {analysis.conflicts && analysis.conflicts.length > 0 && (
               <div className="space-y-2">
-                {analysis.conflicts.map((c, i) => (
+                {analysis.conflicts.map((c) => (
                   <div
-                    key={i}
+                    key={`${c.with_node}-${c.severity}`}
                     className={cn(
                       "rounded-lg border p-3",
                       c.severity === "high"
@@ -319,7 +318,7 @@ export function NodeDetail() {
                         Conflict ({c.severity}) with {c.with_node}
                       </span>
                     </div>
-                    <p className="text-[11px] text-gray-600">
+                    <p className="text-xs text-muted-foreground">
                       {c.description}
                     </p>
                   </div>
@@ -335,7 +334,7 @@ export function NodeDetail() {
                 </span>
                 <ul className="mt-1 space-y-1">
                   {analysis.suggestions.map((s, i) => (
-                    <li key={i} className="text-[11px] text-blue-700">
+                    <li key={i} className="text-xs text-blue-700">
                       &bull; {s}
                     </li>
                   ))}
@@ -348,7 +347,7 @@ export function NodeDetail() {
         {/* Secret references */}
         {secretRefs.length > 0 && (
           <div>
-            <h4 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
               Secret References
             </h4>
             <div className="space-y-1">
@@ -368,14 +367,14 @@ export function NodeDetail() {
         {/* Attachments */}
         {attachments.length > 0 && (
           <div>
-            <h4 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
               Attachments
             </h4>
             <div className="space-y-1.5">
               {attachments.map((a) => (
                 <div
                   key={a.name}
-                  className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2"
+                  className="flex items-center gap-2 rounded-lg border border-border px-3 py-2"
                 >
                   <FileText
                     className={cn(
@@ -384,8 +383,8 @@ export function NodeDetail() {
                     )}
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs text-gray-700 truncate">{a.name}</p>
-                    <p className="text-[10px] text-gray-400">
+                    <p className="text-xs text-foreground truncate">{a.name}</p>
+                    <p className="text-xs text-muted-foreground">
                       {a.size} &middot; by {a.by} &middot; {a.at}
                     </p>
                   </div>
@@ -408,8 +407,8 @@ export function NodeDetail() {
         {/* Category children count */}
         {!isLeaf && node.children && (
           <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-500">Children</span>
-            <span className="text-xs text-gray-700">
+            <span className="text-xs text-muted-foreground">Children</span>
+            <span className="text-xs text-foreground">
               {node.children.length} node
               {node.children.length !== 1 ? "s" : ""}
             </span>

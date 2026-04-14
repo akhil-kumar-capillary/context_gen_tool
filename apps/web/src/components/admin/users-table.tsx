@@ -188,10 +188,10 @@ function ModuleAccessTree({
   if (isAdmin) {
     return (
       <div className="space-y-2">
-        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
           Module Access
         </p>
-        <div className="rounded-lg border border-gray-200 bg-white divide-y divide-gray-100">
+        <div className="rounded-lg border border-border bg-background divide-y divide-border">
           {MODULE_KEYS.map((mod) => {
             const modDef = MODULES[mod];
             const ops = modDef.operations;
@@ -202,12 +202,12 @@ function ModuleAccessTree({
                     type="checkbox"
                     checked
                     disabled
-                    className="h-3.5 w-3.5 rounded border-gray-300 text-violet-600"
+                    className="h-3.5 w-3.5 rounded border-input text-primary"
                   />
-                  <span className="text-sm font-medium text-gray-800">
+                  <span className="text-sm font-medium text-foreground">
                     {modDef.label}
                   </span>
-                  <span className="text-[10px] text-gray-400 ml-1">
+                  <span className="text-xs text-muted-foreground ml-1">
                     {ops.length}/{ops.length}
                   </span>
                 </label>
@@ -218,9 +218,9 @@ function ModuleAccessTree({
                         type="checkbox"
                         checked
                         disabled
-                        className="h-3 w-3 rounded border-gray-300 text-blue-600 disabled:opacity-50"
+                        className="h-3 w-3 rounded border-input text-blue-600 disabled:opacity-50"
                       />
-                      <span className="text-xs text-gray-600">{op.label}</span>
+                      <span className="text-xs text-muted-foreground">{op.label}</span>
                     </label>
                   ))}
                 </div>
@@ -228,7 +228,7 @@ function ModuleAccessTree({
             );
           })}
         </div>
-        <p className="text-[11px] text-gray-400 italic">
+        <p className="text-xs text-muted-foreground italic">
           Admins have full access to all modules and operations.
         </p>
       </div>
@@ -237,11 +237,11 @@ function ModuleAccessTree({
 
   return (
     <div className="space-y-2">
-      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
         Module Access
       </p>
 
-      <div className="rounded-lg border border-gray-200 bg-white divide-y divide-gray-100">
+      <div className="rounded-lg border border-border bg-background divide-y divide-border">
         {MODULE_KEYS.map((mod) => {
           const modDef = MODULES[mod];
           const ops = modDef.operations;
@@ -263,13 +263,13 @@ function ModuleAccessTree({
                     if (el) el.indeterminate = indeterminate;
                   }}
                   onChange={() => toggleModule(mod)}
-                  className="h-3.5 w-3.5 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                  className="h-3.5 w-3.5 rounded border-input text-primary focus:ring-primary"
                 />
-                <span className="text-sm font-medium text-gray-800 group-hover:text-gray-900">
+                <span className="text-sm font-medium text-foreground group-hover:text-foreground">
                   {modDef.label}
                 </span>
                 {isActive && (
-                  <span className="text-[10px] text-gray-400 ml-1">
+                  <span className="text-xs text-muted-foreground ml-1">
                     {checkedOps.length}/{ops.length}
                   </span>
                 )}
@@ -299,12 +299,12 @@ function ModuleAccessTree({
                           checked={checked}
                           disabled={viewLocked}
                           onChange={() => togglePerm(mod, op.key)}
-                          className="h-3 w-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                          className="h-3 w-3 rounded border-input text-blue-600 focus:ring-blue-500 disabled:opacity-50"
                         />
-                        <span className="text-xs text-gray-600">
+                        <span className="text-xs text-muted-foreground">
                           {op.label}
                           {isView && (
-                            <span className="text-[10px] text-gray-400 ml-0.5">
+                            <span className="text-xs text-muted-foreground ml-0.5">
                               (required)
                             </span>
                           )}
@@ -325,7 +325,7 @@ function ModuleAccessTree({
           <button
             onClick={handleSave}
             disabled={actionLoading}
-            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
             {actionLoading ? (
               <Loader2 className="h-3 w-3 animate-spin" />
@@ -398,19 +398,19 @@ export function UsersTable() {
       {/* Toolbar */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search users by email or name..."
-            className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
+            className="w-full rounded-lg border border-input py-2 pl-9 pr-3 text-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/10"
           />
         </div>
         <button
           onClick={() => fetchUsers()}
           disabled={usersLoading}
-          className="rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50"
+          className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-muted/50"
         >
           <RefreshCw className={cn("h-4 w-4", usersLoading && "animate-spin")} />
         </button>
@@ -423,9 +423,9 @@ export function UsersTable() {
       )}
 
       {/* Table */}
-      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <div className="rounded-xl border border-border bg-background overflow-hidden">
         {/* Header */}
-        <div className="grid grid-cols-12 gap-4 bg-gray-50 px-5 py-2.5 text-xs font-medium uppercase tracking-wide text-gray-500">
+        <div className="grid grid-cols-12 gap-4 bg-muted/50 px-5 py-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           <div className="col-span-3">User</div>
           <div className="col-span-2">Roles</div>
           <div className="col-span-3">Modules</div>
@@ -436,12 +436,12 @@ export function UsersTable() {
 
         {usersLoading && (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         )}
 
         {!usersLoading && filtered.length === 0 && (
-          <div className="px-5 py-12 text-center text-sm text-gray-400">
+          <div className="px-5 py-12 text-center text-sm text-muted-foreground">
             {searchTerm ? "No users match your search" : "No users found"}
           </div>
         )}
@@ -450,34 +450,34 @@ export function UsersTable() {
           const userModules = getUserModules(u);
 
           return (
-            <div key={u.id} className="border-b border-gray-100 last:border-0">
+            <div key={u.id} className="border-b border-border last:border-0">
               {/* Main row */}
-              <div className="grid grid-cols-12 gap-4 px-5 py-3 items-center hover:bg-gray-50 transition-colors">
+              <div className="grid grid-cols-12 gap-4 px-5 py-3 items-center hover:bg-muted/50 transition-colors">
                 <div className="col-span-3 min-w-0">
                   <div className="flex items-center gap-2">
                     {u.is_superadmin ? (
                       <Crown className="h-4 w-4 shrink-0 text-amber-500" />
                     ) : u.is_admin ? (
-                      <ShieldCheck className="h-4 w-4 shrink-0 text-violet-500" />
+                      <ShieldCheck className="h-4 w-4 shrink-0 text-primary" />
                     ) : (
-                      <Shield className="h-4 w-4 shrink-0 text-gray-300" />
+                      <Shield className="h-4 w-4 shrink-0 text-muted-foreground/50" />
                     )}
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-gray-900">
+                      <p className="truncate text-sm font-medium text-foreground">
                         {u.display_name || u.email}
                       </p>
-                      <p className="truncate text-xs text-gray-400">{u.email}</p>
+                      <p className="truncate text-xs text-muted-foreground">{u.email}</p>
                     </div>
                   </div>
                 </div>
                 <div className="col-span-2 flex flex-wrap gap-1">
                   {u.roles.length === 0 && (
-                    <span className="text-xs text-gray-400">No roles</span>
+                    <span className="text-xs text-muted-foreground">No roles</span>
                   )}
                   {u.roles.map((r) => (
                     <span
                       key={r}
-                      className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700"
+                      className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
                     >
                       {r}
                     </span>
@@ -486,14 +486,14 @@ export function UsersTable() {
                 {/* Module tags */}
                 <div className="col-span-3 flex flex-wrap gap-1">
                   {userModules.length === 0 && (
-                    <span className="text-xs text-gray-400">No modules</span>
+                    <span className="text-xs text-muted-foreground">No modules</span>
                   )}
                   {userModules.map((mod) => (
                     <span
                       key={mod}
                       className={cn(
-                        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
-                        MODULE_COLORS[mod] || "bg-gray-100 text-gray-600"
+                        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                        MODULE_COLORS[mod] || "bg-muted text-muted-foreground"
                       )}
                     >
                       {MODULES[mod]?.label || mod}
@@ -503,26 +503,26 @@ export function UsersTable() {
                 <div className="col-span-1">
                   <span
                     className={cn(
-                      "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                      "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
                       u.is_active
                         ? "bg-green-100 text-green-700"
-                        : "bg-gray-100 text-gray-500"
+                        : "bg-muted text-muted-foreground"
                     )}
                   >
                     {u.is_active ? "Active" : "Inactive"}
                   </span>
                   {u.is_superadmin && (
-                    <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                    <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
                       <Crown className="h-2.5 w-2.5" /> Super
                     </span>
                   )}
                   {u.is_admin && !u.is_superadmin && (
-                    <span className="ml-1 inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700">
+                    <span className="ml-1 inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                       Admin
                     </span>
                   )}
                 </div>
-                <div className="col-span-2 text-xs text-gray-500">
+                <div className="col-span-2 text-xs text-muted-foreground">
                   {u.last_login_at
                     ? new Date(u.last_login_at).toLocaleDateString()
                     : "Never"}
@@ -532,7 +532,7 @@ export function UsersTable() {
                     onClick={() =>
                       setExpandedUser(expandedUser === u.id ? null : u.id)
                     }
-                    className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                    className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-muted-foreground"
                   >
                     {expandedUser === u.id ? (
                       <ChevronUp className="h-4 w-4" />
@@ -545,14 +545,14 @@ export function UsersTable() {
 
               {/* Expanded details */}
               {expandedUser === u.id && (
-                <div className="border-t border-gray-100 bg-gray-50/50 px-5 py-4 space-y-4">
+                <div className="border-t border-border bg-muted/50 px-5 py-4 space-y-4">
                   {/* Admin toggle section */}
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                         Admin Access
                       </p>
-                      <p className="text-xs text-gray-400 mt-0.5">
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         {u.is_superadmin
                           ? "Superadmin — cannot be demoted"
                           : u.is_admin
@@ -564,7 +564,7 @@ export function UsersTable() {
                       <>
                         {confirmAdminToggle?.id === u.id ? (
                           <div className="flex items-center gap-2">
-                            <span className="text-xs text-gray-500">
+                            <span className="text-xs text-muted-foreground">
                               {u.is_admin ? "Remove admin?" : "Make admin?"}
                             </span>
                             <button
@@ -574,14 +574,14 @@ export function UsersTable() {
                                 "rounded-md px-3 py-1 text-xs font-medium text-white disabled:opacity-50",
                                 u.is_admin
                                   ? "bg-red-600 hover:bg-red-700"
-                                  : "bg-violet-600 hover:bg-violet-700"
+                                  : "bg-primary hover:bg-primary/90"
                               )}
                             >
                               {actionLoading ? "..." : "Confirm"}
                             </button>
                             <button
                               onClick={() => setConfirmAdminToggle(null)}
-                              className="rounded-md border border-gray-200 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                              className="rounded-md border border-border px-3 py-1 text-xs text-muted-foreground hover:bg-muted/50"
                             >
                               Cancel
                             </button>
@@ -590,7 +590,7 @@ export function UsersTable() {
                           <button
                             onClick={() => setConfirmAdminToggle(u)}
                             className={cn(
-                              "flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-medium transition-all",
+                              "flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-all",
                               u.is_admin
                                 ? "border border-red-200 text-red-600 hover:bg-red-50"
                                 : "bg-amber-500 text-white hover:bg-amber-600"
@@ -606,7 +606,7 @@ export function UsersTable() {
 
                   {/* Role selector (hierarchical: admin > operator > viewer) */}
                   <div>
-                    <p className="mb-1.5 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                    <p className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                       Role
                     </p>
                     <select
@@ -615,7 +615,7 @@ export function UsersTable() {
                         handleRoleChange(u.email, u.roles[0], e.target.value)
                       }
                       disabled={actionLoading}
-                      className="w-48 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100 disabled:opacity-50"
+                      className="w-48 rounded-lg border border-input px-3 py-1.5 text-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/10 disabled:opacity-50"
                     >
                       <option value="">No role</option>
                       <option value="viewer">Viewer — read-only access</option>

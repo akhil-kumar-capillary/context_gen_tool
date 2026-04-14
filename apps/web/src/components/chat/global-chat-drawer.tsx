@@ -6,6 +6,7 @@ import { MessageSquare, X, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChatWebSocket } from "@/hooks/use-chat-websocket";
 import { useChatStore } from "@/stores/chat-store";
+import { useContextStore } from "@/stores/context-store";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { ChatInput } from "@/components/chat/chat-input";
 
@@ -119,6 +120,10 @@ export function GlobalChatDrawer() {
     isStreaming,
   } = useChatStore();
 
+  // Hide chat bubble when a context drawer/overlay is open
+  const { editingContextId, isCreating, versionHistoryContextId } = useContextStore();
+  const hasOverlayOpen = !!(editingContextId || isCreating || versionHistoryContextId);
+
   // Don't render on excluded routes
   const isExcluded = EXCLUDED_ROUTES.some((r) => pathname.startsWith(r));
 
@@ -159,15 +164,14 @@ export function GlobalChatDrawer() {
 
   return (
     <>
-      {/* Toggle button — visible when drawer is closed */}
-      {!isChatDrawerOpen && (
+      {/* Toggle button — hidden when chat is open or an overlay drawer is open */}
+      {!isChatDrawerOpen && !hasOverlayOpen && (
         <button
           onClick={() => setChatDrawerOpen(true)}
           className={cn(
-            "fixed bottom-6 right-6 z-50 flex items-center gap-2",
-            "rounded-full bg-violet-600 px-4 py-3 text-sm font-medium text-white",
-            "shadow-lg transition-all hover:bg-violet-700 hover:shadow-xl",
-            "active:scale-95"
+            "fixed bottom-3 right-3 z-50 flex items-center gap-2",
+            "rounded-full bg-primary px-3.5 py-2.5 text-xs font-semibold text-primary-foreground",
+            "shadow-lg transition-all hover:bg-primary/90 hover:shadow-xl",
           )}
         >
           <MessageSquare className="h-4 w-4" />
@@ -179,24 +183,24 @@ export function GlobalChatDrawer() {
       {isChatDrawerOpen && (
         <div
           className={cn(
-            "flex h-full w-[420px] shrink-0 flex-col",
-            "border-l border-gray-200 bg-white"
+            "flex h-full w-full lg:w-[520px] shrink-0 flex-col",
+            "border-l border-border bg-background",
           )}
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-purple-600">
-                <MessageSquare className="h-3.5 w-3.5 text-white" />
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary">
+                <MessageSquare className="h-3.5 w-3.5 text-primary-foreground" />
               </div>
-              <h3 className="text-sm font-semibold text-gray-800">
+              <h3 className="text-sm font-semibold text-foreground">
                 Chat with aiRA
               </h3>
             </div>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => newConversation()}
-                className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 title="New conversation"
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -204,7 +208,7 @@ export function GlobalChatDrawer() {
               </button>
               <button
                 onClick={() => setChatDrawerOpen(false)}
-                className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 title="Close chat"
               >
                 <X className="h-4 w-4" />
@@ -214,23 +218,22 @@ export function GlobalChatDrawer() {
 
           {/* Chat content */}
           <div className="flex flex-1 flex-col overflow-hidden">
-            {/* Show route-specific suggestions when no messages */}
             {messages.length === 0 && !isStreaming ? (
               <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
-                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-100 to-purple-100">
-                  <MessageSquare className="h-6 w-6 text-violet-600" />
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
+                  <MessageSquare className="h-6 w-6 text-primary" />
                 </div>
-                <h4 className="mb-1.5 text-sm font-semibold text-gray-800">
+                <h4 className="mb-1.5 text-sm font-semibold text-foreground">
                   {suggestions.title}
                 </h4>
-                <p className="mb-4 max-w-[280px] text-xs text-gray-500">
+                <p className="mb-4 max-w-[300px] text-xs text-muted-foreground">
                   {suggestions.description}
                 </p>
                 <div className="flex flex-wrap justify-center gap-2">
                   {suggestions.items.map((suggestion) => (
                     <button
                       key={suggestion}
-                      className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-600 transition-colors hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700"
+                      className="rounded-full border border-border bg-background px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
                       onClick={() => handleSuggestion(suggestion)}
                     >
                       {suggestion}

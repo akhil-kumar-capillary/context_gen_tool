@@ -130,15 +130,15 @@ export function ExtractionPanel() {
   return (
     <div className="space-y-4">
       {/* ── Config form ── */}
-      <div className="rounded-xl border border-gray-200 bg-white p-6">
+      <div className="rounded-xl border border-border bg-background p-6">
         <div className="mb-4 flex items-center gap-2">
-          <FolderSearch className="h-5 w-5 text-violet-600" />
-          <h2 className="text-lg font-semibold text-gray-900">Extract Notebooks</h2>
+          <FolderSearch className="h-5 w-5 text-primary" />
+          <h2 className="text-lg font-semibold text-foreground">Extract Notebooks</h2>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               Root Path
             </label>
             <input
@@ -147,11 +147,11 @@ export function ExtractionPanel() {
               onChange={(e) => setRootPath(e.target.value)}
               placeholder="/Workspace"
               disabled={isExtracting}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100 disabled:opacity-50"
+              className="w-full rounded-lg border border-input px-3 py-2 text-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/10 disabled:opacity-50"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               Modified Since (optional)
             </label>
             <input
@@ -159,11 +159,11 @@ export function ExtractionPanel() {
               value={modifiedSince}
               onChange={(e) => setModifiedSince(e.target.value)}
               disabled={isExtracting}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100 disabled:opacity-50"
+              className="w-full rounded-lg border border-input px-3 py-2 text-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/10 disabled:opacity-50"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               Concurrency
             </label>
             <input
@@ -173,7 +173,7 @@ export function ExtractionPanel() {
               min={1}
               max={50}
               disabled={isExtracting}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100 disabled:opacity-50"
+              className="w-full rounded-lg border border-input px-3 py-2 text-sm focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/10 disabled:opacity-50"
             />
           </div>
         </div>
@@ -185,8 +185,8 @@ export function ExtractionPanel() {
             className={cn(
               "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all",
               isExtracting
-                ? "bg-gray-100 text-gray-400"
-                : "bg-violet-600 text-white hover:bg-violet-700 shadow-sm"
+                ? "bg-muted text-muted-foreground"
+                : "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
             )}
           >
             {isExtracting ? (
@@ -215,7 +215,7 @@ export function ExtractionPanel() {
 
       {/* ── Live Progress Panel ── */}
       {isExtracting && lastProgress && (
-        <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-3">
+        <div className="rounded-xl border border-border bg-background p-5 space-y-3">
           {/* Phase header */}
           <div className="flex items-center justify-between">
             <div className={cn("flex items-center gap-2", phaseConfig.color)}>
@@ -230,7 +230,7 @@ export function ExtractionPanel() {
                 </span>
               )}
               {total > 0 && (
-                <span className="text-xs tabular-nums text-gray-500">
+                <span className="text-xs tabular-nums text-muted-foreground">
                   {completed.toLocaleString()}/{total.toLocaleString()}
                 </span>
               )}
@@ -239,9 +239,9 @@ export function ExtractionPanel() {
 
           {/* Progress bar */}
           {total > 0 && (
-            <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+            <div className="h-2 overflow-hidden rounded-full bg-muted">
               <div
-                className="h-full rounded-full bg-violet-500 transition-all duration-300"
+                className="h-full rounded-full bg-primary/50 transition-all duration-300"
                 style={{ width: `${pct}%` }}
               />
             </div>
@@ -249,7 +249,7 @@ export function ExtractionPanel() {
 
           {/* Detail text */}
           {lastProgress.detail && (
-            <p className={cn("text-xs", hasFailures ? "text-amber-500" : "text-gray-500")}>
+            <p className={cn("text-xs", hasFailures ? "text-amber-500" : "text-muted-foreground")}>
               {lastProgress.detail}
             </p>
           )}
@@ -271,7 +271,7 @@ export function ExtractionPanel() {
 
       {/* ── Summary (on complete) ── */}
       {isComplete && summaryStats && (
-        <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-3">
+        <div className="rounded-xl border border-border bg-background p-5 space-y-3">
           <div className="flex items-center gap-2 text-green-500">
             <CheckCircle2 className="h-4 w-4" />
             <span className="text-sm font-medium">Extraction Complete</span>
@@ -297,7 +297,7 @@ export function ExtractionPanel() {
 
           <button
             onClick={() => setActiveStep("analyze")}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-violet-600 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-violet-700"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-primary/90"
           >
             Continue to Analysis
             <ChevronRight className="h-4 w-4" />
@@ -312,11 +312,11 @@ export function ExtractionPanel() {
 
 function StatCard({ label, value, warn }: { label: string; value: number; warn?: boolean }) {
   return (
-    <div className={cn("rounded-lg px-3 py-2.5", warn ? "bg-amber-50" : "bg-gray-50")}>
-      <p className={cn("text-lg font-semibold tabular-nums", warn ? "text-amber-600" : "text-gray-900")}>
+    <div className={cn("rounded-lg px-3 py-2.5", warn ? "bg-amber-50" : "bg-muted/50")}>
+      <p className={cn("text-lg font-semibold tabular-nums", warn ? "text-amber-600" : "text-foreground")}>
         {value.toLocaleString()}
       </p>
-      <p className="text-xs text-gray-500">{label}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
     </div>
   );
 }

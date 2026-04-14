@@ -24,19 +24,19 @@ export function AuditLogViewer() {
       return "bg-green-100 text-green-700";
     if (action.includes("update") || action.includes("edit"))
       return "bg-blue-100 text-blue-700";
-    return "bg-gray-100 text-gray-600";
+    return "bg-muted text-muted-foreground";
   };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-muted-foreground">
           Recent administrative actions and system events.
         </p>
         <button
           onClick={() => fetchAuditLogs(pageSize, page * pageSize)}
           disabled={auditLoading}
-          className="rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50"
+          className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-muted/50"
         >
           <RefreshCw
             className={cn("h-4 w-4", auditLoading && "animate-spin")}
@@ -52,14 +52,14 @@ export function AuditLogViewer() {
 
       {auditLoading && (
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       )}
 
       {!auditLoading && auditLogs.length === 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white px-5 py-12 text-center">
-          <ScrollText className="mx-auto h-8 w-8 text-gray-300" />
-          <p className="mt-2 text-sm text-gray-400">
+        <div className="rounded-xl border border-border bg-background px-5 py-12 text-center">
+          <ScrollText className="mx-auto h-8 w-8 text-muted-foreground/50" />
+          <p className="mt-2 text-sm text-muted-foreground">
             No audit logs recorded yet.
           </p>
         </div>
@@ -67,8 +67,8 @@ export function AuditLogViewer() {
 
       {!auditLoading && auditLogs.length > 0 && (
         <>
-          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-            <div className="grid grid-cols-12 gap-3 bg-gray-50 px-5 py-2.5 text-xs font-medium uppercase tracking-wide text-gray-500">
+          <div className="rounded-xl border border-border bg-background overflow-hidden">
+            <div className="grid grid-cols-12 gap-3 bg-muted/50 px-5 py-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               <div className="col-span-3">User</div>
               <div className="col-span-2">Action</div>
               <div className="col-span-2">Module</div>
@@ -78,30 +78,30 @@ export function AuditLogViewer() {
             </div>
 
             {auditLogs.map((log) => (
-              <div key={log.id} className="border-b border-gray-100 last:border-0">
-                <div className="grid grid-cols-12 gap-3 px-5 py-2.5 items-center hover:bg-gray-50 transition-colors">
-                  <div className="col-span-3 truncate text-sm text-gray-900">
+              <div key={log.id} className="border-b border-border last:border-0">
+                <div className="grid grid-cols-12 gap-3 px-5 py-2.5 items-center hover:bg-muted/50 transition-colors">
+                  <div className="col-span-3 truncate text-sm text-foreground">
                     {log.user_email || "System"}
                   </div>
                   <div className="col-span-2">
                     <span
                       className={cn(
-                        "inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium",
+                        "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
                         actionColor(log.action)
                       )}
                     >
                       {log.action}
                     </span>
                   </div>
-                  <div className="col-span-2 text-xs text-gray-500">
+                  <div className="col-span-2 text-xs text-muted-foreground">
                     {log.module || "—"}
                   </div>
-                  <div className="col-span-2 text-xs text-gray-500 truncate">
+                  <div className="col-span-2 text-xs text-muted-foreground truncate">
                     {log.resource_type
                       ? `${log.resource_type}:${log.resource_id}`
                       : "—"}
                   </div>
-                  <div className="col-span-2 text-xs text-gray-400">
+                  <div className="col-span-2 text-xs text-muted-foreground">
                     {formatDate(log.created_at)}
                   </div>
                   <div className="col-span-1 text-right">
@@ -112,7 +112,7 @@ export function AuditLogViewer() {
                             expandedLog === log.id ? null : log.id
                           )
                         }
-                        className="rounded-md p-1 text-gray-400 hover:bg-gray-100"
+                        className="rounded-md p-1 text-muted-foreground hover:bg-muted"
                       >
                         {expandedLog === log.id ? (
                           <ChevronUp className="h-3.5 w-3.5" />
@@ -125,8 +125,8 @@ export function AuditLogViewer() {
                 </div>
 
                 {expandedLog === log.id && log.details && (
-                  <div className="border-t border-gray-100 bg-gray-50/50 px-5 py-3">
-                    <pre className="whitespace-pre-wrap text-xs text-gray-600 font-mono">
+                  <div className="border-t border-border bg-muted/50 px-5 py-3">
+                    <pre className="whitespace-pre-wrap text-xs text-muted-foreground font-mono">
                       {JSON.stringify(log.details, null, 2)}
                     </pre>
                   </div>
@@ -137,7 +137,7 @@ export function AuditLogViewer() {
 
           {/* Pagination */}
           <div className="flex items-center justify-between">
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-muted-foreground">
               Showing {page * pageSize + 1} -{" "}
               {page * pageSize + auditLogs.length} entries
             </p>
@@ -145,14 +145,14 @@ export function AuditLogViewer() {
               <button
                 onClick={() => setPage(Math.max(0, page - 1))}
                 disabled={page === 0}
-                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/50 disabled:opacity-50"
               >
                 Previous
               </button>
               <button
                 onClick={() => setPage(page + 1)}
                 disabled={auditLogs.length < pageSize}
-                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/50 disabled:opacity-50"
               >
                 Next
               </button>

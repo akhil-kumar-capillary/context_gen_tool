@@ -27,12 +27,12 @@ export const AiContextRow = memo(function AiContextRow({ ctx }: AiContextRowProp
   const isUploaded = status === "success";
 
   return (
-    <div className="border-b border-gray-100 last:border-0">
+    <div className="border-b border-border last:border-0">
       <div className="grid grid-cols-[1fr_70px_100px_140px] items-center gap-3 px-4 py-3">
         {/* Name + preview */}
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-gray-900">{ctx.name}</p>
-          <p className="mt-0.5 truncate text-xs text-gray-400">
+          <p className="truncate text-sm font-medium text-foreground">{ctx.name}</p>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
             {truncate(ctx.content, 80)}
           </p>
         </div>
@@ -43,10 +43,10 @@ export const AiContextRow = memo(function AiContextRow({ ctx }: AiContextRowProp
         {/* Upload status */}
         <div className="flex items-center gap-1">
           {status === "pending" && (
-            <span className="text-xs text-gray-400">Ready</span>
+            <span className="text-xs text-muted-foreground">Ready</span>
           )}
           {status === "uploading" && (
-            <span className="flex items-center gap-1 text-xs text-violet-600">
+            <span className="flex items-center gap-1 text-xs text-primary">
               <Loader2 className="h-3 w-3 animate-spin" />
               Uploading...
             </span>
@@ -75,8 +75,8 @@ export const AiContextRow = memo(function AiContextRow({ ctx }: AiContextRowProp
                 className={cn(
                   "rounded-md p-1.5 transition-colors",
                   isUploading
-                    ? "text-gray-300"
-                    : "text-violet-500 hover:bg-violet-50 hover:text-violet-700"
+                    ? "text-muted-foreground/50"
+                    : "text-primary hover:bg-primary/5 hover:text-primary"
                 )}
                 title="Upload"
               >
@@ -85,7 +85,7 @@ export const AiContextRow = memo(function AiContextRow({ ctx }: AiContextRowProp
               <button
                 onClick={() => setEditingContextId(ctx.id)}
                 disabled={isUploading}
-                className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 disabled:text-gray-300"
+                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-muted-foreground disabled:text-muted-foreground/50"
                 title="Edit"
               >
                 <Pencil className="h-3.5 w-3.5" />
@@ -93,7 +93,7 @@ export const AiContextRow = memo(function AiContextRow({ ctx }: AiContextRowProp
               <button
                 onClick={() => removeAiContext(ctx.id)}
                 disabled={isUploading}
-                className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500 disabled:text-gray-300"
+                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-500 disabled:text-muted-foreground/50"
                 title="Remove"
               >
                 <X className="h-3.5 w-3.5" />

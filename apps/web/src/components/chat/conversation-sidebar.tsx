@@ -106,12 +106,12 @@ export function ConversationSidebar({
   if (olderItems.length) grouped.push({ label: "Previous", items: olderItems });
 
   return (
-    <div className="flex h-full w-64 flex-col border-r border-gray-200 bg-gray-50">
+    <div className="flex h-full w-64 flex-col border-r border-border bg-muted/50">
       {/* New chat button */}
       <div className="p-3">
         <button
           onClick={handleNew}
-          className="flex w-full items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
+          className="flex w-full items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted/50"
         >
           <MessageSquarePlus className="h-4 w-4" />
           New Chat
@@ -122,7 +122,7 @@ export function ConversationSidebar({
       <div className="flex-1 overflow-y-auto px-2 pb-3">
         {grouped.map((group) => (
           <div key={group.label} className="mb-3">
-            <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+            <p className="mb-1 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {group.label}
             </p>
             {group.items.map((conv) => (
@@ -132,15 +132,16 @@ export function ConversationSidebar({
                 className={cn(
                   "group flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors",
                   activeConversationId === conv.id
-                    ? "bg-violet-100 text-violet-800"
-                    : "text-gray-600 hover:bg-gray-100"
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-muted"
                 )}
               >
                 <MessageSquare className="h-3.5 w-3.5 shrink-0 opacity-50" />
                 <span className="flex-1 truncate">{conv.title}</span>
                 <button
                   onClick={(e) => handleDelete(conv.id, e)}
-                  className="hidden shrink-0 rounded p-0.5 text-gray-400 hover:bg-red-100 hover:text-red-600 group-hover:block"
+                  className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-red-100 hover:text-red-600 group-hover:block"
+                  aria-label="Delete conversation"
                 >
                   <Trash2 className="h-3 w-3" />
                 </button>
@@ -150,7 +151,7 @@ export function ConversationSidebar({
         ))}
 
         {conversations.length === 0 && (
-          <p className="px-3 py-8 text-center text-xs text-gray-400">
+          <p className="px-3 py-8 text-center text-xs text-muted-foreground">
             No conversations yet
           </p>
         )}

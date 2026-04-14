@@ -47,35 +47,35 @@ function TableNode({
         transition-all duration-200 cursor-pointer select-none
         ${
           data.selected
-            ? "border-violet-500 bg-violet-50 shadow-violet-200 shadow-xl ring-2 ring-violet-300"
-            : "border-gray-200 bg-white hover:border-violet-300 hover:shadow-xl hover:scale-105"
+            ? "border-primary bg-primary/5 shadow-primary/20 shadow-xl ring-2 ring-primary/30"
+            : "border-border bg-background hover:border-primary/30 hover:shadow-xl hover:scale-105"
         }
       `}
     >
       <Handle
         type="target"
         position={Position.Top}
-        className="!bg-violet-400 !w-2 !h-2 !border-0"
+        className="!bg-primary !w-2 !h-2 !border-0"
       />
       <Handle
         type="source"
         position={Position.Bottom}
-        className="!bg-violet-400 !w-2 !h-2 !border-0"
+        className="!bg-primary !w-2 !h-2 !border-0"
       />
       <Handle
         type="target"
         position={Position.Left}
-        className="!bg-violet-400 !w-2 !h-2 !border-0"
+        className="!bg-primary !w-2 !h-2 !border-0"
       />
       <Handle
         type="source"
         position={Position.Right}
-        className="!bg-violet-400 !w-2 !h-2 !border-0"
+        className="!bg-primary !w-2 !h-2 !border-0"
       />
-      <div className="text-xs font-mono font-bold text-gray-900 truncate max-w-[120px]">
+      <div className="text-xs font-mono font-bold text-foreground truncate max-w-[120px]">
         {data.label}
       </div>
-      <div className="text-[10px] text-gray-400 mt-0.5">
+      <div className="text-xs text-muted-foreground mt-0.5">
         {data.count} references
       </div>
     </div>
@@ -246,7 +246,7 @@ function JoinGraph() {
 
   if (!joinEdges.length) {
     return (
-      <div className="h-[500px] flex items-center justify-center text-sm text-gray-400">
+      <div className="h-[500px] flex items-center justify-center text-sm text-muted-foreground">
         No join relationships found
       </div>
     );
@@ -257,7 +257,7 @@ function JoinGraph() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
-      className="h-[500px] w-full rounded-xl border border-gray-200 bg-gray-50 overflow-hidden relative"
+      className="h-[500px] w-full rounded-xl border border-border bg-muted/50 overflow-hidden relative"
     >
       <ReactFlow
         nodes={nodes}
@@ -276,21 +276,21 @@ function JoinGraph() {
         maxZoom={3}
       >
         <Background gap={20} size={1} color="#e5e7eb" />
-        <Controls className="!bg-white !border-gray-200 !shadow-lg !rounded-lg [&>button]:!bg-white [&>button]:!border-gray-200 [&>button]:!fill-gray-700 [&>button:hover]:!bg-gray-50" />
+        <Controls className="!bg-background !border-border !shadow-lg !rounded-lg [&>button]:!bg-background [&>button]:!border-border [&>button]:!fill-foreground [&>button:hover]:!bg-muted/50" />
         {allTables.length <= 50 && (
           <MiniMap
             nodeColor={() => "rgb(124, 58, 237)"}
             maskColor="rgba(0,0,0,0.1)"
-            className="!bg-white !border-gray-200 !rounded-lg"
+            className="!bg-background !border-border !rounded-lg"
           />
         )}
 
         <Panel position="top-left" className="!m-2">
-          <div className="bg-white/90 backdrop-blur-md border border-gray-200 rounded-lg px-3 py-2 space-y-1.5">
-            <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+          <div className="bg-background/90 backdrop-blur-md border border-border rounded-lg px-3 py-2 space-y-1.5">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Join Network
             </div>
-            <div className="text-[10px] text-gray-400">
+            <div className="text-xs text-muted-foreground">
               {allTables.length === totalTablesInData
                 ? `${allTables.length} tables`
                 : `Showing ${allTables.length} of ${totalTablesInData} tables`}
@@ -301,17 +301,17 @@ function JoinGraph() {
             </div>
             {totalJoinPairs > MAX_EDGES_OPTIONS[0] && (
               <div className="flex items-center gap-1.5 pt-0.5">
-                <span className="text-[10px] text-gray-400">Show:</span>
+                <span className="text-xs text-muted-foreground">Show:</span>
                 {MAX_EDGES_OPTIONS.filter(
                   (n) => n <= totalJoinPairs + 10
                 ).map((n) => (
                   <button
                     key={n}
                     onClick={() => setMaxEdges(n)}
-                    className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${
+                    className={`text-xs px-1.5 py-0.5 rounded transition-colors ${
                       maxEdges === n
-                        ? "bg-violet-100 text-violet-600 font-semibold"
-                        : "text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                        ? "bg-primary/10 text-primary font-semibold"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
                     }`}
                   >
                     {n}
@@ -323,10 +323,10 @@ function JoinGraph() {
                     onClick={() =>
                       setMaxEdges(Math.min(totalJoinPairs, 200))
                     }
-                    className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${
+                    className={`text-xs px-1.5 py-0.5 rounded transition-colors ${
                       maxEdges >= Math.min(totalJoinPairs, 200)
-                        ? "bg-violet-100 text-violet-600 font-semibold"
-                        : "text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                        ? "bg-primary/10 text-primary font-semibold"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
                     }`}
                   >
                     All{totalJoinPairs > 200 ? " (200)" : ""}
@@ -334,7 +334,7 @@ function JoinGraph() {
                 )}
               </div>
             )}
-            <div className="text-[10px] text-gray-400">
+            <div className="text-xs text-muted-foreground">
               Click node to filter · Click edge for details
             </div>
           </div>
@@ -347,32 +347,32 @@ function JoinGraph() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
-            className="absolute bottom-3 left-3 right-3 z-10 bg-white/95 backdrop-blur-md border border-gray-200 rounded-xl p-4 shadow-2xl"
+            className="absolute bottom-3 left-3 right-3 z-10 bg-background/95 backdrop-blur-md border border-border rounded-xl p-4 shadow-2xl"
           >
             <div className="flex items-start justify-between">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-sm font-bold text-violet-600">
+                  <span className="font-mono text-sm font-bold text-primary">
                     {selectedEdgeInfo.left}
                   </span>
-                  <span className="text-xs text-gray-400">&rarr;</span>
-                  <span className="font-mono text-sm font-bold text-violet-600">
+                  <span className="text-xs text-muted-foreground">&rarr;</span>
+                  <span className="font-mono text-sm font-bold text-primary">
                     {selectedEdgeInfo.right}
                   </span>
                 </div>
                 {selectedEdgeInfo.condition && (
-                  <div className="text-xs text-gray-500 font-mono bg-gray-50 rounded px-2 py-1">
+                  <div className="text-xs text-muted-foreground font-mono bg-muted/50 rounded px-2 py-1">
                     ON {selectedEdgeInfo.condition}
                   </div>
                 )}
-                <div className="text-xs text-gray-400">
+                <div className="text-xs text-muted-foreground">
                   {selectedEdgeInfo.count} occurrence
                   {selectedEdgeInfo.count !== 1 ? "s" : ""}
                 </div>
               </div>
               <button
                 onClick={() => setSelectedEdgeInfo(null)}
-                className="text-gray-400 hover:text-gray-700 text-sm p-1"
+                className="text-muted-foreground hover:text-foreground text-sm p-1"
               >
                 ✕
               </button>
@@ -442,7 +442,7 @@ function ColumnHeatmap() {
 
   if (!data.length) {
     return (
-      <div className="h-[400px] flex items-center justify-center text-sm text-gray-400">
+      <div className="h-[400px] flex items-center justify-center text-sm text-muted-foreground">
         No column data available
       </div>
     );
@@ -500,10 +500,10 @@ export function SchemaTab() {
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <h3 className="text-sm font-medium text-gray-500">
+        <h3 className="text-sm font-medium text-muted-foreground">
           Join Relationship Network
         </h3>
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-muted-foreground">
           Drag nodes to rearrange. Click a node to filter. Click an edge for
           join conditions. Edge thickness = frequency.
         </p>
@@ -511,18 +511,18 @@ export function SchemaTab() {
       </div>
 
       <div className="space-y-2">
-        <h3 className="text-sm font-medium text-gray-500">
+        <h3 className="text-sm font-medium text-muted-foreground">
           Column × Table Heatmap
           {selectedTable && (
-            <span className="ml-2 text-violet-600 font-mono">
+            <span className="ml-2 text-primary font-mono">
               (filtered: {selectedTable})
             </span>
           )}
         </h3>
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-muted-foreground">
           Darker cells indicate higher column usage frequency
         </p>
-        <div className="rounded-xl border border-gray-200 bg-white p-2">
+        <div className="rounded-xl border border-border bg-background p-2">
           <ColumnHeatmap />
         </div>
       </div>

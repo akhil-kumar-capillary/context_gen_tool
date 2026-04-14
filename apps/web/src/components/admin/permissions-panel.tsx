@@ -27,13 +27,13 @@ export function PermissionsPanel() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-muted-foreground">
           Permissions control access to specific modules and operations.
         </p>
         <button
           onClick={() => fetchPermissions()}
           disabled={permissionsLoading}
-          className="rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50"
+          className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-muted/50"
         >
           <RefreshCw
             className={cn("h-4 w-4", permissionsLoading && "animate-spin")}
@@ -48,8 +48,8 @@ export function PermissionsPanel() {
           className={cn(
             "rounded-md px-3 py-1 text-xs font-medium transition-colors",
             filterModule === "all"
-              ? "bg-violet-100 text-violet-700"
-              : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+              ? "bg-primary/10 text-primary"
+              : "bg-muted text-muted-foreground hover:bg-muted"
           )}
         >
           All ({permissions.length})
@@ -61,8 +61,8 @@ export function PermissionsPanel() {
             className={cn(
               "rounded-md px-3 py-1 text-xs font-medium transition-colors",
               filterModule === mod
-                ? "bg-violet-100 text-violet-700"
-                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                ? "bg-primary/10 text-primary"
+                : "bg-muted text-muted-foreground hover:bg-muted"
             )}
           >
             {mod} (
@@ -79,22 +79,22 @@ export function PermissionsPanel() {
 
       {permissionsLoading && (
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       )}
 
       {!permissionsLoading && filtered.length === 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white px-5 py-12 text-center">
-          <Key className="mx-auto h-8 w-8 text-gray-300" />
-          <p className="mt-2 text-sm text-gray-400">
+        <div className="rounded-xl border border-border bg-background px-5 py-12 text-center">
+          <Key className="mx-auto h-8 w-8 text-muted-foreground/50" />
+          <p className="mt-2 text-sm text-muted-foreground">
             No permissions found.
           </p>
         </div>
       )}
 
       {!permissionsLoading && filtered.length > 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-          <div className="grid grid-cols-12 gap-4 bg-gray-50 px-5 py-2.5 text-xs font-medium uppercase tracking-wide text-gray-500">
+        <div className="rounded-xl border border-border bg-background overflow-hidden">
+          <div className="grid grid-cols-12 gap-4 bg-muted/50 px-5 py-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             <div className="col-span-3">Module</div>
             <div className="col-span-3">Operation</div>
             <div className="col-span-5">Description</div>
@@ -103,20 +103,20 @@ export function PermissionsPanel() {
           {filtered.map((p) => (
             <div
               key={p.id}
-              className="grid grid-cols-12 gap-4 border-b border-gray-100 px-5 py-2.5 items-center last:border-0 hover:bg-gray-50 transition-colors"
+              className="grid grid-cols-12 gap-4 border-b border-border px-5 py-2.5 items-center last:border-0 hover:bg-muted/50 transition-colors"
             >
               <div className="col-span-3">
-                <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+                <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
                   {p.module}
                 </span>
               </div>
-              <div className="col-span-3 text-sm text-gray-900 font-medium">
+              <div className="col-span-3 text-sm text-foreground font-medium">
                 {p.operation}
               </div>
-              <div className="col-span-5 text-xs text-gray-500">
+              <div className="col-span-5 text-xs text-muted-foreground">
                 {p.description || "—"}
               </div>
-              <div className="col-span-1 text-[10px] text-gray-400 font-mono">
+              <div className="col-span-1 text-xs text-muted-foreground font-mono">
                 {p.id}
               </div>
             </div>

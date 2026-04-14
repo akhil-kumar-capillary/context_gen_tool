@@ -33,15 +33,15 @@ export function ModuleGuard({ module, children }: ModuleGuardProps) {
 
   return (
     <div className="flex flex-col items-center justify-center h-[calc(100vh-8rem)] text-center">
-      <ShieldX className="h-12 w-12 text-gray-300 mb-4" />
-      <h2 className="text-lg font-semibold text-gray-700 mb-1">Access Denied</h2>
-      <p className="text-sm text-gray-500 mb-6 max-w-md">
+      <ShieldX className="h-12 w-12 text-muted-foreground/50 mb-4" />
+      <h2 className="text-lg font-semibold text-foreground mb-1">Access Denied</h2>
+      <p className="text-sm text-muted-foreground mb-6 max-w-md">
         You don&apos;t have permission to access this module.
         Contact your admin to request access.
       </p>
       <button
         onClick={() => router.push("/dashboard/chat")}
-        className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors"
+        className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
       >
         Go to Chat
       </button>

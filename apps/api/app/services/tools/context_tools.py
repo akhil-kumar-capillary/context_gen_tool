@@ -14,6 +14,8 @@ import aiofiles
 import aiofiles.os
 import httpx
 
+from sqlalchemy import select
+
 from app.config import settings
 from app.services.context_engine.blueprint import build_refactor_preamble
 from app.services.context_engine.parsing import (
@@ -91,7 +93,7 @@ async def _fetch_active_contexts(ctx: ToolContext) -> list[dict]:
         params={"is_active": "true"},
         headers=ctx.capillary_headers(),
     )
-    if resp.status_code != 200:
+    if not resp.is_success:
         raise RuntimeError(
             f"Failed to fetch contexts (HTTP {resp.status_code})"
         )
@@ -407,8 +409,49 @@ async def update_context(
         },
     )
 
-    if resp.status_code != 200:
+    if not resp.is_success:
         return f"Error: Failed to update context '{context_name}' (HTTP {resp.status_code})"
+
+    # Create version record
+    try:
+        from app.services.versioning import create_version
+        from app.models.content_version import ContentVersion
+
+        name = target.get("name", context_name)
+        scope = target.get("scope", "org")
+        # Store HTML content to stay consistent with the edit dialog path,
+        # which receives HTML from Capillary's list endpoint.
+        new_snapshot = {"name": name, "content": html_content, "scope": scope}
+
+        async with ctx.get_db() as db:
+            # Look up previous snapshot
+            prev_result = await db.execute(
+                select(ContentVersion.snapshot)
+                .where(
+                    ContentVersion.entity_type == "aira_context",
+                    ContentVersion.entity_id == str(context_id),
+                    ContentVersion.org_id == ctx.org_id,
+                )
+                .order_by(ContentVersion.version_number.desc())
+                .limit(1)
+            )
+            previous_snapshot = prev_result.scalar_one_or_none()
+
+            await create_version(
+                db,
+                entity_type="aira_context",
+                entity_id=str(context_id),
+                org_id=ctx.org_id,
+                snapshot=new_snapshot,
+                previous_snapshot=previous_snapshot,
+                change_type="update",
+                change_summary=f"Updated context '{name}' via chat",
+                changed_fields=["content"],
+                user_id=ctx.user_id,
+            )
+            await db.commit()
+    except Exception:
+        logger.warning("Failed to create version for chat context update %s", context_id, exc_info=True)
 
     return f"Successfully updated context document '{context_name}'."
 
@@ -454,7 +497,7 @@ async def delete_context(ctx: ToolContext, context_name: str) -> str:
         headers=ctx.capillary_headers(),
     )
 
-    if resp.status_code != 200:
+    if not resp.is_success:
         return f"Error: Failed to delete context '{context_name}' (HTTP {resp.status_code})"
 
     return f"Successfully deleted context document '{context_name}'."

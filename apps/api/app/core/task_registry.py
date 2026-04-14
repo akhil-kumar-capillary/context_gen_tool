@@ -88,11 +88,14 @@ class TaskRegistry:
         tasks = list(self._tasks.values())
         if not tasks:
             return
-        logger.info(f"Cancelling {len(tasks)} background tasks...")
+        logger.info("Cancelling %d background tasks...", len(tasks))
         for task in tasks:
             task.cancel()
-        await asyncio.wait(tasks, timeout=timeout)
-        logger.info("Background task cleanup complete")
+        done, pending = await asyncio.wait(tasks, timeout=timeout)
+        for task in pending:
+            logger.warning("Task %s did not complete in shutdown, force-cancelled", task.get_name())
+            task.cancel()
+        logger.info("Background task cleanup complete: %d done, %d force-cancelled", len(done), len(pending))
 
 
 task_registry = TaskRegistry()

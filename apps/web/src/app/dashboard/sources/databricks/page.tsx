@@ -35,8 +35,8 @@ export default function DatabricksPage() {
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Databricks Source</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-foreground">Databricks Source</h1>
+          <p className="text-sm text-muted-foreground">
             Extract SQL from Databricks notebooks, analyze patterns, and generate context documents.
           </p>
         </div>

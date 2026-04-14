@@ -46,13 +46,13 @@ export function ChatInput({ onSend, onCancel }: ChatInputProps) {
   };
 
   return (
-    <div className="border-t border-gray-200 bg-white p-4">
+    <div className="border-t border-border bg-background p-4 shadow-[0_-2px_8px_0_rgb(0_0_0/0.04)]">
       {/* Model selector */}
       <div className="mb-2 flex items-center gap-2">
         <select
           value={provider}
           onChange={(e) => setProvider(e.target.value as "anthropic" | "openai")}
-          className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs text-gray-600 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
+          className="rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs text-muted-foreground focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/10"
         >
           <option value="anthropic">Anthropic</option>
           <option value="openai">OpenAI</option>
@@ -60,7 +60,7 @@ export function ChatInput({ onSend, onCancel }: ChatInputProps) {
         <select
           value={model}
           onChange={(e) => setModel(e.target.value)}
-          className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs text-gray-600 focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100"
+          className="rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs text-muted-foreground focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/10"
         >
           {models.map((m) => (
             <option key={m.id} value={m.id}>
@@ -84,9 +84,9 @@ export function ChatInput({ onSend, onCancel }: ChatInputProps) {
             disabled={isStreaming}
             rows={1}
             className={cn(
-              "w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 pr-12 text-sm",
-              "placeholder:text-gray-400",
-              "focus:border-violet-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-100",
+              "w-full resize-none rounded-xl border border-border bg-muted/50 px-4 py-3 pr-12 text-sm",
+              "placeholder:text-muted-foreground",
+              "focus:border-primary/30 focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/10",
               "disabled:opacity-50",
               "transition-all"
             )}
@@ -95,7 +95,7 @@ export function ChatInput({ onSend, onCancel }: ChatInputProps) {
         {isStreaming ? (
           <button
             onClick={onCancel}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 shadow-sm transition-all hover:bg-gray-200"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted shadow-sm transition-all hover:bg-muted"
             title="Stop generating"
           >
             <span className="block h-3.5 w-3.5 rounded-sm bg-[#eb6c6c]" />
@@ -107,8 +107,8 @@ export function ChatInput({ onSend, onCancel }: ChatInputProps) {
             className={cn(
               "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-all",
               input.trim()
-                ? "bg-violet-600 text-white hover:bg-violet-700 shadow-sm"
-                : "bg-gray-100 text-gray-400"
+                ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+                : "bg-muted text-muted-foreground"
             )}
           >
             <Send className="h-4 w-4" />
@@ -116,7 +116,7 @@ export function ChatInput({ onSend, onCancel }: ChatInputProps) {
         )}
       </div>
 
-      <p className="mt-1.5 text-center text-[10px] text-gray-400">
+      <p className="mt-1.5 text-center text-xs text-muted-foreground">
         Press Enter to send, Shift+Enter for new line
       </p>
     </div>
