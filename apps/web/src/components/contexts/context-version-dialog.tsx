@@ -254,7 +254,7 @@ export function ContextVersionDialog() {
         animate={{ x: 0 }}
         exit={{ x: "100%" }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="flex w-full lg:w-3/4 flex-col bg-background shadow-2xl overflow-hidden"
+        className="flex w-full lg:w-4/5 flex-col bg-background shadow-2xl overflow-hidden"
       >
       {/* Header */}
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2 bg-muted/50 shrink-0">
