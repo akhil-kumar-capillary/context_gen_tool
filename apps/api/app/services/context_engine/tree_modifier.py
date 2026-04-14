@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 
 from app.config import settings
 from app.services.llm_service import call_llm
+from app.utils import md_to_html
 
 logger = logging.getLogger(__name__)
 
@@ -431,7 +432,7 @@ def _apply_add_to_existing(tree: dict, plan: ModificationPlan) -> dict:
 
     existing = node.get("desc", "")
     separator = "\n\n" if existing else ""
-    node["desc"] = existing + separator + plan.new_content
+    combined = existing + separator + plan.new_content
 
     # Add cross-references as a comment at the end
     if plan.cross_references:
@@ -439,7 +440,9 @@ def _apply_add_to_existing(tree: dict, plan: ModificationPlan) -> dict:
             f"{r.get('to_node', '?')} ({r.get('relationship', '')})"
             for r in plan.cross_references
         )
-        node["desc"] += f"\n\n> **See also:** {refs}"
+        combined += f"\n\n> **See also:** {refs}"
+
+    node["desc"] = md_to_html(combined)
 
     return tree
 
@@ -462,17 +465,19 @@ def _apply_create_leaf(tree: dict, plan: ModificationPlan) -> dict:
         "type": "leaf",
         "health": 80,
         "visibility": "public",
-        "desc": plan.new_content,
+        "desc": "",
         "source": "manual",
     }
 
-    # Add cross-references
+    # Build desc with cross-references, then normalize to HTML
+    desc = plan.new_content
     if plan.cross_references:
         refs = ", ".join(
             f"{r.get('to_node', '?')} ({r.get('relationship', '')})"
             for r in plan.cross_references
         )
-        new_node["desc"] += f"\n\n> **See also:** {refs}"
+        desc += f"\n\n> **See also:** {refs}"
+    new_node["desc"] = md_to_html(desc)
 
     # Position after a specific node if specified
     if plan.position_after:
@@ -544,7 +549,8 @@ def _apply_modify_existing(tree: dict, plan: ModificationPlan) -> dict:
     if plan.edit_operations:
         # Surgical edit mode — apply line-based operations to original content
         original_content = node.get("desc", "")
-        node["desc"] = _apply_edit_operations(original_content, plan.edit_operations)
+        edited = _apply_edit_operations(original_content, plan.edit_operations)
+        node["desc"] = md_to_html(edited)
         logger.info(
             f"Applied {len(plan.edit_operations)} edit operations to node "
             f"'{plan.target_node_id}' (original: {len(original_content)} chars, "
@@ -552,7 +558,7 @@ def _apply_modify_existing(tree: dict, plan: ModificationPlan) -> dict:
         )
     elif plan.new_content:
         # Legacy full replacement mode (small nodes or fallback)
-        node["desc"] = plan.new_content
+        node["desc"] = md_to_html(plan.new_content)
     else:
         raise ValueError("modify_existing requires either edit_operations or new_content")
 

@@ -1,17 +1,11 @@
 "use client";
 
-import { SafeHtml } from "@/components/shared/safe-html";
-
 import { useState } from "react";
 import { X, Loader2, AlertCircle } from "lucide-react";
 import { motion } from "framer-motion";
-import { cn, CONTEXT_NAME_REGEX, CONTEXT_NAME_ERROR } from "@/lib/utils";
+import { CONTEXT_NAME_REGEX, CONTEXT_NAME_ERROR } from "@/lib/utils";
 import { useContextStore } from "@/stores/context-store";
-import { MarkdownRenderer } from "@/components/chat/markdown-renderer";
-
-function looksLikeHtml(text: string): boolean {
-  return /^\s*<[a-z][\s\S]*>/i.test(text.trim());
-}
+import { RichTextEditor } from "@/components/shared/rich-text-editor";
 
 export function NewContextDialog() {
   const { createContext, setIsCreating } = useContextStore();
@@ -19,7 +13,6 @@ export function NewContextDialog() {
   const [name, setName] = useState("");
   const [content, setContent] = useState("");
   const [scope, setScope] = useState<"org" | "private">("org");
-  const [tab, setTab] = useState<"edit" | "preview">("edit");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -98,50 +91,13 @@ export function NewContextDialog() {
 
           {/* Content — fills all remaining vertical space */}
           <div className="flex flex-1 flex-col min-h-0">
-            <div className="mb-1.5 flex items-center justify-between shrink-0">
-              <label className="text-xs font-medium text-foreground">Content</label>
-              <div className="flex rounded-lg border border-border bg-muted/50 p-0.5">
-                <button
-                  onClick={() => setTab("edit")}
-                  className={cn(
-                    "rounded-md px-3 py-1 text-xs font-medium transition-all",
-                    tab === "edit" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => setTab("preview")}
-                  className={cn(
-                    "rounded-md px-3 py-1 text-xs font-medium transition-all",
-                    tab === "preview" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Preview
-                </button>
-              </div>
-            </div>
-
-            {tab === "edit" ? (
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="Enter context content (Markdown and HTML supported)..."
-                className="flex-1 w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm font-mono transition-colors"
-              />
-            ) : (
-              <div className="flex-1 overflow-y-auto rounded-lg border border-border bg-muted/30 p-4 text-sm">
-                {content ? (
-                  looksLikeHtml(content) ? (
-                    <SafeHtml html={content} className="prose prose-sm max-w-none text-foreground" />
-                  ) : (
-                    <MarkdownRenderer content={content} />
-                  )
-                ) : (
-                  <p className="italic text-muted-foreground">Nothing to preview</p>
-                )}
-              </div>
-            )}
+            <label className="mb-1.5 text-xs font-medium text-foreground shrink-0">Content</label>
+            <RichTextEditor
+              value={content}
+              onChange={setContent}
+              placeholder="Start writing your context..."
+              className="flex-1 min-h-0"
+            />
           </div>
 
           {/* Error */}

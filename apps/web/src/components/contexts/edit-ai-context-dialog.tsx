@@ -1,17 +1,11 @@
 "use client";
 
-import { SafeHtml } from "@/components/shared/safe-html";
-
 import { useState } from "react";
 import { X } from "lucide-react";
-import { cn, CONTEXT_NAME_REGEX, CONTEXT_NAME_ERROR } from "@/lib/utils";
+import { CONTEXT_NAME_REGEX, CONTEXT_NAME_ERROR } from "@/lib/utils";
 import { useContextStore } from "@/stores/context-store";
-import { MarkdownRenderer } from "@/components/chat/markdown-renderer";
+import { RichTextEditor } from "@/components/shared/rich-text-editor";
 import type { AiGeneratedContext } from "@/types";
-
-function looksLikeHtml(text: string): boolean {
-  return /^\s*<[a-z][\s\S]*>/i.test(text.trim());
-}
 
 interface EditAiContextDialogProps {
   ctx: AiGeneratedContext;
@@ -23,7 +17,6 @@ export function EditAiContextDialog({ ctx }: EditAiContextDialogProps) {
   const [name, setName] = useState(ctx.name);
   const [content, setContent] = useState(ctx.content);
   const [scope, setScope] = useState<"org" | "private">(ctx.scope);
-  const [tab, setTab] = useState<"edit" | "preview">("edit");
   const [error, setError] = useState<string | null>(null);
 
   const handleSave = () => {
@@ -38,9 +31,9 @@ export function EditAiContextDialog({ ctx }: EditAiContextDialogProps) {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 backdrop-blur-[2px]">
-      <div className="w-full max-w-2xl rounded-xl bg-background shadow-2xl">
+      <div className="w-full max-w-2xl max-h-[85vh] flex flex-col rounded-xl bg-background shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+        <div className="flex items-center justify-between border-b border-border px-6 py-4 shrink-0">
           <h2 className="text-base font-semibold text-foreground">Edit AI Context</h2>
           <button
             onClick={() => setEditingContextId(null)}
@@ -52,8 +45,8 @@ export function EditAiContextDialog({ ctx }: EditAiContextDialogProps) {
         </div>
 
         {/* Body */}
-        <div className="space-y-4 px-6 py-5">
-          <div>
+        <div className="flex-1 flex flex-col overflow-hidden px-6 py-5 gap-4 min-h-0">
+          <div className="shrink-0">
             <label htmlFor="ai-name" className="mb-1.5 block text-sm font-medium text-foreground">Name</label>
             <input
               id="ai-name"
@@ -65,7 +58,7 @@ export function EditAiContextDialog({ ctx }: EditAiContextDialogProps) {
             />
           </div>
 
-          <div>
+          <div className="shrink-0">
             <label htmlFor="ai-scope" className="mb-1.5 block text-sm font-medium text-foreground">Scope</label>
             <select
               id="ai-scope"
@@ -78,61 +71,24 @@ export function EditAiContextDialog({ ctx }: EditAiContextDialogProps) {
             </select>
           </div>
 
-          <div>
-            <div className="mb-1.5 flex items-center justify-between">
-              <label className="text-sm font-medium text-foreground">Content</label>
-              <div className="flex rounded-lg border border-border bg-muted/50 p-0.5">
-                <button
-                  onClick={() => setTab("edit")}
-                  className={cn(
-                    "rounded-md px-3 py-1 text-xs font-medium transition-all",
-                    tab === "edit" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => setTab("preview")}
-                  className={cn(
-                    "rounded-md px-3 py-1 text-xs font-medium transition-all",
-                    tab === "preview" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Preview
-                </button>
-              </div>
-            </div>
-
-            {tab === "edit" ? (
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                className="h-72 w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm font-mono transition-colors"
-              />
-            ) : (
-              <div className="h-72 overflow-y-auto rounded-lg border border-border bg-muted/30 p-4 text-sm">
-                {content ? (
-                  looksLikeHtml(content) ? (
-                    <SafeHtml html={content} className="prose prose-sm max-w-none text-foreground" />
-                  ) : (
-                    <MarkdownRenderer content={content} />
-                  )
-                ) : (
-                  <p className="italic text-muted-foreground">Nothing to preview</p>
-                )}
-              </div>
-            )}
+          <div className="flex-1 flex flex-col min-h-0">
+            <label className="mb-1.5 text-sm font-medium text-foreground shrink-0">Content</label>
+            <RichTextEditor
+              value={content}
+              onChange={setContent}
+              className="flex-1 min-h-0"
+            />
           </div>
 
           {error && (
-            <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-2.5 text-sm text-destructive">
+            <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-2.5 text-sm text-destructive shrink-0">
               {error}
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4">
+        <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4 shrink-0">
           <button
             onClick={() => setEditingContextId(null)}
             className="rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"

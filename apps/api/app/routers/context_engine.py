@@ -14,7 +14,7 @@ from app.core.websocket import ws_manager
 from app.core.task_registry import task_registry
 from app.database import async_session
 from app.models.context_tree import ContextTreeRun
-from app.utils import utcnow
+from app.utils import utcnow, md_to_html
 
 router = APIRouter(tags=["context-engine"])
 
@@ -482,7 +482,7 @@ async def update_node(
         node["name"] = req.name
         changed.append("name")
     if req.desc is not None:
-        node["desc"] = req.desc
+        node["desc"] = md_to_html(req.desc)
         changed.append("desc")
     if req.visibility is not None:
         node["visibility"] = req.visibility

@@ -22,6 +22,7 @@ import {
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth-store";
 import { MarkdownRenderer } from "@/components/chat/markdown-renderer";
+import { RichTextEditor } from "@/components/shared/rich-text-editor";
 
 // ── Helpers ──
 
@@ -237,10 +238,10 @@ export function NodeDetail() {
               </div>
             </div>
             {isEditing ? (
-              <textarea
+              <RichTextEditor
                 value={editedDesc}
-                onChange={(e) => setEditedDesc(e.target.value)}
-                className="w-full rounded-lg border border-border bg-background p-3 text-xs font-mono text-foreground min-h-[200px] focus:border-primary/30 focus:outline-none focus:ring-1 focus:ring-primary/30"
+                onChange={setEditedDesc}
+                className="min-h-[200px]"
               />
             ) : node.desc ? (
               <div className="rounded-lg bg-muted/50 border border-border p-3 max-h-[400px] overflow-y-auto">

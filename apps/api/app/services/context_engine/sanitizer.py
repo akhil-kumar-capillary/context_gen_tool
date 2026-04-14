@@ -12,6 +12,7 @@ from app.config import settings
 from app.services.context_engine.blueprint import build_refactor_preamble, load_blueprint
 from app.services.context_engine.parsing import parse_refactor_output
 from app.services.llm_service import stream_llm
+from app.utils import md_to_html
 
 logger = logging.getLogger(__name__)
 
@@ -106,14 +107,14 @@ def _attach_sanitized_content(
         # Try sanitized content first
         sanitized = sanitized_map.get(leaf_name)
         if sanitized:
-            leaf["desc"] = sanitized
+            leaf["desc"] = md_to_html(sanitized)
             sanitized_count += 1
             continue
 
-        # Fall back to original content
+        # Fall back to original content (already HTML from Capillary)
         original = original_map.get(leaf_key) or original_map.get(leaf_name)
         if original:
-            leaf["desc"] = original
+            leaf["desc"] = md_to_html(original)
             fallback_count += 1
         else:
             fallback_count += 1
