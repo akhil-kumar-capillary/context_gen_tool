@@ -211,12 +211,14 @@ export function ContextVersionDialog() {
     setCompareLeftDetail(selectedDetail);
     setLoadingCompareLeft(false);
     setCompareRight(rightDefault);
+    setExpandAll(false);
     setMode("compare");
   }, [selectedVersion, selectedDetail, versions]);
 
   const handleExitCompare = useCallback(() => {
     setSelectedVersion(compareLeft);
     setSelectedDetail(compareLeftDetail);
+    setExpandAll(false);
     setMode("browse");
   }, [compareLeft, compareLeftDetail]);
 
