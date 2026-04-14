@@ -445,7 +445,7 @@ async def add_node(
         "type": req.node.get("type", "leaf"),
         "health": req.node.get("health", 80),
         "visibility": req.node.get("visibility", "public"),
-        "desc": req.node.get("desc", ""),
+        "desc": md_to_html(req.node.get("desc", "")),
         "source": "manual",
     }
     if req.node.get("children"):
