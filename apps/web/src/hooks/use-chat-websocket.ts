@@ -99,6 +99,13 @@ export function useChatWebSocket() {
             data.usage,
             mergedCalls,
           );
+
+          // Auto-refresh context list if any tool modified contexts
+          const CONTEXT_TOOLS = ["update_context", "create_context", "delete_context", "refactor_all_contexts", "upload_staged_contexts"];
+          const allCalls = mergedCalls || data.tool_calls || [];
+          if (allCalls.some((tc: { name: string }) => CONTEXT_TOOLS.includes(tc.name))) {
+            useContextStore.getState().fetchContexts();
+          }
           break;
         }
 
