@@ -148,8 +148,14 @@ export function CustomizationPanel() {
     handleHslChange(field, hsl);
   };
 
+  const isValidHsl = (v: string) => /^\d{1,3}\s+\d{1,3}%\s+\d{1,3}%$/.test(v.trim());
+
   const handleSave = async () => {
     if (!token) return;
+    if (!isValidHsl(lightHsl) || !isValidHsl(darkHsl)) {
+      toast.error("Invalid HSL format. Use: hue saturation% lightness% (e.g. 215 70% 55%)");
+      return;
+    }
     setSaving(true);
     try {
       await apiClient.put(

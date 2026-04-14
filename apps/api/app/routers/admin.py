@@ -431,11 +431,25 @@ THEME_PRESETS = {
 DEFAULT_THEME = THEME_PRESETS["slate_blue"]
 
 
+import re
+
+_HSL_PATTERN = re.compile(r"^\d{1,3}\s+\d{1,3}%\s+\d{1,3}%$")
+_VALID_PRESETS = set(THEME_PRESETS.keys()) | {"custom"}
+
+
 class ThemeUpdateRequest(BaseModel):
     theme_preset: str = "slate_blue"
     primary_hsl_light: str = DEFAULT_THEME["light"]
     primary_hsl_dark: str = DEFAULT_THEME["dark"]
     dark_mode_default: bool = False
+
+    def validate_theme(self):
+        if self.theme_preset not in _VALID_PRESETS:
+            raise HTTPException(400, f"Invalid preset: {self.theme_preset}")
+        if not _HSL_PATTERN.match(self.primary_hsl_light):
+            raise HTTPException(400, f"Invalid HSL for light mode: {self.primary_hsl_light}")
+        if not _HSL_PATTERN.match(self.primary_hsl_dark):
+            raise HTTPException(400, f"Invalid HSL for dark mode: {self.primary_hsl_dark}")
 
 
 @router.get("/theme")
@@ -468,6 +482,7 @@ async def update_theme(
     db: AsyncSession = Depends(get_db),
 ):
     """Admin only — update platform theme."""
+    req.validate_theme()
     result = await db.execute(select(PlatformSettings).where(PlatformSettings.id == 1))
     s = result.scalar_one_or_none()
     if not s:
