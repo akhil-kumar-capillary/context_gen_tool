@@ -38,6 +38,7 @@ interface ContextState {
   setConfirmArchiveId: (id: string | null) => void;
   setIsCreating: (creating: boolean) => void;
   setVersionHistoryContextId: (id: string | null) => void;
+  openVersionHistory: (contextId: string, ctx: Context) => Promise<void>;
   setError: (error: string | null) => void;
   setStatusFilter: (filter: ContextStatusFilter) => void;
 
@@ -114,9 +115,9 @@ export const useContextStore = create<ContextState>((set, get) => ({
         { name, content, scope },
         { token }
       );
-      set({ isCreating: false });
       toast.success("Context created");
       await get().fetchContexts();
+      set({ isCreating: false });
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : "Failed to create context",
@@ -137,9 +138,9 @@ export const useContextStore = create<ContextState>((set, get) => ({
         { context_id: contextId, name, content, scope },
         { token }
       );
-      set({ editingContextId: null });
       toast.success("Context updated");
       await get().fetchContexts();
+      set({ editingContextId: null });
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : "Failed to update context",
@@ -308,6 +309,30 @@ export const useContextStore = create<ContextState>((set, get) => ({
   setVersionHistoryContextId: (versionHistoryContextId) => {
     if (versionHistoryContextId) useChatStore.getState().setChatDrawerOpen(false);
     set({ versionHistoryContextId });
+  },
+  openVersionHistory: async (contextId, ctx) => {
+    const { token, orgId } = useAuthStore.getState();
+    if (!token || !orgId) return;
+    try {
+      // Check if versions exist
+      const data = await apiClient.get<{ total: number }>(
+        `/api/versions/aira_context/${contextId}/history?org_id=${orgId}&limit=1&offset=0`,
+        { token },
+      );
+      if (data.total === 0) {
+        // Backfill current state as version 1
+        await apiClient.post(
+          `/api/versions/aira_context/${contextId}/backfill?org_id=${orgId}`,
+          { snapshot: { name: ctx.name, content: ctx.context || "", scope: ctx.scope } },
+          { token },
+        );
+      }
+    } catch {
+      // If backfill fails, still open the drawer — user sees empty state as fallback
+    }
+    // NOW open the drawer (versions guaranteed to exist or best-effort)
+    useChatStore.getState().setChatDrawerOpen(false);
+    set({ versionHistoryContextId: contextId });
   },
   setError: (error) => set({ error }),
   setStatusFilter: (statusFilter) => set({ statusFilter }),

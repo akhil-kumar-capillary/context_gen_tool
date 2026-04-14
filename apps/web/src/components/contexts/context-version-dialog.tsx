@@ -2,7 +2,7 @@
 
 import { SafeHtml } from "@/components/shared/safe-html";
 
-import { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { toast } from "sonner";
 import {
   X,
@@ -162,7 +162,7 @@ const fadeVariants = {
 };
 
 export function ContextVersionDialog() {
-  const { versionHistoryContextId, setVersionHistoryContextId, fetchContexts, contexts } =
+  const { versionHistoryContextId, setVersionHistoryContextId, fetchContexts } =
     useContextStore();
 
   const {
@@ -172,7 +172,6 @@ export function ContextVersionDialog() {
     fetchHistory,
     fetchVersionDetail,
     restoreVersion,
-    backfillVersion,
   } = useVersionHistory("aira_context", versionHistoryContextId);
 
   const [mode, setMode] = useState<"browse" | "compare">("browse");
@@ -201,33 +200,7 @@ export function ContextVersionDialog() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [versionHistoryContextId]);
 
-  // Auto-backfill: if history is empty, create version 1 from current context state
-  const backfillInProgress = useRef(false);
-  const lastBackfillId = useRef<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    // Reset guard when switching contexts
-    if (lastBackfillId.current !== versionHistoryContextId) {
-      backfillInProgress.current = false;
-      lastBackfillId.current = versionHistoryContextId;
-    }
-    if (!isLoading && versions.length === 0 && versionHistoryContextId && !backfillInProgress.current) {
-      const ctx = contexts.find((c) => c.id === versionHistoryContextId);
-      if (ctx) {
-        backfillInProgress.current = true;
-        backfillVersion({
-          name: ctx.name,
-          content: ctx.context || "",
-          scope: ctx.scope,
-        }).then((created: boolean) => {
-          backfillInProgress.current = false;
-          if (!cancelled && created) fetchHistory(true);
-        });
-      }
-    }
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading, versions.length, versionHistoryContextId, contexts.length]);
+  // Backfill is now handled BEFORE the drawer opens (in context-store.openVersionHistory)
 
   useEffect(() => {
     if (mode === "browse" && versions.length > 0 && selectedVersion === null) {
@@ -306,9 +279,8 @@ export function ContextVersionDialog() {
   const handleRestore = async (versionNumber: number) => {
     const ok = await restoreVersion(versionNumber);
     if (ok) {
+      await Promise.all([fetchContexts(), fetchHistory(true)]);
       toast.success(`Restored to version ${versionNumber}`);
-      fetchContexts();
-      fetchHistory(true);
     } else {
       toast.error("Failed to restore version");
     }

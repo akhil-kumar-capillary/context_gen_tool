@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useState } from "react";
 import { Pencil, Archive, ArchiveRestore, Loader2, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { truncateHtml } from "@/lib/text-utils";
@@ -18,10 +18,12 @@ export const ContextRow = memo(function ContextRow({ ctx }: ContextRowProps) {
     actionLoadingId,
     setEditingContextId,
     setConfirmArchiveId,
-    setVersionHistoryContextId,
+    openVersionHistory,
     archiveContext,
     restoreContext,
   } = useContextStore();
+
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   const isConfirmingArchive = confirmArchiveId === ctx.id;
   const isActionLoading = actionLoadingId === ctx.id;
@@ -66,11 +68,16 @@ export const ContextRow = memo(function ContextRow({ ctx }: ContextRowProps) {
                 <Pencil className="h-4 w-4" />
               </button>
               <button
-                onClick={() => setVersionHistoryContextId(ctx.id)}
-                className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-primary/5 hover:text-primary"
+                onClick={async () => {
+                  setLoadingHistory(true);
+                  await openVersionHistory(ctx.id, ctx);
+                  setLoadingHistory(false);
+                }}
+                disabled={loadingHistory}
+                className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-primary/5 hover:text-primary disabled:opacity-50"
                 aria-label={`Version history for ${ctx.name}`}
               >
-                <History className="h-4 w-4" />
+                {loadingHistory ? <Loader2 className="h-4 w-4 animate-spin" /> : <History className="h-4 w-4" />}
               </button>
               <button
                 onClick={() => setConfirmArchiveId(ctx.id)}
