@@ -10,8 +10,18 @@ import { Table } from "@tiptap/extension-table";
 import { TableRow } from "@tiptap/extension-table-row";
 import { TableCell } from "@tiptap/extension-table-cell";
 import { TableHeader } from "@tiptap/extension-table-header";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { marked } from "marked";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { cn } from "@/lib/utils";
+
+// Detect if content is already HTML (starts with a tag) vs raw markdown
+function ensureHtml(content: string): string {
+  if (!content || !content.trim()) return content;
+  // If it starts with an HTML tag, it's already HTML
+  if (/^\s*<[a-z][\s\S]*>/i.test(content.trim())) return content;
+  // Otherwise treat as markdown and convert
+  return marked.parse(content, { async: false }) as string;
+}
 import {
   Bold,
   Italic,
@@ -334,7 +344,8 @@ export function RichTextEditor({
   readOnly = false,
   className,
 }: RichTextEditorProps) {
-  const lastHtml = useRef(value);
+  const htmlValue = useMemo(() => ensureHtml(value), [value]);
+  const lastHtml = useRef(htmlValue);
 
   const handleUpdate = useCallback(
     ({ editor }: { editor: { getHTML: () => string } }) => {
@@ -374,7 +385,7 @@ export function RichTextEditor({
       TableCell,
       TableHeader,
     ],
-    content: value,
+    content: htmlValue,
     editable: !readOnly,
     onUpdate: handleUpdate,
     editorProps: {
@@ -386,9 +397,9 @@ export function RichTextEditor({
 
   // Sync external value changes (e.g. reset from parent) without resetting cursor
   useEffect(() => {
-    if (editor && value !== lastHtml.current) {
-      lastHtml.current = value;
-      editor.commands.setContent(value, { emitUpdate: false });
+    if (editor && htmlValue !== lastHtml.current) {
+      lastHtml.current = htmlValue;
+      editor.commands.setContent(htmlValue, { emitUpdate: false });
     }
   }, [editor, value]);
 

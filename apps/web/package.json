@@ -41,6 +41,7 @@
     "isomorphic-dompurify": "^3.8.0",
     "jszip": "^3.10.1",
     "lucide-react": "^0.451.0",
+    "marked": "^18.0.0",
     "next": "^14.2.15",
     "next-themes": "^0.4.6",
     "react": "^18.3.1",
