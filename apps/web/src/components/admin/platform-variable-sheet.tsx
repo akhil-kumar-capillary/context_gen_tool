@@ -40,19 +40,19 @@ export function PlatformVariableSheet({ variable, existingGroups, onClose, onSav
   const [groupDropdownOpen, setGroupDropdownOpen] = useState(false);
   const groupRef = useRef<HTMLDivElement>(null);
 
-  // Reset state when variable changes
+  // Reset state when variable changes (handles both edit and create mode)
   useEffect(() => {
-    if (variable) {
-      setKey(variable.key);
-      setValue(variable.value || "");
-      setValueType(variable.value_type);
-      setGroupName(variable.group_name || "");
-      setDescription(variable.description || "");
-      setDefaultValue(variable.default_value || "");
-      setIsRequired(variable.is_required);
-      setValidationRule(variable.validation_rule || "");
-      setSortOrder(variable.sort_order);
-    }
+    setKey(variable?.key || "");
+    setValue(variable?.value || "");
+    setValueType(variable?.value_type || "string");
+    setGroupName(variable?.group_name || "");
+    setDescription(variable?.description || "");
+    setDefaultValue(variable?.default_value || "");
+    setIsRequired(variable?.is_required || false);
+    setValidationRule(variable?.validation_rule || "");
+    setSortOrder(variable?.sort_order ?? 0);
+    setChangeReason("");
+    setError(null);
   }, [variable]);
 
   // Close group dropdown on click outside
