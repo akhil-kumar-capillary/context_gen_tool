@@ -4,6 +4,7 @@ import logging
 import re as re_module
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -579,11 +580,15 @@ def _validate_variable_value(
         if not value.startswith(("http://", "https://")):
             raise HTTPException(400, "Value must be a valid URL starting with http:// or https://")
     if validation_rule:
+        if len(validation_rule) > 200:
+            raise HTTPException(400, "Validation rule must be 200 characters or less")
         try:
             pattern = re_module.compile(validation_rule)
         except re_module.error:
             raise HTTPException(400, f"Invalid validation regex: {validation_rule}")
-        if not pattern.match(value):
+        # Limit test input length to prevent ReDoS on pathological patterns
+        test_value = value[:10000] if value else ""
+        if not pattern.match(test_value):
             raise HTTPException(400, f"Value does not match validation rule: {validation_rule}")
 
 
@@ -609,10 +614,12 @@ async def list_platform_variables(
     group: str | None = Query(None),
     search: str | None = Query(None),
     value_type: str | None = Query(None),
+    limit: int = Query(default=500, ge=1, le=5000),
+    offset: int = Query(default=0, ge=0),
     current_user: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """List all platform variables with optional filters."""
+    """List platform variables with optional filters and pagination."""
     query = select(PlatformVariable).order_by(
         PlatformVariable.group_name, PlatformVariable.sort_order, PlatformVariable.key,
     )
@@ -628,7 +635,11 @@ async def list_platform_variables(
             | PlatformVariable.description.ilike(like_term)
         )
 
-    result = await db.execute(query)
+    # Total count (before pagination)
+    count_query = select(func.count()).select_from(query.subquery())
+    total = (await db.execute(count_query)).scalar() or 0
+
+    result = await db.execute(query.limit(limit).offset(offset))
     variables = result.scalars().all()
 
     # Group counts
@@ -645,6 +656,7 @@ async def list_platform_variables(
     return {
         "variables": [_serialize_variable(v) for v in variables],
         "groups": groups,
+        "total": total,
     }
 
 
@@ -688,7 +700,11 @@ async def create_platform_variable(
         updated_by=current_user["user_id"],
     )
     db.add(var)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(409, f"Variable with key '{req.key}' already exists")
 
     await _audit(
         db,

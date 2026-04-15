@@ -12,9 +12,11 @@ class AnalysisRun(Base):
     __tablename__ = "analysis_runs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    run_id = Column(UUID(as_uuid=True), ForeignKey("extraction_runs.id"))
+    run_id = Column(UUID(as_uuid=True), ForeignKey("extraction_runs.id"), nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     org_id = Column(String(50))
+    source_type = Column(String(20), nullable=False, default="extraction")
+    source_table_name = Column(String(500), nullable=True)
     counters = Column(JSONB)
     clusters = Column(JSONB)
     classified_filters = Column(JSONB)

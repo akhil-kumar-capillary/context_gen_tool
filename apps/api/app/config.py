@@ -72,9 +72,10 @@ AUTH_CLUSTER_TO_KEY: dict[str, str] = {
 @dataclass
 class DatabricksCluster:
     """Resolved Databricks workspace config for a given Intouch cluster."""
-    key: str        # canonical key, e.g. "APAC2"
-    instance: str   # Databricks workspace URL
-    token: str      # access token (never exposed to frontend)
+    key: str            # canonical key, e.g. "APAC2"
+    instance: str       # Databricks workspace URL
+    token: str          # access token (never exposed to frontend)
+    cluster_id: str     # all-purpose cluster ID for SQL queries
 
 
 def _resolve_databricks_token(cluster_key: str, dotenv_path: str = ".env") -> Optional[str]:
@@ -84,6 +85,16 @@ def _resolve_databricks_token(cluster_key: str, dotenv_path: str = ".env") -> Op
     Falls back to .env file.
     """
     env_key = f"DATABRICKS_{cluster_key.upper()}_TOKEN"
+    return _env_or_dotenv(env_key, dotenv_path)
+
+
+def _resolve_databricks_cluster_id(cluster_key: str, dotenv_path: str = ".env") -> Optional[str]:
+    """Resolve the Databricks cluster ID for SQL queries.
+
+    Looks for env var: DATABRICKS_<CLUSTER_KEY>_CLUSTER_ID
+    Falls back to .env file.
+    """
+    env_key = f"DATABRICKS_{cluster_key.upper()}_CLUSTER_ID"
     return _env_or_dotenv(env_key, dotenv_path)
 
 
@@ -121,7 +132,9 @@ def get_databricks_cluster(cluster_key: str) -> Optional[DatabricksCluster]:
         logger.warning(f"No Databricks token for cluster {key} (set DATABRICKS_{key}_TOKEN)")
         return None
 
-    return DatabricksCluster(key=key, instance=instance, token=token)
+    cluster_id = _resolve_databricks_cluster_id(key) or ""
+
+    return DatabricksCluster(key=key, instance=instance, token=token, cluster_id=cluster_id)
 
 
 def get_all_configured_clusters() -> list[dict]:

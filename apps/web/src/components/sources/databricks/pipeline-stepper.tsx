@@ -2,31 +2,40 @@
 
 import { Link, FolderSearch, BarChart3, Sparkles, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/stores/auth-store";
 import { useDatabricksStore, type PipelineStep } from "@/stores/databricks-store";
 
-const STEPS: { id: PipelineStep; label: string; icon: React.ReactNode; num: number }[] = [
-  { id: "connect", label: "Connect", icon: <Link className="h-4 w-4" />, num: 1 },
-  { id: "extract", label: "Extract", icon: <FolderSearch className="h-4 w-4" />, num: 2 },
-  { id: "analyze", label: "Analyze", icon: <BarChart3 className="h-4 w-4" />, num: 3 },
-  { id: "generate", label: "Generate", icon: <Sparkles className="h-4 w-4" />, num: 4 },
+const ALL_STEPS: { id: PipelineStep; label: string; icon: React.ReactNode }[] = [
+  { id: "connect", label: "Connect", icon: <Link className="h-4 w-4" /> },
+  { id: "extract", label: "Extract", icon: <FolderSearch className="h-4 w-4" /> },
+  { id: "analyze", label: "Analyze", icon: <BarChart3 className="h-4 w-4" /> },
+  { id: "generate", label: "Generate", icon: <Sparkles className="h-4 w-4" /> },
 ];
 
 const STEP_ORDER: PipelineStep[] = ["connect", "extract", "analyze", "generate"];
 
 export function PipelineStepper() {
+  const { user } = useAuthStore();
+  const isAdmin = user?.isAdmin ?? false;
+
   const { activeStep, setActiveStep, connectionStatus, activeExtractionId, activeAnalysisId } =
     useDatabricksStore();
+
+  // Non-admins only see Analyze + Generate
+  const visibleSteps = isAdmin
+    ? ALL_STEPS
+    : ALL_STEPS.filter((s) => s.id === "analyze" || s.id === "generate");
 
   const activeIdx = STEP_ORDER.indexOf(activeStep);
 
   const canNavigate = (step: PipelineStep): boolean => {
     switch (step) {
       case "connect":
-        return true;
+        return isAdmin;
       case "extract":
-        return connectionStatus === "connected";
+        return isAdmin && connectionStatus === "connected";
       case "analyze":
-        return !!activeExtractionId;
+        return isAdmin ? !!activeExtractionId : true;
       case "generate":
         return !!activeAnalysisId;
       default:
@@ -40,7 +49,7 @@ export function PipelineStepper() {
 
   return (
     <div className="flex items-center gap-1">
-      {STEPS.map((step, i) => {
+      {visibleSteps.map((step, i) => {
         const active = step.id === activeStep;
         const completed = isCompleted(step.id);
         const enabled = canNavigate(step.id);

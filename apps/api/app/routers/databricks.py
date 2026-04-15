@@ -11,7 +11,10 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.database import get_db
 from app.core.auth import get_current_user
 from app.core.rbac import require_permission
 from app.core.websocket import ws_manager
@@ -21,7 +24,7 @@ from app.config import get_databricks_cluster, get_all_configured_clusters, norm
 from app.services.databricks.storage import StorageService
 from app.services.databricks.client import DatabricksClient
 from app.services.databricks.extraction_orchestrator import run_extraction
-from app.services.databricks.analysis_orchestrator import run_analysis
+from app.services.databricks.analysis_orchestrator import run_analysis, run_analysis_from_table
 from app.services.databricks.doc_orchestrator import run_generation, preview_payloads
 from app.services.databricks.doc_author import DOC_NAMES, SYSTEM_PROMPTS, TOKEN_BUDGETS
 
@@ -41,6 +44,10 @@ class StartExtractionRequest(BaseModel):
 
 class StartAnalysisRequest(BaseModel):
     run_id: str = Field(..., description="Extraction run UUID")
+    org_id: str = Field(..., description="Organization ID to analyze")
+
+
+class StartTableAnalysisRequest(BaseModel):
     org_id: str = Field(..., description="Organization ID to analyze")
 
 
@@ -394,6 +401,76 @@ async def cancel_analysis(
     if not cancelled:
         raise HTTPException(status_code=404, detail="No active analysis task found")
     return {"cancelled": True, "run_id": run_id, "org_id": org_id}
+
+
+@router.post("/analysis/start-from-table")
+async def start_table_analysis(
+    req: StartTableAnalysisRequest,
+    current_user: dict = Depends(require_permission("databricks", "analyze")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Start analysis using SQLs from a Databricks SQL table (background task).
+
+    Fetches SQLs from the cluster's configured table, filtered by org_id.
+    Progress is pushed via WebSocket (same events as extraction-based analysis).
+    """
+    user_id = current_user["user_id"]
+    is_admin = current_user.get("is_admin", False)
+
+    # Org authorization: non-admins can only analyze their own orgs
+    if not is_admin:
+        from app.models.user import UserOrg
+        org_check = await db.execute(
+            select(UserOrg).where(
+                UserOrg.user_id == user_id,
+                UserOrg.org_id == int(req.org_id),
+            )
+        )
+        if not org_check.scalar_one_or_none():
+            raise HTTPException(403, f"You don't have access to org {req.org_id}")
+
+    cluster_key = normalize_cluster_key(current_user.get("cluster", ""))
+    progress_cb = _ws_progress_callback(user_id, "analysis")
+
+    task_name = f"analysis-table-{req.org_id}"
+
+    async def _run():
+        try:
+            result = await run_analysis_from_table(
+                org_id=req.org_id,
+                user_id=user_id,
+                cluster_key=cluster_key,
+                on_progress=progress_cb,
+            )
+            await ws_manager.send_to_user(user_id, {
+                "type": "analysis_complete", "result": result,
+            })
+        except asyncio.CancelledError:
+            logger.info(f"Table analysis {task_name} cancelled")
+            await ws_manager.send_to_user(user_id, {
+                "type": "analysis_cancelled", "org_id": req.org_id,
+            })
+        except Exception as e:
+            logger.exception(f"Table analysis for org {req.org_id} failed")
+            await ws_manager.send_to_user(user_id, {
+                "type": "analysis_failed", "org_id": req.org_id, "error": str(e),
+            })
+
+    if task_name in task_registry.active_tasks:
+        return {"status": "already_running", "org_id": req.org_id}
+    task_registry.create_task(_run(), name=task_name, user_id=user_id)
+    return {"status": "started", "org_id": req.org_id}
+
+
+@router.get("/analysis/table-history")
+async def table_analysis_history(
+    org_id: str = Query(..., description="Organization ID"),
+    current_user: dict = Depends(require_permission("databricks", "view")),
+):
+    """List table-sourced analysis runs for a given org."""
+    storage = StorageService()
+    runs = await storage.get_table_analysis_history(org_id)
+    return {"runs": runs}
 
 
 @router.get("/analysis/history")

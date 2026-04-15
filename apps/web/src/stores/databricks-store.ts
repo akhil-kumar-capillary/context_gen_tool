@@ -33,7 +33,7 @@ export interface OrgIdEntry {
 
 export interface AnalysisRun {
   id: string;
-  run_id: string;
+  run_id: string | null;
   org_id: string;
   version: number;
   total_weight: number;
@@ -44,6 +44,8 @@ export interface AnalysisRun {
   databricks_instance?: string;
   root_path?: string;
   valid_sqls?: number;
+  source_type?: "extraction" | "table";
+  source_table_name?: string;
 }
 
 export interface ContextDoc {
@@ -101,7 +103,9 @@ interface DatabricksState {
   selectedOrgId: string | null;
 
   // Analysis
+  analysisSource: "extraction" | "table";
   analysisRuns: AnalysisRun[];
+  tableAnalysisRuns: AnalysisRun[];
   activeAnalysisId: string | null;
   analysisProgress: ProgressEvent[];
   isAnalyzing: boolean;
@@ -130,7 +134,9 @@ interface DatabricksState {
   setOrgIds: (orgs: OrgIdEntry[]) => void;
   setSelectedOrgId: (id: string | null) => void;
 
+  setAnalysisSource: (source: "extraction" | "table") => void;
   setAnalysisRuns: (runs: AnalysisRun[]) => void;
+  setTableAnalysisRuns: (runs: AnalysisRun[]) => void;
   setActiveAnalysisId: (id: string | null) => void;
   addAnalysisProgress: (event: ProgressEvent) => void;
   clearAnalysisProgress: () => void;
@@ -159,7 +165,9 @@ const initialState = {
   isExtracting: false,
   orgIds: [] as OrgIdEntry[],
   selectedOrgId: null,
+  analysisSource: "table" as const,
   analysisRuns: [] as AnalysisRun[],
+  tableAnalysisRuns: [] as AnalysisRun[],
   activeAnalysisId: null,
   analysisProgress: [] as ProgressEvent[],
   isAnalyzing: false,
@@ -203,7 +211,9 @@ export const useDatabricksStore = create<DatabricksState>((set) => ({
   setSelectedOrgId: (id) => set({ selectedOrgId: id }),
 
   // Analysis
+  setAnalysisSource: (source) => set({ analysisSource: source }),
   setAnalysisRuns: (runs) => set({ analysisRuns: runs }),
+  setTableAnalysisRuns: (runs) => set({ tableAnalysisRuns: runs }),
   setActiveAnalysisId: (id) => set({ activeAnalysisId: id }),
   addAnalysisProgress: (event) =>
     set((s) => {

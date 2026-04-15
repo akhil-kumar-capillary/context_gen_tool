@@ -423,21 +423,35 @@ class StorageService:
     async def save_analysis_run(
         self,
         analysis_id: str,
-        run_id: str,
+        run_id: str | None,
         user_id: int,
         data: dict,
+        source_type: str = "extraction",
+        source_table_name: str | None = None,
     ) -> int:
-        """Save analysis results. Auto-increments version per run_id. Returns version."""
+        """Save analysis results. Auto-increments version. Returns version."""
         uid_analysis = uuid.UUID(analysis_id)
-        uid_run = uuid.UUID(run_id)
+        uid_run = uuid.UUID(run_id) if run_id else None
 
         async with async_session() as db:
-            # Compute next version
-            result = await db.execute(
-                select(func.max(AnalysisRun.version)).where(
-                    AnalysisRun.run_id == uid_run
+            # Advisory lock prevents concurrent version computation for the same scope
+            lock_key = run_id or f"table-{data.get('org_id', '')}"
+            await db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": lock_key})
+
+            # Compute next version — by run_id for extraction, by org_id for table
+            if uid_run:
+                result = await db.execute(
+                    select(func.max(AnalysisRun.version)).where(
+                        AnalysisRun.run_id == uid_run
+                    )
                 )
-            )
+            else:
+                result = await db.execute(
+                    select(func.max(AnalysisRun.version)).where(
+                        AnalysisRun.org_id == data.get("org_id"),
+                        AnalysisRun.source_type == "table",
+                    )
+                )
             max_v = result.scalar()
             version = (max_v or 0) + 1
 
@@ -446,6 +460,8 @@ class StorageService:
                 run_id=uid_run,
                 user_id=user_id,
                 org_id=data.get("org_id"),
+                source_type=source_type,
+                source_table_name=source_table_name,
                 counters=data.get("counters", {}),
                 clusters=data.get("clusters", []),
                 classified_filters=data.get("classified_filters", {}),
@@ -486,7 +502,7 @@ class StorageService:
             stmt = text("""
                 SELECT
                     a.id, a.run_id, a.org_id, a.version, a.total_weight,
-                    a.status, a.created_at,
+                    a.status, a.created_at, a.source_type, a.source_table_name,
                     e.databricks_instance, e.root_path, e.valid_sqls, e.total_notebooks,
                     (SELECT COUNT(*) FROM analysis_fingerprints af WHERE af.analysis_id = a.id) AS fingerprint_count,
                     (SELECT COUNT(*) FROM analysis_notebooks an WHERE an.analysis_id = a.id) AS notebook_count
@@ -502,7 +518,7 @@ class StorageService:
             stmt = text("""
                 SELECT
                     a.id, a.run_id, a.org_id, a.version, a.total_weight,
-                    a.status, a.created_at,
+                    a.status, a.created_at, a.source_type, a.source_table_name,
                     (SELECT COUNT(*) FROM analysis_fingerprints af WHERE af.analysis_id = a.id) AS fingerprint_count,
                     (SELECT COUNT(*) FROM analysis_notebooks an WHERE an.analysis_id = a.id) AS notebook_count
                 FROM analysis_runs a
@@ -531,12 +547,30 @@ class StorageService:
             )
             await db.commit()
 
+    async def get_table_analysis_history(self, org_id: str) -> list[dict]:
+        """Return analysis runs sourced from Databricks table for a given org."""
+        async with async_session() as db:
+            stmt = text("""
+                SELECT
+                    a.id, a.run_id, a.org_id, a.version, a.total_weight,
+                    a.status, a.created_at, a.source_type, a.source_table_name,
+                    (SELECT COUNT(*) FROM analysis_fingerprints af WHERE af.analysis_id = a.id) AS fingerprint_count,
+                    (SELECT COUNT(*) FROM analysis_notebooks an WHERE an.analysis_id = a.id) AS notebook_count
+                FROM analysis_runs a
+                WHERE a.source_type = 'table' AND a.org_id = :org_id
+                ORDER BY a.created_at DESC
+            """)
+            result = await db.execute(stmt, {"org_id": org_id})
+            return [dict(row._mapping) for row in result.all()]
+
     def _analysis_to_dict(self, run: AnalysisRun) -> dict:
         return {
             "id": str(run.id),
-            "run_id": str(run.run_id),
+            "run_id": str(run.run_id) if run.run_id else None,
             "user_id": run.user_id,
             "org_id": run.org_id,
+            "source_type": run.source_type or "extraction",
+            "source_table_name": run.source_table_name,
             "counters": run.counters or {},
             "clusters": run.clusters or [],
             "classified_filters": run.classified_filters or {},

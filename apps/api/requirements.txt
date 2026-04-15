@@ -25,6 +25,9 @@ openai>=1.51.0
 # SQL Parsing (for Databricks module)
 sqlglot>=25.0.0
 
+# Databricks SQL Connector (for table-mode analysis)
+databricks-sql-connector>=3.0.0
+
 # Confluence
 atlassian-python-api>=3.41.0
 markdownify>=0.13.0

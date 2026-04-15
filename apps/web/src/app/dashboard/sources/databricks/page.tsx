@@ -15,8 +15,9 @@ import {
 } from "@/components/sources/databricks";
 
 export default function DatabricksPage() {
-  const { orgId } = useAuthStore();
-  const { activeStep } = useDatabricksStore();
+  const { orgId, user } = useAuthStore();
+  const { activeStep, setActiveStep } = useDatabricksStore();
+  const isAdmin = user?.isAdmin ?? false;
 
   // Reset store when org changes (skip hydration: null → number)
   const prevOrgIdRef = useRef(orgId);
@@ -26,6 +27,13 @@ export default function DatabricksPage() {
     }
     prevOrgIdRef.current = orgId;
   }, [orgId]);
+
+  // Non-admins start at "analyze" (skip connect/extract)
+  useEffect(() => {
+    if (!isAdmin && (activeStep === "connect" || activeStep === "extract")) {
+      setActiveStep("analyze");
+    }
+  }, [isAdmin, activeStep, setActiveStep]);
 
   // Connect to WebSocket for progress events
   useDatabricksWebSocket();
@@ -37,7 +45,10 @@ export default function DatabricksPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Databricks Source</h1>
           <p className="text-sm text-muted-foreground">
-            Extract SQL from Databricks notebooks, analyze patterns, and generate context documents.
+            {isAdmin
+              ? "Extract SQL from Databricks notebooks, analyze patterns, and generate context documents."
+              : "Analyze SQL patterns and generate context documents."
+            }
           </p>
         </div>
 
@@ -46,8 +57,8 @@ export default function DatabricksPage() {
 
         {/* Active step content */}
         <div className="space-y-4">
-          {activeStep === "connect" && <ConnectionForm />}
-          {activeStep === "extract" && <ExtractionPanel />}
+          {activeStep === "connect" && isAdmin && <ConnectionForm />}
+          {activeStep === "extract" && isAdmin && <ExtractionPanel />}
           {activeStep === "analyze" && <AnalysisPanel />}
           {activeStep === "generate" && <DocGenerationPanel />}
         </div>
