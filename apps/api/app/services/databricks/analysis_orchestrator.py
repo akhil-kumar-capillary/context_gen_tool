@@ -237,8 +237,12 @@ async def run_analysis_from_table(
                 f"Set it in Admin → Platform Variables."
             )
 
-        # Validate table name format (defense-in-depth — table names can't be parameterized)
-        if not re_module.match(r'^[a-zA-Z0-9_\.]+$', table_name):
+        # Validate table name: each dot-separated part must be a valid identifier
+        # Allows: catalog.schema.table, schema.table, or just table
+        parts = table_name.split(".")
+        if not (1 <= len(parts) <= 3) or not all(
+            re_module.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', p) for p in parts
+        ):
             raise ValueError(f"Invalid table name format: '{table_name}'")
 
         # Step 2: Query Databricks SQL table (org_id is parameterized, not interpolated)
