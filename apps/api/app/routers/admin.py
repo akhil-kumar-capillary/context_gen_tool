@@ -1,21 +1,29 @@
-"""Admin panel endpoints — user management, RBAC, secrets, audit logs."""
+"""Admin panel endpoints — user management, RBAC, platform variables, audit logs."""
+import json
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
+import re as re_module
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.core.auth import require_admin
+from app.core.auth import require_admin, get_current_user
+from app.core.cache import app_cache
 from app.models.user import User, Role, Permission, UserRole, UserPermission
 from app.models.audit_log import AuditLog
 from app.models.platform_settings import PlatformSettings
+from app.models.platform_variable import PlatformVariable
 from app.config import settings
 from pydantic import BaseModel
 from app.schemas.admin import (
     GrantRoleRequest, RevokeRoleRequest,
     GrantPermissionRequest, RevokePermissionRequest,
     ToggleAdminRequest, SetPermissionsRequest,
+)
+from app.schemas.platform_variable import (
+    PlatformVariableCreate, PlatformVariableUpdate,
+    PlatformVariableImportRequest,
 )
 
 router = APIRouter()
@@ -542,3 +550,447 @@ async def reset_theme(
     )
     await db.commit()
     return {"message": "Theme reset to Slate Blue"}
+
+
+# ── Platform Variables ─────────────────────────────────────────────
+
+_VALID_VALUE_TYPES = {"string", "number", "boolean", "json", "url", "text"}
+_KEY_PATTERN = re_module.compile(r"^[a-zA-Z0-9/_\-\.]+$")
+
+
+def _validate_variable_value(
+    value: str | None, value_type: str, validation_rule: str | None = None,
+) -> None:
+    """Validate a platform variable value against its type and optional regex."""
+    if value is None or value == "":
+        return
+    if value_type == "number":
+        try:
+            float(value)
+        except ValueError:
+            raise HTTPException(400, f"Value must be a valid number, got: {value}")
+    elif value_type == "boolean":
+        if value.lower() not in ("true", "false"):
+            raise HTTPException(400, f"Value must be 'true' or 'false', got: {value}")
+    elif value_type == "json":
+        try:
+            json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            raise HTTPException(400, "Value must be valid JSON")
+    elif value_type == "url":
+        if not value.startswith(("http://", "https://")):
+            raise HTTPException(400, "Value must be a valid URL starting with http:// or https://")
+    if validation_rule:
+        try:
+            pattern = re_module.compile(validation_rule)
+        except re_module.error:
+            raise HTTPException(400, f"Invalid validation regex: {validation_rule}")
+        if not pattern.match(value):
+            raise HTTPException(400, f"Value does not match validation rule: {validation_rule}")
+
+
+def _serialize_variable(v: PlatformVariable) -> dict:
+    return {
+        "id": v.id,
+        "key": v.key,
+        "value": v.value,
+        "value_type": v.value_type,
+        "group_name": v.group_name,
+        "description": v.description,
+        "default_value": v.default_value,
+        "is_required": v.is_required,
+        "validation_rule": v.validation_rule,
+        "sort_order": v.sort_order,
+        "created_at": v.created_at.isoformat() if v.created_at else None,
+        "updated_at": v.updated_at.isoformat() if v.updated_at else None,
+    }
+
+
+@router.get("/platform-variables")
+async def list_platform_variables(
+    group: str | None = Query(None),
+    search: str | None = Query(None),
+    value_type: str | None = Query(None),
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all platform variables with optional filters."""
+    query = select(PlatformVariable).order_by(
+        PlatformVariable.group_name, PlatformVariable.sort_order, PlatformVariable.key,
+    )
+    if group:
+        query = query.where(PlatformVariable.group_name == group)
+    if value_type:
+        query = query.where(PlatformVariable.value_type == value_type)
+    if search:
+        like_term = f"%{search}%"
+        query = query.where(
+            PlatformVariable.key.ilike(like_term)
+            | PlatformVariable.value.ilike(like_term)
+            | PlatformVariable.description.ilike(like_term)
+        )
+
+    result = await db.execute(query)
+    variables = result.scalars().all()
+
+    # Group counts
+    group_result = await db.execute(
+        select(PlatformVariable.group_name, func.count(PlatformVariable.id))
+        .group_by(PlatformVariable.group_name)
+        .order_by(PlatformVariable.group_name)
+    )
+    groups = [
+        {"name": name or "Ungrouped", "count": count}
+        for name, count in group_result.all()
+    ]
+
+    return {
+        "variables": [_serialize_variable(v) for v in variables],
+        "groups": groups,
+    }
+
+
+@router.post("/platform-variables")
+async def create_platform_variable(
+    req: PlatformVariableCreate,
+    request: Request,
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new platform variable."""
+    # Validate key format
+    if not _KEY_PATTERN.match(req.key):
+        raise HTTPException(400, "Key must contain only letters, numbers, /, _, -, .")
+
+    # Validate value_type
+    if req.value_type not in _VALID_VALUE_TYPES:
+        raise HTTPException(400, f"Invalid value_type. Must be one of: {', '.join(sorted(_VALID_VALUE_TYPES))}")
+
+    # Check uniqueness
+    existing = await db.execute(
+        select(PlatformVariable).where(PlatformVariable.key == req.key)
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(409, f"Variable with key '{req.key}' already exists")
+
+    # Validate value
+    _validate_variable_value(req.value, req.value_type, req.validation_rule)
+
+    var = PlatformVariable(
+        key=req.key,
+        value=req.value,
+        value_type=req.value_type,
+        group_name=req.group_name,
+        description=req.description,
+        default_value=req.default_value,
+        is_required=req.is_required,
+        validation_rule=req.validation_rule,
+        sort_order=req.sort_order,
+        created_by=current_user["user_id"],
+        updated_by=current_user["user_id"],
+    )
+    db.add(var)
+
+    await _audit(
+        db,
+        user_id=current_user["user_id"],
+        user_email=current_user.get("email", ""),
+        action="create_platform_variable",
+        module="admin",
+        resource_type="platform_variable",
+        resource_id=req.key,
+        details={"key": req.key, "value": req.value, "value_type": req.value_type, "group": req.group_name},
+        ip_address=request.client.host if request.client else None,
+    )
+    await db.commit()
+    await db.refresh(var)
+    app_cache.invalidate_prefix("platform_vars:")
+
+    return {"message": f"Variable '{req.key}' created", "variable": _serialize_variable(var)}
+
+
+@router.put("/platform-variables/{variable_id}")
+async def update_platform_variable(
+    variable_id: int,
+    req: PlatformVariableUpdate,
+    request: Request,
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update an existing platform variable."""
+    result = await db.execute(
+        select(PlatformVariable).where(PlatformVariable.id == variable_id)
+    )
+    var = result.scalar_one_or_none()
+    if not var:
+        raise HTTPException(404, "Variable not found")
+
+    old_value = var.value
+
+    # Determine effective value_type for validation
+    effective_type = req.value_type if req.value_type is not None else var.value_type
+    if req.value_type is not None and req.value_type not in _VALID_VALUE_TYPES:
+        raise HTTPException(400, f"Invalid value_type. Must be one of: {', '.join(sorted(_VALID_VALUE_TYPES))}")
+
+    # Determine effective validation_rule
+    effective_rule = req.validation_rule if req.validation_rule is not None else var.validation_rule
+
+    # Validate new value if provided
+    if req.value is not None:
+        _validate_variable_value(req.value, effective_type, effective_rule)
+
+    # Apply updates (only non-None fields)
+    if req.value is not None:
+        var.value = req.value
+    if req.value_type is not None:
+        var.value_type = req.value_type
+    if req.group_name is not None:
+        var.group_name = req.group_name
+    if req.description is not None:
+        var.description = req.description
+    if req.default_value is not None:
+        var.default_value = req.default_value
+    if req.is_required is not None:
+        var.is_required = req.is_required
+    if req.validation_rule is not None:
+        var.validation_rule = req.validation_rule
+    if req.sort_order is not None:
+        var.sort_order = req.sort_order
+    var.updated_by = current_user["user_id"]
+
+    await _audit(
+        db,
+        user_id=current_user["user_id"],
+        user_email=current_user.get("email", ""),
+        action="update_platform_variable",
+        module="admin",
+        resource_type="platform_variable",
+        resource_id=str(variable_id),
+        details={
+            "key": var.key,
+            "old_value": old_value,
+            "new_value": req.value if req.value is not None else old_value,
+            "change_reason": req.change_reason,
+        },
+        ip_address=request.client.host if request.client else None,
+    )
+    await db.commit()
+    await db.refresh(var)
+    app_cache.invalidate_prefix("platform_vars:")
+
+    return {"message": f"Variable '{var.key}' updated", "variable": _serialize_variable(var)}
+
+
+@router.delete("/platform-variables/{variable_id}")
+async def delete_platform_variable(
+    variable_id: int,
+    request: Request,
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a platform variable."""
+    result = await db.execute(
+        select(PlatformVariable).where(PlatformVariable.id == variable_id)
+    )
+    var = result.scalar_one_or_none()
+    if not var:
+        raise HTTPException(404, "Variable not found")
+
+    key = var.key
+    last_value = var.value
+
+    await _audit(
+        db,
+        user_id=current_user["user_id"],
+        user_email=current_user.get("email", ""),
+        action="delete_platform_variable",
+        module="admin",
+        resource_type="platform_variable",
+        resource_id=str(variable_id),
+        details={"key": key, "last_value": last_value},
+        ip_address=request.client.host if request.client else None,
+    )
+    await db.delete(var)
+    await db.commit()
+    app_cache.invalidate_prefix("platform_vars:")
+
+    return {"message": f"Variable '{key}' deleted"}
+
+
+@router.get("/platform-variables/groups")
+async def list_platform_variable_groups(
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get unique groups with counts."""
+    result = await db.execute(
+        select(PlatformVariable.group_name, func.count(PlatformVariable.id))
+        .group_by(PlatformVariable.group_name)
+        .order_by(PlatformVariable.group_name)
+    )
+    return {
+        "groups": [
+            {"name": name or "Ungrouped", "count": count}
+            for name, count in result.all()
+        ]
+    }
+
+
+@router.get("/platform-variables/values")
+async def get_platform_variable_values(
+    db: AsyncSession = Depends(get_db),
+):
+    """Public endpoint — flat {key: value} dict for app consumption. No admin required."""
+    cached = app_cache.get("platform_vars:values")
+    if cached is not None:
+        return cached
+
+    result = await db.execute(
+        select(PlatformVariable.key, PlatformVariable.value, PlatformVariable.default_value)
+    )
+    values = {}
+    for key, value, default_value in result.all():
+        values[key] = value if value is not None else default_value
+
+    app_cache.set("platform_vars:values", values)
+    return values
+
+
+@router.get("/platform-variables/{variable_id}/history")
+async def get_platform_variable_history(
+    variable_id: int,
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get audit trail for a specific platform variable."""
+    result = await db.execute(
+        select(AuditLog)
+        .where(
+            AuditLog.resource_type == "platform_variable",
+            AuditLog.resource_id == str(variable_id),
+        )
+        .order_by(AuditLog.created_at.desc())
+        .limit(50)
+    )
+    logs = result.scalars().all()
+    return {
+        "history": [
+            {
+                "id": log.id,
+                "user_email": log.user_email,
+                "action": log.action,
+                "details": log.details,
+                "created_at": log.created_at.isoformat() if log.created_at else None,
+            }
+            for log in logs
+        ]
+    }
+
+
+@router.post("/platform-variables/import")
+async def import_platform_variables(
+    req: PlatformVariableImportRequest,
+    request: Request,
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk import platform variables from JSON."""
+    created = 0
+    updated = 0
+    errors = []
+
+    for item in req.variables:
+        if not _KEY_PATTERN.match(item.key):
+            errors.append(f"Invalid key format: {item.key}")
+            continue
+        if item.value_type not in _VALID_VALUE_TYPES:
+            errors.append(f"Invalid value_type for {item.key}: {item.value_type}")
+            continue
+        try:
+            _validate_variable_value(item.value, item.value_type, item.validation_rule)
+        except HTTPException as e:
+            errors.append(f"{item.key}: {e.detail}")
+            continue
+
+        existing_result = await db.execute(
+            select(PlatformVariable).where(PlatformVariable.key == item.key)
+        )
+        existing = existing_result.scalar_one_or_none()
+
+        if existing:
+            if not req.overwrite:
+                errors.append(f"Key '{item.key}' already exists (overwrite=false)")
+                continue
+            existing.value = item.value
+            existing.value_type = item.value_type
+            existing.group_name = item.group_name
+            existing.description = item.description
+            existing.default_value = item.default_value
+            existing.is_required = item.is_required
+            existing.validation_rule = item.validation_rule
+            existing.sort_order = item.sort_order
+            existing.updated_by = current_user["user_id"]
+            updated += 1
+        else:
+            db.add(PlatformVariable(
+                key=item.key,
+                value=item.value,
+                value_type=item.value_type,
+                group_name=item.group_name,
+                description=item.description,
+                default_value=item.default_value,
+                is_required=item.is_required,
+                validation_rule=item.validation_rule,
+                sort_order=item.sort_order,
+                created_by=current_user["user_id"],
+                updated_by=current_user["user_id"],
+            ))
+            created += 1
+
+    await _audit(
+        db,
+        user_id=current_user["user_id"],
+        user_email=current_user.get("email", ""),
+        action="import_platform_variables",
+        module="admin",
+        resource_type="platform_variable",
+        details={"created": created, "updated": updated, "errors": len(errors), "overwrite": req.overwrite},
+        ip_address=request.client.host if request.client else None,
+    )
+    await db.commit()
+    app_cache.invalidate_prefix("platform_vars:")
+
+    return {
+        "message": f"Import complete: {created} created, {updated} updated, {len(errors)} errors",
+        "created": created,
+        "updated": updated,
+        "errors": errors,
+    }
+
+
+@router.get("/platform-variables/export")
+async def export_platform_variables(
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export all platform variables as JSON."""
+    result = await db.execute(
+        select(PlatformVariable).order_by(PlatformVariable.group_name, PlatformVariable.sort_order)
+    )
+    variables = result.scalars().all()
+    return {
+        "variables": [
+            {
+                "key": v.key,
+                "value": v.value,
+                "value_type": v.value_type,
+                "group_name": v.group_name,
+                "description": v.description,
+                "default_value": v.default_value,
+                "is_required": v.is_required,
+                "validation_rule": v.validation_rule,
+                "sort_order": v.sort_order,
+            }
+            for v in variables
+        ]
+    }

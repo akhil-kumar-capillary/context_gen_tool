@@ -9,17 +9,19 @@ import { RolesPanel } from "@/components/admin/roles-panel";
 import { PermissionsPanel } from "@/components/admin/permissions-panel";
 import { AuditLogViewer } from "@/components/admin/audit-log-viewer";
 import { CustomizationPanel } from "@/components/admin/customization-panel";
+import { PlatformVariablesPanel } from "@/components/admin/platform-variables-panel";
 import { cn } from "@/lib/utils";
 import {
-  Users, Shield, Key, ScrollText, Palette, Check, AlertCircle, X,
+  Users, Shield, Key, ScrollText, Palette, Settings2, Check, AlertCircle, X,
 } from "lucide-react";
 
-type AdminTab = "users" | "roles" | "permissions" | "audit" | "customization";
+type AdminTab = "users" | "roles" | "permissions" | "audit" | "customization" | "platform-vars";
 
 const tabs: { id: AdminTab; label: string; icon: typeof Users }[] = [
   { id: "users", label: "Users", icon: Users },
   { id: "roles", label: "Roles", icon: Shield },
   { id: "permissions", label: "Permissions", icon: Key },
+  { id: "platform-vars", label: "Platform Variables", icon: Settings2 },
   { id: "audit", label: "Audit Logs", icon: ScrollText },
   { id: "customization", label: "Customization", icon: Palette },
 ];
@@ -106,6 +108,7 @@ export default function AdminPage() {
       {activeTab === "users" && <UsersTable />}
       {activeTab === "roles" && <RolesPanel />}
       {activeTab === "permissions" && <PermissionsPanel />}
+      {activeTab === "platform-vars" && <PlatformVariablesPanel />}
       {activeTab === "audit" && <AuditLogViewer />}
       {activeTab === "customization" && <CustomizationPanel />}
     </div>

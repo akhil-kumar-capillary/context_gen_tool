@@ -9,6 +9,7 @@ from app.models.chat import ChatConversation, ChatMessage
 from app.models.context_tree import ContextTreeRun
 from app.models.content_version import ContentVersion
 from app.models.platform_settings import PlatformSettings
+from app.models.platform_variable import PlatformVariable
 
 __all__ = [
     "User", "Role", "Permission", "UserRole", "UserPermission",
@@ -23,4 +24,5 @@ __all__ = [
     "ContextTreeRun",
     "ContentVersion",
     "PlatformSettings",
+    "PlatformVariable",
 ]

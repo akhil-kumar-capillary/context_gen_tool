@@ -41,6 +41,34 @@ export interface AuditLogEntry {
   created_at: string | null;
 }
 
+export interface PlatformVariable {
+  id: number;
+  key: string;
+  value: string | null;
+  value_type: "string" | "number" | "boolean" | "json" | "url" | "text";
+  group_name: string | null;
+  description: string | null;
+  default_value: string | null;
+  is_required: boolean;
+  validation_rule: string | null;
+  sort_order: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface PlatformVariableGroup {
+  name: string;
+  count: number;
+}
+
+export interface PlatformVariableHistory {
+  id: number;
+  user_email: string;
+  action: string;
+  details: Record<string, unknown> | null;
+  created_at: string | null;
+}
+
 /* ── State ─────────────────────────────────────────────────────────── */
 
 interface AdminState {
@@ -64,6 +92,12 @@ interface AdminState {
   auditLoading: boolean;
   auditError: string | null;
 
+  // Platform Variables
+  platformVariables: PlatformVariable[];
+  platformVariableGroups: PlatformVariableGroup[];
+  platformVarsLoading: boolean;
+  platformVarsError: string | null;
+
   // Action feedback
   actionLoading: boolean;
   actionMessage: string | null;
@@ -81,6 +115,15 @@ interface AdminState {
   grantPermission: (userEmail: string, module: string, operation: string) => Promise<boolean>;
   revokePermission: (userEmail: string, module: string, operation: string) => Promise<boolean>;
   setPermissions: (userEmail: string, permissions: { module: string; operation: string }[]) => Promise<boolean>;
+
+  // Platform Variable Actions
+  fetchPlatformVariables: (group?: string, search?: string) => Promise<void>;
+  createPlatformVariable: (data: Partial<PlatformVariable> & { key: string }) => Promise<boolean>;
+  updatePlatformVariable: (id: number, data: Partial<PlatformVariable> & { change_reason?: string }) => Promise<boolean>;
+  deletePlatformVariable: (id: number) => Promise<boolean>;
+  fetchPlatformVariableHistory: (id: number) => Promise<PlatformVariableHistory[]>;
+  importPlatformVariables: (variables: Partial<PlatformVariable>[], overwrite: boolean) => Promise<{ created: number; updated: number; errors: string[] } | null>;
+  exportPlatformVariables: () => Promise<Partial<PlatformVariable>[] | null>;
 
   clearActionFeedback: () => void;
 }
@@ -113,6 +156,11 @@ export const useAdminStore = create<AdminState>()((set) => ({
   auditLogs: [],
   auditLoading: false,
   auditError: null,
+
+  platformVariables: [],
+  platformVariableGroups: [],
+  platformVarsLoading: false,
+  platformVarsError: null,
 
   actionLoading: false,
   actionMessage: null,
@@ -278,6 +326,129 @@ export const useAdminStore = create<AdminState>()((set) => ({
     } catch (e) {
       set({ actionError: e instanceof Error ? e.message : "Failed", actionLoading: false });
       return false;
+    }
+  },
+
+  /* ── Platform Variables ──────────────────────────────────────────── */
+
+  fetchPlatformVariables: async (group?, search?) => {
+    set({ platformVarsLoading: true, platformVarsError: null });
+    try {
+      const params = new URLSearchParams();
+      if (group) params.set("group", group);
+      if (search) params.set("search", search);
+      const qs = params.toString();
+      const resp = await fetch(
+        `${API}/api/admin/platform-variables${qs ? `?${qs}` : ""}`,
+        { headers: authHeaders() },
+      );
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      set({
+        platformVariables: data.variables || [],
+        platformVariableGroups: data.groups || [],
+        platformVarsLoading: false,
+      });
+    } catch (e) {
+      set({ platformVarsError: e instanceof Error ? e.message : "Failed to load variables", platformVarsLoading: false });
+    }
+  },
+
+  createPlatformVariable: async (data) => {
+    set({ actionLoading: true, actionMessage: null, actionError: null });
+    try {
+      const resp = await fetch(`${API}/api/admin/platform-variables`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify(data),
+      });
+      const result = await resp.json();
+      if (!resp.ok) throw new Error(result.detail || `HTTP ${resp.status}`);
+      set({ actionMessage: result.message, actionLoading: false });
+      return true;
+    } catch (e) {
+      set({ actionError: e instanceof Error ? e.message : "Failed", actionLoading: false });
+      return false;
+    }
+  },
+
+  updatePlatformVariable: async (id, data) => {
+    set({ actionLoading: true, actionMessage: null, actionError: null });
+    try {
+      const resp = await fetch(`${API}/api/admin/platform-variables/${id}`, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify(data),
+      });
+      const result = await resp.json();
+      if (!resp.ok) throw new Error(result.detail || `HTTP ${resp.status}`);
+      set({ actionMessage: result.message, actionLoading: false });
+      return true;
+    } catch (e) {
+      set({ actionError: e instanceof Error ? e.message : "Failed", actionLoading: false });
+      return false;
+    }
+  },
+
+  deletePlatformVariable: async (id) => {
+    set({ actionLoading: true, actionMessage: null, actionError: null });
+    try {
+      const resp = await fetch(`${API}/api/admin/platform-variables/${id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      const result = await resp.json();
+      if (!resp.ok) throw new Error(result.detail || `HTTP ${resp.status}`);
+      set({ actionMessage: result.message, actionLoading: false });
+      return true;
+    } catch (e) {
+      set({ actionError: e instanceof Error ? e.message : "Failed", actionLoading: false });
+      return false;
+    }
+  },
+
+  fetchPlatformVariableHistory: async (id) => {
+    try {
+      const resp = await fetch(
+        `${API}/api/admin/platform-variables/${id}/history`,
+        { headers: authHeaders() },
+      );
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      return data.history || [];
+    } catch {
+      return [];
+    }
+  },
+
+  importPlatformVariables: async (variables, overwrite) => {
+    set({ actionLoading: true, actionMessage: null, actionError: null });
+    try {
+      const resp = await fetch(`${API}/api/admin/platform-variables/import`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ variables, overwrite }),
+      });
+      const result = await resp.json();
+      if (!resp.ok) throw new Error(result.detail || `HTTP ${resp.status}`);
+      set({ actionMessage: result.message, actionLoading: false });
+      return { created: result.created, updated: result.updated, errors: result.errors };
+    } catch (e) {
+      set({ actionError: e instanceof Error ? e.message : "Failed", actionLoading: false });
+      return null;
+    }
+  },
+
+  exportPlatformVariables: async () => {
+    try {
+      const resp = await fetch(`${API}/api/admin/platform-variables/export`, {
+        headers: authHeaders(),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      return data.variables || [];
+    } catch {
+      return null;
     }
   },
 
