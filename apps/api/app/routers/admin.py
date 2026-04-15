@@ -882,9 +882,11 @@ async def update_platform_variable(
     # Determine effective validation_rule
     effective_rule = req.validation_rule if req.validation_rule is not None else var.validation_rule
 
-    # Validate new value if provided
+    # Validate new value if provided, or re-validate existing value if type changed
     if req.value is not None:
         _validate_variable_value(req.value, effective_type, effective_rule)
+    elif req.value_type is not None and req.value_type != var.value_type and var.value:
+        _validate_variable_value(var.value, effective_type, effective_rule)
 
     # Apply updates (only non-None fields)
     if req.value is not None:
