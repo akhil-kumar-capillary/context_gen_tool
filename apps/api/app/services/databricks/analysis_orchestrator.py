@@ -237,15 +237,11 @@ async def run_analysis_from_table(
                 f"Set it in Admin → Platform Variables."
             )
 
-        # Validate table name format (defense-in-depth)
+        # Validate table name format (defense-in-depth — table names can't be parameterized)
         if not re_module.match(r'^[a-zA-Z0-9_\.]+$', table_name):
             raise ValueError(f"Invalid table name format: '{table_name}'")
 
-        # Validate org_id is strictly numeric (prevent SQL injection)
-        if not re_module.match(r'^\d+$', str(org_id)):
-            raise ValueError(f"Invalid org_id: must be numeric, got '{org_id}'")
-
-        # Step 2: Query Databricks SQL table (parameterized org_id)
+        # Step 2: Query Databricks SQL table (org_id is parameterized, not interpolated)
         await emit("loading", 0, 0, f"Fetching SQLs from {table_name} for org {org_id}...")
         async with await create_sql_client_for_cluster(cluster_key) as client:
             query = f"SELECT sql FROM {table_name} WHERE org_id = %(org_id)s"
