@@ -7,7 +7,6 @@ import { apiClient } from "@/lib/api-client";
 import { TypeAnimation } from "react-type-animation";
 import { CLUSTERS } from "@/types";
 import type { LoginResponse } from "@/types";
-import { AiraLogo } from "@/components/shared/aira-icon";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -61,9 +60,11 @@ export default function LoginPage() {
         <div />
         <div className="max-w-md text-center">
           {/* Logo */}
-          <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-2xl bg-white/10 backdrop-blur-sm shadow-2xl">
-            <AiraLogo className="h-16 w-16 drop-shadow-lg" />
-          </div>
+          <img
+            src="/aira-logo.png"
+            alt="aiRA"
+            className="mx-auto mb-6 h-28 w-auto drop-shadow-2xl"
+          />
           <h1 className="text-4xl font-bold text-primary-foreground mb-3">aiRA</h1>
           <p className="text-base font-medium text-primary-foreground/70 uppercase tracking-widest mb-8">Context Management Platform</p>
           <TerminalTyper />
