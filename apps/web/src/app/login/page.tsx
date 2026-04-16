@@ -61,9 +61,11 @@ export default function LoginPage() {
         <div />
         <div className="max-w-md text-center">
           {/* Logo */}
-          <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-2xl bg-white shadow-2xl">
-            <AiraLogo className="h-14 w-14" />
-          </div>
+          <img
+            src="/aira-logo.svg"
+            alt="aiRA"
+            className="mx-auto mb-6 h-28 w-28 drop-shadow-2xl"
+          />
           <h1 className="text-4xl font-bold text-primary-foreground mb-3">aiRA</h1>
           <p className="text-base font-medium text-primary-foreground/70 uppercase tracking-widest mb-8">Context Management Platform</p>
           <TerminalTyper />
