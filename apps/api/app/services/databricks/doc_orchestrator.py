@@ -323,19 +323,20 @@ async def run_generation(
 
             source_run_id = run_id if run_id else analysis_id
             doc_id = await storage.save_context_doc(
-                source_type="databricks",
-                source_run_id=source_run_id,
-                user_id=user_id,
+                analysis_id=source_run_id,
                 org_id=org_id,
-                doc_key=key,
-                doc_name=doc_names.get(key, key),
-                doc_content=text,
-                model_used=model_map.get(key, model) if model_map else model,
-                provider_used=provider,
-                system_prompt_used=SYSTEM_PROMPTS.get(key, "")[:500],
-                payload_sent=payloads.get(key),
-                inclusions_used=None,
-                token_count=int(len(text.split()) * 1.3),
+                user_id=user_id,
+                doc={
+                    "doc_key": key,
+                    "doc_name": doc_names.get(key, key),
+                    "doc_content": text,
+                    "model_used": model_map.get(key, model) if model_map else model,
+                    "provider_used": provider,
+                    "system_prompt_used": SYSTEM_PROMPTS.get(key, "")[:500],
+                    "payload_sent": payloads.get(key),
+                    "inclusions_used": None,
+                    "token_count": int(len(text.split()) * 1.3),
+                },
             )
             saved_docs.append({
                 "id": doc_id, "key": key, "name": doc_names.get(key, key),
