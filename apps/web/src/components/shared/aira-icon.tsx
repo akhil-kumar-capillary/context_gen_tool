@@ -35,6 +35,7 @@ export function AiraIcon({ className }: { className?: string }) {
 
 /**
  * aiRA logo mark — larger version with centered sparkle, used on login/splash screens.
+ * Uses currentColor so it matches any background (pass text-white, text-primary, etc. via className).
  */
 export function AiraLogo({ className }: { className?: string }) {
   return (
@@ -48,7 +49,7 @@ export function AiraLogo({ className }: { className?: string }) {
         d="M15.5 10.5L16.125 9.125L17.5 8.5L16.125 7.875L15.5 6.5L14.875 7.875L13.5 8.5L14.875 9.125L15.5 10.5Z
            M11.75 10.75L10.5 8L9.25 10.75L6.5 12L9.25 13.25L10.5 16L11.75 13.25L14.5 12L11.75 10.75Z
            M15.5 13.5L14.875 14.875L13.5 15.5L14.875 16.125L15.5 17.5L16.125 16.125L17.5 15.5L16.125 14.875L15.5 13.5Z"
-        fill="#6268FF"
+        fill="currentColor"
       />
     </svg>
   );

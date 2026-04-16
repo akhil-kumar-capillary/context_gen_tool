@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth-store";
 import { Search, ChevronRight, LogOut, Building2 } from "lucide-react";
+import { AiraLogo } from "@/components/shared/aira-icon";
 
 export default function OrgPickerPage() {
   const router = useRouter();
@@ -38,7 +39,7 @@ export default function OrgPickerPage() {
         <div className="rounded-2xl bg-background shadow-lg border border-border overflow-hidden">
           {/* Header */}
           <div className="px-8 pt-8 pb-6 text-center">
-            <img src="/aira-logo.png" alt="aiRA" className="mx-auto mb-4 h-14 w-auto" />
+            <AiraLogo className="mx-auto mb-4 h-14 w-14 text-primary" />
             <h1 className="text-xl font-bold text-foreground">
               Welcome back{user?.displayName ? `, ${user.displayName.split(" ")[0]}` : ""}
             </h1>
