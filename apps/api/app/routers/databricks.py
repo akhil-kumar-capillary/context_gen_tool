@@ -26,7 +26,7 @@ from app.services.databricks.client import DatabricksClient
 from app.services.databricks.extraction_orchestrator import run_extraction
 from app.services.databricks.analysis_orchestrator import run_analysis, run_analysis_from_table
 from app.services.databricks.doc_orchestrator import run_generation, preview_payloads
-from app.services.databricks.doc_author import DOC_NAMES, SYSTEM_PROMPTS, TOKEN_BUDGETS
+from app.services.databricks.doc_author import DOC_NAMES, SYSTEM_PROMPTS, CORE_DOC_KEYS
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -57,10 +57,7 @@ class GenerateDocsRequest(BaseModel):
     model: str = Field(default="claude-opus-4-6")
     model_map: Optional[dict] = Field(default=None, description="Per-doc model overrides")
     system_prompts: Optional[dict] = Field(default=None, description="Custom system prompts")
-    inclusions: Optional[dict] = Field(default=None, description="Payload inclusion overrides")
-    focus_domains: Optional[list[str]] = Field(default=None)
     skip_validation: bool = False
-    skip_focus_docs: bool = False
 
 
 class PreviewPayloadRequest(BaseModel):
@@ -560,11 +557,11 @@ async def delete_analysis(
 async def default_prompts(
     current_user: dict = Depends(require_permission("databricks", "view")),
 ):
-    """Return the default system prompts, doc names, and token budgets."""
+    """Return the default system prompts, doc names, and core doc keys."""
     return {
         "system_prompts": SYSTEM_PROMPTS,
         "doc_names": DOC_NAMES,
-        "token_budgets": TOKEN_BUDGETS,
+        "core_doc_keys": CORE_DOC_KEYS,
     }
 
 
@@ -574,10 +571,13 @@ async def preview_payload(
     current_user: dict = Depends(require_permission("databricks", "view")),
 ):
     """Build and return payloads without calling LLM. For inspection/preview."""
+    capillary_token = current_user.get("capillary_token")
+    base_url = current_user.get("base_url")
     try:
         result = await preview_payloads(
             analysis_id=req.analysis_id,
-            inclusions=req.inclusions,
+            capillary_token=capillary_token,
+            base_url=base_url,
         )
         return result
     except ValueError as e:
@@ -596,6 +596,10 @@ async def generate_docs(
     user_id = current_user["user_id"]
     progress_cb = _ws_progress_callback(user_id, "llm")
 
+    # Pass Capillary credentials for Thrift schema fetching
+    capillary_token = current_user.get("capillary_token")
+    base_url = current_user.get("base_url")
+
     async def _run():
         try:
             result = await run_generation(
@@ -605,10 +609,9 @@ async def generate_docs(
                 model=req.model,
                 model_map=req.model_map,
                 system_prompts=req.system_prompts,
-                inclusions=req.inclusions,
-                focus_domains=req.focus_domains,
                 skip_validation=req.skip_validation,
-                skip_focus_docs=req.skip_focus_docs,
+                capillary_token=capillary_token,
+                base_url=base_url,
                 on_progress=progress_cb,
             )
             await ws_manager.send_to_user(user_id, {

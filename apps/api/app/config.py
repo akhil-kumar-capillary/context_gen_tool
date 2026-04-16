@@ -199,12 +199,8 @@ class Settings(BaseSettings):
     primary_admin_email: str = "akhil.kumar@capillarytech.com"
 
     # Token budgets (Databricks 5-doc architecture)
-    token_budget_01_master: int = 2000
-    token_budget_02_schema: int = 3000
-    token_budget_03_business: int = 3000
-    token_budget_04_filters: int = 2000
-    token_budget_05_patterns: int = 4000
-    focus_token_budget: int = 3000
+    # Token budgets are now dynamic (estimated from payload size in doc_author.py)
+    max_extra_docs: int = 5  # max LLM-planned extra documents beyond core 4
     max_focus_docs: int = 3
     max_payload_chars: int = 800000
 

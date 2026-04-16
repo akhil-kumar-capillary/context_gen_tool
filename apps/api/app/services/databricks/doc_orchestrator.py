@@ -1,34 +1,60 @@
 """
-Async document generation orchestrator.
+Async document generation orchestrator — 10-step pipeline.
 
-New file (no direct reference equivalent) — ties together:
-  load analysis → build payloads → author 5 docs → validate → focus docs → save.
+Replaces the old 5-doc pipeline with:
+  load → Thrift schema → enrichment → payloads → plan extras →
+  author all docs → index → validate → save.
+
+4 core docs (DATA_MODEL, FILTERS_GUARDS, BUSINESS_LOGIC, QUERY_COOKBOOK)
++ LLM-planned extra docs when data complexity warrants it.
 """
 
 import logging
 from typing import Optional, Callable, Awaitable
+from collections import Counter
 
 from app.services.databricks.storage import StorageService
+from app.services.databricks.schema_client import fetch_thrift_schema, ThriftSchema
+from app.services.databricks.enrichment import run_all_enrichments
 from app.services.databricks.payload_builder import build_all_payloads
 from app.services.databricks.doc_author import (
-    author_docs,
-    build_preamble,
-    DOC_NAMES,
-    SYSTEM_PROMPTS,
-    TOKEN_BUDGETS,
-    _cap_payload,
+    author_docs, build_preamble, build_index_document,
+    DOC_NAMES, SYSTEM_PROMPTS, CORE_DOC_KEYS, _cap_payload,
 )
+from app.services.databricks.doc_planner import plan_extra_docs, build_extra_payload
 from app.services.databricks.validation_engine import (
-    validate_and_patch,
-    spot_check,
-    check_budgets,
+    run_completeness_check, run_schema_validation,
+    run_self_evaluation, validate_and_patch,
+    spot_check, check_budgets,
 )
-from app.services.databricks.focus_doc_engine import assess_and_author_focus_docs
 
 logger = logging.getLogger(__name__)
 
-# Type alias for progress callback (dict-based for flexible event shapes)
 ProgressCallback = Callable[[dict], Awaitable[None]]
+
+
+def _reconstruct_counters(counters_json: dict) -> dict:
+    """Reconstruct Counter objects from the stored JSON format.
+
+    The analysis orchestrator stores counters via counters_to_serializable(),
+    which converts Counter → list of [key, count] pairs.
+    """
+    counters = {}
+    for key, val in counters_json.items():
+        if isinstance(val, list):
+            c = Counter()
+            for item in val:
+                if isinstance(item, (list, tuple)) and len(item) == 2:
+                    k, n = item
+                    if isinstance(k, list):
+                        k = tuple(k)
+                    c[k] = n
+            counters[key] = c
+        elif isinstance(val, dict):
+            counters[key] = Counter(val)
+        else:
+            counters[key] = val
+    return counters
 
 
 async def run_generation(
@@ -38,31 +64,26 @@ async def run_generation(
     model: str = "claude-opus-4-6",
     model_map: Optional[dict] = None,
     system_prompts: Optional[dict] = None,
-    inclusions: Optional[dict] = None,
-    focus_domains: Optional[list] = None,
     skip_validation: bool = False,
-    skip_focus_docs: bool = False,
+    capillary_token: Optional[str] = None,
+    base_url: Optional[str] = None,
+    org_id_for_schema: Optional[str] = None,
     on_progress: Optional[ProgressCallback] = None,
 ) -> dict:
-    """
-    Run the full document generation pipeline for a completed analysis.
+    """Run the full 10-step document generation pipeline.
 
     Args:
         analysis_id: Analysis run UUID.
         user_id: User running the generation.
-        provider: LLM provider ("anthropic" or "openai").
-        model: Default model name.
-        model_map: Optional per-doc model override {doc_key: model_name}.
-        system_prompts: Optional custom system prompts per doc.
-        inclusions: Optional inclusion overrides per doc (controls what data appears in payloads).
-        focus_domains: Optional filter for focus doc topic selection.
-        skip_validation: Skip cross-doc validation + patching step.
-        skip_focus_docs: Skip focus doc assessment + generation.
-        on_progress: async callback(event_dict) for real-time progress updates.
-
-    Returns:
-        dict with: doc_count, focus_doc_count, validation_status, budget_check,
-                   spot_check_pct, docs (list of doc metadata)
+        provider: LLM provider.
+        model: Default LLM model.
+        model_map: Optional per-doc model overrides.
+        system_prompts: Optional custom system prompts.
+        skip_validation: Skip validation passes.
+        capillary_token: Capillary auth token for Thrift API (from JWT).
+        base_url: Capillary Intouch base URL (from JWT/config).
+        org_id_for_schema: Org ID for Thrift schema fetch.
+        on_progress: Async callback for progress events.
     """
     storage = StorageService()
 
@@ -71,7 +92,9 @@ async def run_generation(
             await on_progress(event)
 
     try:
-        # ── Step 1: Load analysis data ──
+        # ══════════════════════════════════════════════════════
+        # Step 1: Load analysis data
+        # ══════════════════════════════════════════════════════
         await emit({"type": "llm_progress", "phase": "loading", "status": "started"})
 
         analysis = await storage.get_analysis_run(analysis_id)
@@ -81,7 +104,6 @@ async def run_generation(
         org_id = analysis.get("org_id")
         run_id = analysis.get("run_id")
 
-        # Load stored analysis artifacts
         counters_json = analysis.get("counters", {})
         clusters = analysis.get("clusters", [])
         classified_filters = analysis.get("classified_filters", {})
@@ -89,12 +111,9 @@ async def run_generation(
         alias_conv_raw = analysis.get("alias_conv", {})
         total_weight = analysis.get("total_weight", 0)
 
-        # Reconstruct counters from stored JSON format
-        # The analysis orchestrator stores counters via counters_to_serializable(),
-        # which converts Counter → list of [key, count] pairs.
         counters = _reconstruct_counters(counters_json)
 
-        # Reconstruct literal_vals: stored as {col: [[v, n], ...]} → {col: {v: n, ...}}
+        # Reconstruct literal_vals
         literal_vals = {}
         for col, pairs in literal_vals_raw.items():
             if isinstance(pairs, list):
@@ -104,7 +123,7 @@ async def run_generation(
             else:
                 literal_vals[col] = {}
 
-        # Reconstruct alias_conv: stored as {table: [[alias, n], ...]} → {table: {alias: n, ...}}
+        # Reconstruct alias_conv
         alias_conv = {}
         for tbl, pairs in alias_conv_raw.items():
             if isinstance(pairs, list):
@@ -114,10 +133,14 @@ async def run_generation(
             else:
                 alias_conv[tbl] = {}
 
-        # Load fingerprints from the analysis (we need them for payload building)
+        # Load fingerprints
         fingerprints, total_fp = await storage.get_analysis_fingerprints(
-            analysis_id, limit=5000, offset=0
+            analysis_id, limit=5000, offset=0,
         )
+
+        # Ensure classified_filters is a list
+        if isinstance(classified_filters, dict):
+            classified_filters = []
 
         await emit({
             "type": "llm_progress", "phase": "loading", "status": "done",
@@ -126,7 +149,64 @@ async def run_generation(
             "total_weight": total_weight,
         })
 
-        # ── Step 2: Build payloads ──
+        # ══════════════════════════════════════════════════════
+        # Step 2: Fetch Thrift schema (ground truth)
+        # ══════════════════════════════════════════════════════
+        thrift_schema: Optional[ThriftSchema] = None
+        schema_org = org_id_for_schema or org_id
+
+        if capillary_token and base_url and schema_org:
+            await emit({
+                "type": "llm_progress", "phase": "schema",
+                "status": "started", "detail": f"Fetching schema for org {schema_org}...",
+            })
+            try:
+                thrift_schema = await fetch_thrift_schema(base_url, capillary_token, schema_org)
+                await emit({
+                    "type": "llm_progress", "phase": "schema", "status": "done",
+                    "detail": f"{thrift_schema.table_count} tables, {thrift_schema.column_count} columns",
+                })
+            except Exception as e:
+                logger.warning(f"Thrift schema fetch failed (proceeding without): {e}")
+                await emit({
+                    "type": "llm_progress", "phase": "schema",
+                    "status": "skipped", "detail": f"Schema fetch failed: {e}",
+                })
+        else:
+            await emit({
+                "type": "llm_progress", "phase": "schema",
+                "status": "skipped", "detail": "No Capillary credentials for schema fetch",
+            })
+
+        # ══════════════════════════════════════════════════════
+        # Step 3: Run enrichment passes
+        # ══════════════════════════════════════════════════════
+        await emit({
+            "type": "llm_progress", "phase": "enrichment", "status": "started",
+        })
+
+        enrichment_data = run_all_enrichments(
+            fingerprints=fingerprints,
+            counters=counters,
+            clusters=clusters,
+            classified_filters=classified_filters,
+            literal_vals=literal_vals,
+            thrift_schema=thrift_schema,
+        )
+
+        await emit({
+            "type": "llm_progress", "phase": "enrichment", "status": "done",
+            "detail": (
+                f"{len(enrichment_data.get('enriched_metrics', []))} metrics, "
+                f"{len(enrichment_data.get('verified_queries', []))} queries, "
+                f"{len(enrichment_data.get('synonyms', {}))} synonyms, "
+                f"{len(enrichment_data.get('pitfalls', []))} pitfalls"
+            ),
+        })
+
+        # ══════════════════════════════════════════════════════
+        # Step 4: Build 4 core payloads
+        # ══════════════════════════════════════════════════════
         await emit({"type": "llm_progress", "phase": "payloads", "status": "started"})
 
         payloads = build_all_payloads(
@@ -135,18 +215,44 @@ async def run_generation(
             literal_vals=literal_vals,
             fingerprints=fingerprints,
             clusters=clusters,
-            classified_filters=classified_filters if isinstance(classified_filters, list) else [],
+            classified_filters=classified_filters,
             total_weight=total_weight,
-            inclusions=inclusions,
+            thrift_schema=thrift_schema,
+            enrichment_data=enrichment_data,
         )
 
         await emit({"type": "llm_progress", "phase": "payloads", "status": "done"})
 
-        # ── Step 3: Build preamble ──
-        column_freq = counters.get("column", [])
+        # ══════════════════════════════════════════════════════
+        # Step 5: Structure planning pass
+        # ══════════════════════════════════════════════════════
+        extra_plans = await plan_extra_docs(
+            payloads=payloads,
+            counters=counters,
+            clusters=clusters,
+            fingerprints=fingerprints,
+            provider=provider,
+            model=model_map.get("planning", "claude-sonnet-4-6") if model_map else "claude-sonnet-4-6",
+            on_progress=on_progress,
+        )
+
+        # ══════════════════════════════════════════════════════
+        # Step 6: Build extra doc payloads (if any)
+        # ══════════════════════════════════════════════════════
+        for plan in extra_plans:
+            extra_payload = build_extra_payload(
+                plan, counters, alias_conv, literal_vals,
+                fingerprints, clusters, classified_filters,
+            )
+            payloads[plan.key] = extra_payload
+            DOC_NAMES[plan.key] = plan.name
+
+        # ══════════════════════════════════════════════════════
+        # Step 7: Author all docs (core 4 + extras)
+        # ══════════════════════════════════════════════════════
+        column_freq = counters.get("column", Counter()).most_common() if isinstance(counters.get("column"), Counter) else counters.get("column", [])
         preamble = build_preamble(column_freq)
 
-        # ── Step 4: Author 5 core documents via LLM ──
         docs = await author_docs(
             payloads=payloads,
             preamble=preamble,
@@ -157,80 +263,81 @@ async def run_generation(
             on_progress=on_progress,
         )
 
-        authored_count = sum(1 for v in docs.values() if v)
-        if authored_count == 0:
-            raise RuntimeError("All 5 documents failed to generate")
+        # ══════════════════════════════════════════════════════
+        # Step 8: Generate 00_INDEX document
+        # ══════════════════════════════════════════════════════
+        index_doc = build_index_document(docs, payloads)
+        docs["00_INDEX"] = index_doc
+        DOC_NAMES["00_INDEX"] = "00_INDEX"
 
-        # ── Step 5: Cross-document validation + patching ──
-        validation_status = "skipped"
-        if not skip_validation and authored_count == 5:
-            docs = await validate_and_patch(
-                docs=docs,
-                payloads=payloads,
-                preamble=preamble,
+        # ══════════════════════════════════════════════════════
+        # Step 9: Validation (4 passes)
+        # ══════════════════════════════════════════════════════
+        validation_results = {}
+
+        if not skip_validation:
+            # Pass 1: Completeness
+            await emit({"type": "llm_progress", "phase": "validation", "status": "completeness"})
+            completeness = run_completeness_check(docs, payloads)
+            validation_results["completeness"] = completeness
+
+            # Pass 2: Schema validation
+            schema_check = run_schema_validation(docs, thrift_schema)
+            validation_results["schema"] = schema_check
+
+            # Pass 3: Self-evaluation (anti-hallucination)
+            await emit({"type": "llm_progress", "phase": "validation", "status": "self_eval"})
+            self_eval = await run_self_evaluation(
+                docs, payloads,
                 provider=provider,
-                model=model,
+                model=model_map.get("validation", "claude-sonnet-4-6") if model_map else "claude-sonnet-4-6",
+                on_progress=on_progress,
+            )
+            validation_results["self_eval"] = self_eval
+
+            # Pass 4: Cross-doc validation + patching
+            await emit({"type": "llm_progress", "phase": "validation", "status": "cross_doc"})
+            docs = await validate_and_patch(
+                docs, payloads, preamble,
+                provider=provider,
+                model=model_map.get("validation", model) if model_map else model,
                 system_prompts=system_prompts,
                 on_progress=on_progress,
             )
-            validation_status = "done"
 
-        # ── Step 6: Focus docs ──
-        focus_docs = {}
-        if not skip_focus_docs and authored_count >= 3:
-            focus_docs = await assess_and_author_focus_docs(
-                docs=docs,
-                fingerprints=fingerprints,
-                counters=counters,
-                clusters=clusters,
-                literal_vals=literal_vals,
-                classified_filters=classified_filters if isinstance(classified_filters, list) else [],
-                alias_conv=alias_conv,
-                preamble=preamble,
-                provider=provider,
-                model=model,
-                focus_domains=focus_domains,
-                on_progress=on_progress,
-            )
+        # Quality checks
+        spot_pct = spot_check(fingerprints, docs) if fingerprints else 0
+        budget_check = check_budgets(docs, payloads)
 
-        # ── Step 7: Quality checks ──
-        spot_pct = spot_check(fingerprints, docs) if fingerprints else 0.0
-        budgets = check_budgets(docs)
-
-        # Merge focus docs into main docs dict
-        all_docs = {**docs, **focus_docs}
-
-        # ── Step 8: Save to database ──
+        # ══════════════════════════════════════════════════════
+        # Step 10: Save all docs
+        # ══════════════════════════════════════════════════════
         await emit({"type": "llm_progress", "phase": "saving", "status": "started"})
 
         saved_docs = []
-        for doc_key, content in sorted(all_docs.items()):
-            if not content:
+        for key, text in docs.items():
+            if not text:
                 continue
 
-            is_focus = doc_key.startswith("06_") or doc_key.startswith("07_") or doc_key.startswith("08_")
-            doc_name = DOC_NAMES.get(doc_key, doc_key)
-            est_tokens = int(len(content.split()) * 1.3)
-
-            doc_record = {
-                "doc_key": doc_key,
-                "doc_name": doc_name,
-                "doc_content": content,
-                "model_used": (model_map or {}).get(doc_key, model),
-                "provider_used": provider,
-                "system_prompt_used": (system_prompts or SYSTEM_PROMPTS).get(doc_key, ""),
-                "payload_sent": payloads.get(doc_key, {}),
-                "inclusions_used": (inclusions or {}).get(doc_key, {}),
-                "token_count": est_tokens,
-            }
-
-            await storage.save_context_doc(analysis_id, org_id, user_id, doc_record)
+            source_run_id = run_id if run_id else analysis_id
+            doc_id = await storage.save_context_doc(
+                source_type="databricks",
+                source_run_id=source_run_id,
+                user_id=user_id,
+                org_id=org_id,
+                doc_key=key,
+                doc_name=DOC_NAMES.get(key, key),
+                doc_content=text,
+                model_used=model_map.get(key, model) if model_map else model,
+                provider_used=provider,
+                system_prompt_used=SYSTEM_PROMPTS.get(key, "")[:500],
+                payload_sent=payloads.get(key),
+                inclusions_used=None,
+                token_count=int(len(text.split()) * 1.3),
+            )
             saved_docs.append({
-                "doc_key": doc_key,
-                "doc_name": doc_name,
-                "word_count": len(content.split()),
-                "est_tokens": est_tokens,
-                "is_focus": is_focus,
+                "id": doc_id, "key": key, "name": DOC_NAMES.get(key, key),
+                "word_count": len(text.split()),
             })
 
         await emit({
@@ -238,70 +345,37 @@ async def run_generation(
             "doc_count": len(saved_docs),
         })
 
-        await emit({
-            "type": "llm_progress", "phase": "complete", "status": "done",
-            "doc_count": len(saved_docs),
-            "focus_doc_count": len(focus_docs),
-        })
+        core_count = sum(1 for d in saved_docs if d["key"] in CORE_DOC_KEYS or d["key"] == "00_INDEX")
+        extra_count = len(saved_docs) - core_count
 
         return {
             "analysis_id": analysis_id,
-            "org_id": org_id,
-            "doc_count": authored_count,
-            "focus_doc_count": len(focus_docs),
-            "validation_status": validation_status,
-            "spot_check_pct": round(spot_pct, 1),
-            "budget_check": budgets,
+            "doc_count": len(saved_docs),
+            "core_doc_count": core_count,
+            "extra_doc_count": extra_count,
             "docs": saved_docs,
+            "validation": validation_results,
+            "spot_check_pct": round(spot_pct, 1),
+            "budget_check": budget_check,
+            "thrift_schema_available": thrift_schema is not None,
         }
 
     except Exception as e:
         logger.exception(f"Document generation failed: {e}")
         await emit({
-            "type": "llm_progress", "phase": "generation",
+            "type": "llm_progress", "phase": "error",
             "status": "failed", "error": str(e),
         })
         raise
 
 
-def _reconstruct_counters(counters_json: dict) -> dict:
-    """Reconstruct counters from the serialized JSON stored in the database.
-
-    The analysis orchestrator saves counters via `counters_to_serializable()`,
-    which converts each Counter to a list of [key, count] tuples.
-    The payload builders expect dicts with lists of (key, count) tuples (Counter.most_common() format).
-
-    NOTE: counters_to_serializable() also embeds "literal_vals" and "alias_conv"
-    as nested dicts — those are handled separately in run_generation() and must
-    be skipped here (their values are dicts-of-lists, not flat [key, count] pairs).
-    """
-    # Keys that have nested structure and are handled separately
-    _NESTED_KEYS = {"literal_vals", "alias_conv"}
-
-    result = {}
-    for counter_name, entries in counters_json.items():
-        if counter_name in _NESTED_KEYS:
-            continue
-        if isinstance(entries, list):
-            # Already in [[key, count], ...] format — convert to list of tuples
-            result[counter_name] = [(item[0], item[1]) for item in entries if len(item) >= 2]
-        elif isinstance(entries, dict):
-            # Dict format — convert to sorted list of tuples
-            # Ensure values are numeric before negating for sort
-            result[counter_name] = sorted(
-                ((k, v) for k, v in entries.items() if isinstance(v, (int, float))),
-                key=lambda x: -x[1],
-            )
-        else:
-            result[counter_name] = []
-    return result
-
-
 async def preview_payloads(
     analysis_id: str,
-    inclusions: Optional[dict] = None,
+    capillary_token: Optional[str] = None,
+    base_url: Optional[str] = None,
+    org_id_for_schema: Optional[str] = None,
 ) -> dict:
-    """Build and return payloads without calling LLM. Useful for preview/inspection."""
+    """Build payloads without calling LLM — for preview/debugging."""
     storage = StorageService()
 
     analysis = await storage.get_analysis_run(analysis_id)
@@ -316,54 +390,48 @@ async def preview_payloads(
     total_weight = analysis.get("total_weight", 0)
 
     counters = _reconstruct_counters(counters_json)
+    literal_vals = {col: ({str(v): n for v, n in pairs} if isinstance(pairs, list) else pairs if isinstance(pairs, dict) else {}) for col, pairs in literal_vals_raw.items()}
+    alias_conv = {tbl: ({str(a): n for a, n in pairs} if isinstance(pairs, list) else pairs if isinstance(pairs, dict) else {}) for tbl, pairs in alias_conv_raw.items()}
 
-    literal_vals = {}
-    for col, pairs in literal_vals_raw.items():
-        if isinstance(pairs, list):
-            literal_vals[col] = {str(v): n for v, n in pairs}
-        elif isinstance(pairs, dict):
-            literal_vals[col] = pairs
-        else:
-            literal_vals[col] = {}
+    fingerprints, _ = await storage.get_analysis_fingerprints(analysis_id, limit=5000, offset=0)
 
-    alias_conv = {}
-    for tbl, pairs in alias_conv_raw.items():
-        if isinstance(pairs, list):
-            alias_conv[tbl] = {str(a): n for a, n in pairs}
-        elif isinstance(pairs, dict):
-            alias_conv[tbl] = pairs
-        else:
-            alias_conv[tbl] = {}
+    if isinstance(classified_filters, dict):
+        classified_filters = []
 
-    fingerprints, _ = await storage.get_analysis_fingerprints(
-        analysis_id, limit=5000, offset=0
+    # Thrift schema
+    thrift_schema = None
+    schema_org = org_id_for_schema or analysis.get("org_id")
+    if capillary_token and base_url and schema_org:
+        try:
+            thrift_schema = await fetch_thrift_schema(base_url, capillary_token, schema_org)
+        except Exception:
+            pass
+
+    # Enrichment
+    enrichment_data = run_all_enrichments(
+        fingerprints=fingerprints, counters=counters, clusters=clusters,
+        classified_filters=classified_filters, literal_vals=literal_vals,
+        thrift_schema=thrift_schema,
     )
 
+    # Payloads
     payloads = build_all_payloads(
-        counters=counters,
-        alias_conv=alias_conv,
-        literal_vals=literal_vals,
-        fingerprints=fingerprints,
-        clusters=clusters,
-        classified_filters=classified_filters if isinstance(classified_filters, list) else [],
-        total_weight=total_weight,
-        inclusions=inclusions,
+        counters=counters, alias_conv=alias_conv, literal_vals=literal_vals,
+        fingerprints=fingerprints, clusters=clusters,
+        classified_filters=classified_filters, total_weight=total_weight,
+        thrift_schema=thrift_schema, enrichment_data=enrichment_data,
     )
-
-    # Include preamble preview
-    column_freq = counters.get("column", [])
-    preamble = build_preamble(column_freq)
-
-    # Estimate payload sizes
-    sizes = {}
-    for key, payload in payloads.items():
-        text = _cap_payload(payload)
-        sizes[key] = {"chars": len(text), "est_tokens": int(len(text.split()) * 1.3)}
 
     return {
-        "payloads": payloads,
-        "preamble": preamble,
-        "payload_sizes": sizes,
-        "total_weight": total_weight,
-        "fingerprint_count": len(fingerprints),
+        "payloads": {k: {"item_count": sum(len(v) if isinstance(v, list) else len(v) if isinstance(v, dict) else 0 for v in p.values()), "keys": list(p.keys())} for k, p in payloads.items()},
+        "enrichment_summary": {
+            "metrics": len(enrichment_data.get("enriched_metrics", [])),
+            "verified_queries": len(enrichment_data.get("verified_queries", [])),
+            "synonyms": len(enrichment_data.get("synonyms", {})),
+            "pitfalls": len(enrichment_data.get("pitfalls", [])),
+            "correctness_criteria": len(enrichment_data.get("correctness_criteria", [])),
+            "business_evidence": len(enrichment_data.get("business_evidence", [])),
+        },
+        "thrift_schema_available": thrift_schema is not None,
+        "thrift_tables": thrift_schema.table_count if thrift_schema else 0,
     }
