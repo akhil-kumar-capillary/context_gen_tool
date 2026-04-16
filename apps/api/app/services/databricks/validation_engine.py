@@ -150,7 +150,7 @@ def run_schema_validation(
         # Check if it's a column in any table
         is_column = any(
             thrift_schema.column_exists(t, ref)
-            for t in list(all_table_names)[:50]  # sample check
+            for t in all_table_names
         )
         if not is_column and ref not in unknown_tables:
             # Could be a hallucinated table — but only flag if it looks like a table name
@@ -221,7 +221,7 @@ async def run_self_evaluation(
                 })
         except Exception as e:
             logger.warning(f"[self-eval] {key} failed: {e}")
-            results[key] = {"passed": True, "report": f"Skipped: {e}"}
+            results[key] = {"passed": None, "skipped": True, "report": f"Skipped: {e}"}
 
     return results
 

@@ -163,9 +163,14 @@ async def plan_extra_docs(
 
         extras = []
         for doc in plan.get("extra_docs", []):
+            key = doc.get("key", "")
+            name = doc.get("name", "")
+            if not key or not name:
+                logger.warning(f"[planner] Skipping invalid extra doc (missing key/name): {doc}")
+                continue
             extras.append(ExtraDocPlan(
-                key=doc.get("key", ""),
-                name=doc.get("name", ""),
+                key=key,
+                name=name,
                 layer=doc.get("layer", ""),
                 purpose=doc.get("purpose", ""),
                 tables=doc.get("tables", []),

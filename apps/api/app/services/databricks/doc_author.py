@@ -399,10 +399,12 @@ def _split_payload_into_chunks(key: str, payload: dict) -> list[dict]:
     chunk1_data = {**payload, largest_key: payload[largest_key][:midpoint]}
     chunk2_data = {**payload, largest_key: payload[largest_key][midpoint:]}
 
-    # Remove other large lists from chunk2 (they're fully in chunk1)
+    # Split other large lists proportionally between chunks
     for k, v in payload.items():
         if k != largest_key and isinstance(v, list) and len(v) > 50:
-            chunk2_data[k] = []
+            mid = len(v) // 2
+            chunk1_data[k] = v[:mid]
+            chunk2_data[k] = v[mid:]
 
     return [
         {"label": f"{largest_key} (top half)", "data": chunk1_data},

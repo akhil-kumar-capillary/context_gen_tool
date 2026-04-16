@@ -239,13 +239,15 @@ async def run_generation(
         # ══════════════════════════════════════════════════════
         # Step 6: Build extra doc payloads (if any)
         # ══════════════════════════════════════════════════════
+        # Local copy to avoid mutating global DOC_NAMES
+        doc_names = dict(DOC_NAMES)
         for plan in extra_plans:
             extra_payload = build_extra_payload(
                 plan, counters, alias_conv, literal_vals,
                 fingerprints, clusters, classified_filters,
             )
             payloads[plan.key] = extra_payload
-            DOC_NAMES[plan.key] = plan.name
+            doc_names[plan.key] = plan.name
 
         # ══════════════════════════════════════════════════════
         # Step 7: Author all docs (core 4 + extras)
@@ -268,7 +270,7 @@ async def run_generation(
         # ══════════════════════════════════════════════════════
         index_doc = build_index_document(docs, payloads)
         docs["00_INDEX"] = index_doc
-        DOC_NAMES["00_INDEX"] = "00_INDEX"
+        doc_names["00_INDEX"] = "00_INDEX"
 
         # ══════════════════════════════════════════════════════
         # Step 9: Validation (4 passes)
@@ -326,7 +328,7 @@ async def run_generation(
                 user_id=user_id,
                 org_id=org_id,
                 doc_key=key,
-                doc_name=DOC_NAMES.get(key, key),
+                doc_name=doc_names.get(key, key),
                 doc_content=text,
                 model_used=model_map.get(key, model) if model_map else model,
                 provider_used=provider,
@@ -336,7 +338,7 @@ async def run_generation(
                 token_count=int(len(text.split()) * 1.3),
             )
             saved_docs.append({
-                "id": doc_id, "key": key, "name": DOC_NAMES.get(key, key),
+                "id": doc_id, "key": key, "name": doc_names.get(key, key),
                 "word_count": len(text.split()),
             })
 
