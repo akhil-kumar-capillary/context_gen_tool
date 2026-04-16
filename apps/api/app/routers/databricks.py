@@ -31,6 +31,9 @@ from app.services.databricks.doc_author import DOC_NAMES, SYSTEM_PROMPTS, CORE_D
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# Cancel events for in-progress LLM calls (task_name → asyncio.Event)
+_cancel_events: dict[str, asyncio.Event] = {}
+
 
 # ── Request/Response Models ──
 
@@ -600,6 +603,13 @@ async def generate_docs(
     capillary_token = current_user.get("capillary_token")
     base_url = current_user.get("base_url")
 
+    task_name = f"generation-{req.analysis_id}"
+    if task_name in task_registry.active_tasks:
+        return {"status": "already_running", "analysis_id": req.analysis_id}
+
+    cancel_event = asyncio.Event()
+    _cancel_events[task_name] = cancel_event
+
     async def _run():
         try:
             result = await run_generation(
@@ -613,6 +623,7 @@ async def generate_docs(
                 capillary_token=capillary_token,
                 base_url=base_url,
                 on_progress=progress_cb,
+                cancel_event=cancel_event,
             )
             await ws_manager.send_to_user(user_id, {
                 "type": "generation_complete",
@@ -632,10 +643,9 @@ async def generate_docs(
                 "analysis_id": req.analysis_id,
                 "error": str(e),
             })
+        finally:
+            _cancel_events.pop(task_name, None)
 
-    task_name = f"generation-{req.analysis_id}"
-    if task_name in task_registry.active_tasks:
-        return {"status": "already_running", "analysis_id": req.analysis_id}
     task_registry.create_task(_run(), name=task_name, user_id=user_id)
     return {"status": "started", "analysis_id": req.analysis_id}
 
@@ -645,9 +655,18 @@ async def cancel_generation(
     analysis_id: str,
     current_user: dict = Depends(require_permission("databricks", "generate")),
 ):
-    """Cancel a running document generation task."""
-    cancelled = task_registry.cancel_task(f"generation-{analysis_id}")
-    if not cancelled:
+    """Cancel a running document generation task.
+
+    Sets the cancel_event (stops in-progress LLM calls) AND cancels the asyncio task.
+    """
+    task_name = f"generation-{analysis_id}"
+    # Signal cancel to in-progress LLM calls
+    event = _cancel_events.get(task_name)
+    if event:
+        event.set()
+    # Cancel the wrapper task
+    cancelled = task_registry.cancel_task(task_name)
+    if not cancelled and not event:
         raise HTTPException(status_code=404, detail="No active generation task found")
     return {"cancelled": True, "analysis_id": analysis_id}
 

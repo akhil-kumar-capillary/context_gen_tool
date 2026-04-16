@@ -9,6 +9,7 @@ Replaces the old 5-doc pipeline with:
 + LLM-planned extra docs when data complexity warrants it.
 """
 
+import asyncio
 import logging
 from typing import Optional, Callable, Awaitable
 from collections import Counter
@@ -69,6 +70,7 @@ async def run_generation(
     base_url: Optional[str] = None,
     org_id_for_schema: Optional[str] = None,
     on_progress: Optional[ProgressCallback] = None,
+    cancel_event: Optional[asyncio.Event] = None,
 ) -> dict:
     """Run the full 10-step document generation pipeline.
 
@@ -263,6 +265,7 @@ async def run_generation(
             model_map=model_map,
             system_prompts=system_prompts,
             on_progress=on_progress,
+            cancel_event=cancel_event,
         )
 
         # ══════════════════════════════════════════════════════
@@ -294,6 +297,7 @@ async def run_generation(
                 provider=provider,
                 model=model_map.get("validation", "claude-sonnet-4-6") if model_map else "claude-sonnet-4-6",
                 on_progress=on_progress,
+                cancel_event=cancel_event,
             )
             validation_results["self_eval"] = self_eval
 
@@ -305,6 +309,7 @@ async def run_generation(
                 model=model_map.get("validation", model) if model_map else model,
                 system_prompts=system_prompts,
                 on_progress=on_progress,
+                cancel_event=cancel_event,
             )
 
         # Quality checks

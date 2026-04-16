@@ -246,15 +246,37 @@ def _cap_payload(payload: dict, max_chars: int = 0) -> str:
 async def _call_llm_async(
     provider: str, model: str, system_prompt: str,
     user_content: str, max_tokens: int = 4096,
+    cancel_event: Optional["asyncio.Event"] = None,
 ) -> str:
-    """Call LLM using our existing llm_service (async, cached clients)."""
-    result = await _llm_call(
-        provider=provider,
-        model=model,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_content}],
-        max_tokens=max_tokens,
-    )
+    """Call LLM using our existing llm_service (async, cached clients).
+
+    If cancel_event is set, races the LLM call against it for hard cancellation.
+    """
+    import asyncio
+
+    async def _do_call():
+        return await _llm_call(
+            provider=provider,
+            model=model,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_content}],
+            max_tokens=max_tokens,
+        )
+
+    if cancel_event:
+        call_task = asyncio.create_task(_do_call())
+        cancel_task = asyncio.create_task(cancel_event.wait())
+        done, pending = await asyncio.wait(
+            {call_task, cancel_task}, return_when=asyncio.FIRST_COMPLETED,
+        )
+        for p in pending:
+            p.cancel()
+        if cancel_task in done:
+            raise asyncio.CancelledError("LLM call cancelled by user")
+        result = call_task.result()
+    else:
+        result = await _do_call()
+
     for block in result.get("content", []):
         if block.get("type") == "text":
             return block["text"]
@@ -271,6 +293,7 @@ async def author_docs(
     model_map: Optional[dict] = None,
     system_prompts: Optional[dict] = None,
     on_progress: Optional[Callable] = None,
+    cancel_event: Optional["asyncio.Event"] = None,
 ) -> dict:
     """Generate context documents via LLM.
 
@@ -282,6 +305,11 @@ async def author_docs(
     docs = {}
 
     for key in payloads:
+        # Check cancel before each doc
+        if cancel_event and cancel_event.is_set():
+            logger.info(f"[author] Cancelled before authoring {key}")
+            break
+
         name = DOC_NAMES.get(key, key)
         payload = payloads[key]
         active_model = mm.get(key, model)
@@ -320,6 +348,7 @@ async def author_docs(
                 )
                 docs[key] = await _call_llm_async(
                     provider, active_model, sys_prompt, user_msg, max_tokens=budget,
+                    cancel_event=cancel_event,
                 )
 
             word_count = len(docs[key].split()) if docs[key] else 0

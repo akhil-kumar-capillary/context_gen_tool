@@ -64,7 +64,7 @@ export function DocGenerationPanel() {
     clearGenerationProgress();
 
     try {
-      const resp = await apiClient.post<{ status: string }>(
+      await apiClient.post(
         "/api/sources/databricks/llm/generate",
         {
           analysis_id: activeAnalysisId,
@@ -73,11 +73,7 @@ export function DocGenerationPanel() {
         },
         { token: token || undefined }
       );
-      // If task is already running, stay in generating state (WebSocket will handle it)
-      // If started, stay in generating state (WebSocket will complete it)
-      if (resp.status !== "started" && resp.status !== "already_running") {
-        setIsGenerating(false);
-      }
+      // Stay in generating state — WebSocket events handle completion/failure/cancel
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Generation failed to start";
       setIsGenerating(false);
@@ -172,7 +168,10 @@ export function DocGenerationPanel() {
               Additional docs may be generated based on data complexity.
             </p>
 
-            <div className="flex items-center gap-2">
+            <div className={cn(
+              "flex items-center gap-2",
+              isGenerating && "sticky top-0 z-10 bg-background py-2"
+            )}>
               <button
                 onClick={handleGenerate}
                 disabled={isGenerating}

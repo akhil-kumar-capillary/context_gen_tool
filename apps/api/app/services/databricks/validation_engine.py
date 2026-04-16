@@ -198,11 +198,14 @@ async def run_self_evaluation(
     provider: str = "anthropic",
     model: str = "claude-sonnet-4-6",
     on_progress: Optional[Callable] = None,
+    cancel_event: Optional["asyncio.Event"] = None,
 ) -> dict:
     """LLM checks if generated doc content is grounded in the payload data."""
     results = {}
 
     for key, doc_text in docs.items():
+        if cancel_event and cancel_event.is_set():
+            break
         if not doc_text:
             continue
 
@@ -249,8 +252,12 @@ async def validate_and_patch(
     model: str = "claude-opus-4-6",
     system_prompts: Optional[dict] = None,
     on_progress: Optional[Callable] = None,
+    cancel_event: Optional["asyncio.Event"] = None,
 ) -> dict:
     """Validate cross-doc consistency; patch affected docs if issues found."""
+    if cancel_event and cancel_event.is_set():
+        return docs
+
     prompts = system_prompts or SYSTEM_PROMPTS
 
     combined = "\n\n".join(
