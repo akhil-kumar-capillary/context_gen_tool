@@ -35,7 +35,8 @@ export function PipelineStepper() {
       case "extract":
         return isAdmin && connectionStatus === "connected";
       case "analyze":
-        return isAdmin ? !!activeExtractionId : true;
+        // Admins can always reach Analyze — they choose source (extracted vs table) there
+        return true;
       case "generate":
         return !!activeAnalysisId;
       default:
