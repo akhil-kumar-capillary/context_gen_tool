@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { AiraIcon } from "@/components/shared/aira-icon";
 
 const navItems = [
   {
@@ -131,6 +132,7 @@ export function AppSidebar() {
 
         {/* Logo */}
         <div className="flex h-14 items-center gap-2.5 border-b border-border px-4">
+          <AiraIcon className="h-5 w-5" />
           <span className="text-base font-bold text-foreground tracking-tight">aiRA</span>
           <span className="text-xs text-muted-foreground">Context Platform</span>
         </div>

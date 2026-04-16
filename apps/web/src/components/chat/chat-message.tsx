@@ -1,8 +1,9 @@
 "use client";
 
-import { User, Bot, AlertCircle, Copy, Check } from "lucide-react";
+import { User, AlertCircle, Copy, Check } from "lucide-react";
 import { useState } from "react";
 import { cn, formatDate } from "@/lib/utils";
+import { AiraIcon } from "@/components/shared/aira-icon";
 import { MarkdownRenderer } from "./markdown-renderer";
 import { ToolCallIndicator } from "./tool-call-indicator";
 import type { ChatMessage as ChatMessageType, ToolCallStatus } from "@/types";
@@ -40,7 +41,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
           isUser ? "bg-primary/10 text-primary" : "bg-primary text-primary-foreground",
         )}
       >
-        {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+        {isUser ? <User className="h-4 w-4" /> : <AiraIcon className="h-4 w-4" />}
       </div>
 
       {/* Content */}
@@ -125,7 +126,7 @@ export function StreamingMessage({ text, toolCalls }: StreamingMessageProps) {
   return (
     <div className="flex gap-3 bg-muted/50 px-4 py-4">
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary text-white">
-        <Bot className="h-4 w-4" />
+        <AiraIcon className="h-4 w-4" />
       </div>
       <div className="min-w-0 flex-1">
         <p className="mb-1 text-xs font-medium text-muted-foreground">aiRA</p>
