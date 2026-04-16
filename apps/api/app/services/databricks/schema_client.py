@@ -131,8 +131,14 @@ def _parse_md_table(content: str) -> list[dict]:
         if not stripped.startswith("|"):
             continue
         # Split on | and filter empty parts from leading/trailing pipes
-        cells = [c.strip() for c in stripped.split("|") if c.strip()]
-        if not cells:
+        # Split on | preserving empty cells for column alignment
+        parts = stripped.split("|")
+        if parts and parts[0].strip() == "":
+            parts = parts[1:]
+        if parts and parts[-1].strip() == "":
+            parts = parts[:-1]
+        cells = [c.strip() for c in parts]
+        if not cells or all(c == "" for c in cells):
             continue
         # Skip separator rows (e.g., |---|---|---|)
         if all(set(c) <= {"-", ":", " "} for c in cells):
