@@ -131,27 +131,25 @@ def run_schema_validation(
     all_table_names = thrift_schema.all_table_names
     issues = []
 
+    # Pre-build set of all column names for O(1) lookup
+    all_column_names: set[str] = set()
+    for t in all_table_names:
+        table = thrift_schema.get_table(t)
+        if table:
+            all_column_names.update(col.name for col in table.columns)
+
     all_doc_text = " ".join(d for d in docs.values() if d)
 
-    # Check for table names in docs — find any that aren't in schema
-    # Use word boundary matching for common table name patterns
     import re
-    # Extract backtick-quoted identifiers from docs
     backtick_refs = re.findall(r'`(\w+)`', all_doc_text)
 
     unknown_tables = set()
     for ref in backtick_refs:
-        # Skip if it looks like a column name (lowercase, short)
         if len(ref) < 3:
             continue
-        # Check if it could be a table name
         if ref in all_table_names:
             continue
-        # Check if it's a column in any table
-        is_column = any(
-            thrift_schema.column_exists(t, ref)
-            for t in all_table_names
-        )
+        is_column = ref in all_column_names
         if not is_column and ref not in unknown_tables:
             # Could be a hallucinated table — but only flag if it looks like a table name
             # (contains underscore, not a SQL keyword)
