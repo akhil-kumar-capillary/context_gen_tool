@@ -196,10 +196,10 @@ export const useDatabricksStore = create<DatabricksState>((set) => ({
     set((s) => {
       const isDone = event.status === "done" || event.status === "failed" || event.status === "cancelled";
       if (isDone) {
-        const hasTerminal = s.extractionProgress.some(
-          (e) => e.status === "done" || e.status === "failed" || e.status === "cancelled",
+        const withoutTerminal = s.extractionProgress.filter(
+          (e) => e.status !== "done" && e.status !== "failed" && e.status !== "cancelled",
         );
-        if (hasTerminal) return {};
+        return { extractionProgress: [...withoutTerminal, event] };
       }
       return { extractionProgress: [...s.extractionProgress, event] };
     }),
@@ -219,10 +219,10 @@ export const useDatabricksStore = create<DatabricksState>((set) => ({
     set((s) => {
       const isDone = event.status === "done" || event.status === "failed" || event.status === "cancelled";
       if (isDone) {
-        const hasTerminal = s.analysisProgress.some(
-          (e) => e.status === "done" || e.status === "failed" || e.status === "cancelled",
+        const withoutTerminal = s.analysisProgress.filter(
+          (e) => e.status !== "done" && e.status !== "failed" && e.status !== "cancelled",
         );
-        if (hasTerminal) return {};
+        return { analysisProgress: [...withoutTerminal, event] };
       }
       return { analysisProgress: [...s.analysisProgress, event] };
     }),
@@ -235,10 +235,11 @@ export const useDatabricksStore = create<DatabricksState>((set) => ({
     set((s) => {
       const isDone = event.status === "done" || event.status === "failed" || event.status === "cancelled";
       if (isDone) {
-        const hasTerminal = s.generationProgress.some(
-          (e) => e.status === "done" || e.status === "failed" || e.status === "cancelled",
+        // Replace any existing terminal event (don't drop — update with latest)
+        const withoutTerminal = s.generationProgress.filter(
+          (e) => e.status !== "done" && e.status !== "failed" && e.status !== "cancelled",
         );
-        if (hasTerminal) return {};
+        return { generationProgress: [...withoutTerminal, event] };
       }
       return { generationProgress: [...s.generationProgress, event] };
     }),

@@ -116,7 +116,6 @@ export function useDatabricksWebSocket() {
           });
           break;
         case "generation_failed":
-          if (!useDatabricksStore.getState().isGenerating) break;
           setIsGenerating(false);
           addGenerationProgress({
             type: "llm_progress",
@@ -126,7 +125,6 @@ export function useDatabricksWebSocket() {
           });
           break;
         case "generation_cancelled":
-          if (!useDatabricksStore.getState().isGenerating) break;
           setIsGenerating(false);
           addGenerationProgress({
             type: "llm_progress",

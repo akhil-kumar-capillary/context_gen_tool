@@ -64,7 +64,7 @@ export function DocGenerationPanel() {
     clearGenerationProgress();
 
     try {
-      await apiClient.post(
+      const resp = await apiClient.post<{ status: string }>(
         "/api/sources/databricks/llm/generate",
         {
           analysis_id: activeAnalysisId,
@@ -73,6 +73,11 @@ export function DocGenerationPanel() {
         },
         { token: token || undefined }
       );
+      // If task is already running, stay in generating state (WebSocket will handle it)
+      // If started, stay in generating state (WebSocket will complete it)
+      if (resp.status !== "started" && resp.status !== "already_running") {
+        setIsGenerating(false);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Generation failed to start";
       setIsGenerating(false);
@@ -162,9 +167,9 @@ export function DocGenerationPanel() {
 
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Generate 5 context documents from the analysis results using LLM.
-              This will create: Master Rules, Schema Reference, Business Mappings,
-              Default Filters, and Query Patterns.
+              Generate context documents from the analysis results using LLM.
+              Core docs: Data Model, Filters & Guards, Business Logic, Query Cookbook.
+              Additional docs may be generated based on data complexity.
             </p>
 
             <div className="flex items-center gap-2">
