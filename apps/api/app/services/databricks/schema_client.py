@@ -122,12 +122,27 @@ def _parse_fact_columns(content: str) -> list[dict]:
 
 
 def _parse_md_table(content: str) -> list[dict]:
-    """Parse markdown table (| col1 | col2 | col3 |) into list of dicts."""
-    rows = re.findall(r'^\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|', content, re.MULTILINE)
-    if len(rows) < 2:
-        return []
-    hdr = [c.strip().lower().replace(' ', '_') for c in rows[0]]
-    return [dict(zip(hdr, [c.strip() for c in r])) for r in rows[1:]]
+    """Parse markdown table with any number of columns into list of dicts."""
+    result = []
+    lines = content.split("\n")
+    header = None
+    for line in lines:
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            continue
+        # Split on | and filter empty parts from leading/trailing pipes
+        cells = [c.strip() for c in stripped.split("|") if c.strip()]
+        if not cells:
+            continue
+        # Skip separator rows (e.g., |---|---|---|)
+        if all(set(c) <= {"-", ":", " "} for c in cells):
+            continue
+        if header is None:
+            header = [c.lower().replace(" ", "_") for c in cells]
+        else:
+            row = dict(zip(header, cells))
+            result.append(row)
+    return result
 
 
 def _extract_view_sql(content: str) -> str:

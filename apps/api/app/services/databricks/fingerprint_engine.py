@@ -88,7 +88,7 @@ async def ingest_and_dedup(
         sql = r.get("cleaned_sql") or r.get("CleanedSQL") or ""
         if not sql or not sql.strip():
             continue
-        sql = sql.strip()
+        sql = sql.strip().replace("`", "")  # Strip backticks — not supported in this env
         if not _is_select(sql):
             continue
         corpus.append({
@@ -130,13 +130,15 @@ async def ingest_and_dedup(
         results = []
         for sql in sqls:
             try:
-                results.append(
+                canonical = (
                     parse_one(sql, dialect=DIALECT)
                     .sql(dialect=DIALECT, pretty=False)
                     .upper()
+                    .replace("`", "")  # Strip backticks — not supported in this env
                 )
+                results.append(canonical)
             except Exception:
-                results.append(_norm(sql).upper())
+                results.append(_norm(sql).upper().replace("`", ""))
         return results
 
     sql_strings = [e["sql"] for e in p1]

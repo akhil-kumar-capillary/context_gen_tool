@@ -23,6 +23,18 @@ TIER_IMPORTANT_PCT = 0.40  # next 30%
 MAX_ENUM_DISTINCT = 50     # max distinct values before treating as continuous
 
 
+def _bt(s: str) -> str:
+    """Strip backticks — not supported in this env."""
+    return s.replace("`", "") if isinstance(s, str) else s
+
+
+def _fp_get(fp, key: str, default=None):
+    """Get attribute from fingerprint (handles both dict and object)."""
+    if isinstance(fp, dict):
+        return fp.get(key, default)
+    return getattr(fp, key, default)
+
+
 def compute_importance_tier(rank: int, total: int) -> str:
     """Assign importance tier based on rank position (0-indexed, sorted by frequency desc)."""
     if total == 0:
@@ -120,35 +132,35 @@ def build_verified_queries(fingerprints: list, clusters: list) -> list[dict]:
 
     # Tier 1: Actual NL→SQL pairs from corpus
     nl_fps = sorted(
-        [fp for fp in fingerprints if getattr(fp, "nl_question", None)],
-        key=lambda fp: getattr(fp, "frequency", 1),
+        [fp for fp in fingerprints if _fp_get(fp, "nl_question")],
+        key=lambda fp: _fp_get(fp, "frequency", 1),
         reverse=True,
     )
     for fp in nl_fps:
-        sql_key = getattr(fp, "canonical_sql", "").strip().upper()
+        sql_key = _bt(_fp_get(fp, "canonical_sql", "")).strip().upper()
         if sql_key and sql_key not in seen_sqls:
             verified.append({
-                "question": fp.nl_question.strip(),
-                "sql": fp.canonical_sql,
-                "tables": fp.tables if hasattr(fp, "tables") else [],
+                "question": _fp_get(fp, "nl_question", "").strip(),
+                "sql": _bt(_fp_get(fp, "canonical_sql", "")),
+                "tables": _fp_get(fp, "tables", []),
                 "source": "corpus",
             })
             seen_sqls.add(sql_key)
 
     # Tier 2: Representative queries from top clusters
-    fp_map = {getattr(fp, "id", i): fp for i, fp in enumerate(fingerprints)}
+    fp_map = {_fp_get(fp, "id", i): fp for i, fp in enumerate(fingerprints)}
     for cl in clusters:
         rep_id = cl.get("rep_id")
         rep = fp_map.get(rep_id) if rep_id else None
         if not rep:
             continue
-        sql_key = getattr(rep, "canonical_sql", "").strip().upper()
+        sql_key = _bt(_fp_get(rep, "canonical_sql", "")).strip().upper()
         if sql_key in seen_sqls:
             continue
         verified.append({
             "question": None,
-            "sql": rep.canonical_sql,
-            "tables": rep.tables if hasattr(rep, "tables") else [],
+            "sql": _bt(_fp_get(rep, "canonical_sql", "")),
+            "tables": _fp_get(rep, "tables", []),
             "source": "inferred_from_cluster",
         })
         seen_sqls.add(sql_key)
@@ -357,7 +369,7 @@ def mine_common_pitfalls(
                 tbl_list = ", ".join(sorted(tables)[:4])
                 pitfalls.append({
                     "type": "ambiguous_column",
-                    "warning": f"Column `{col}` exists in multiple tables ({tbl_list}). "
+                    "warning": f"Column {col} exists in multiple tables ({tbl_list}). "
                                f"Always qualify with table name/alias.",
                     "severity": "high",
                 })
@@ -391,7 +403,7 @@ def mine_common_pitfalls(
             if a in custom_tables or b in custom_tables:
                 pitfalls.append({
                     "type": "missing_direct_join",
-                    "warning": f"Tables `{a}` and `{b}` co-occur in queries but are never "
+                    "warning": f"Tables {a} and {b} co-occur in queries but are never "
                                f"directly joined. They likely need a bridge table.",
                     "severity": "medium",
                 })
@@ -410,8 +422,8 @@ def mine_common_pitfalls(
                     if not any(filter_lower in cf for cf in corpus_filters):
                         pitfalls.append({
                             "type": "missing_standard_filter",
-                            "warning": f"Table `{table.name}` has standard filter "
-                                       f"`{col.standard_filter}` (from schema) but it's not "
+                            "warning": f"Table {table.name} has standard filter "
+                                       f"{col.standard_filter} (from schema) but it's not "
                                        f"consistently used in the query corpus.",
                             "severity": "high",
                         })
@@ -455,7 +467,7 @@ def generate_correctness_criteria(
     for tbl, conditions in table_defaults.items():
         for cond in conditions[:3]:
             criteria.append({
-                "rule": f"When querying `{tbl}`, include filter: {cond}",
+                "rule": f"When querying {tbl}, include filter: {cond}",
                 "scope": f"table:{tbl.split('.')[-1]}",
                 "source": "table_default_filter",
             })
@@ -470,7 +482,7 @@ def generate_correctness_criteria(
                  if tuple(sorted(p)) == tuple(sorted(pair)) and on]
         if conds:
             criteria.append({
-                "rule": f"Join `{pair[0]}` to `{pair[1]}` ON {conds[0]}",
+                "rule": f"Join {pair[0]} to {pair[1]} ON {conds[0]}",
                 "scope": f"join:{pair[0]}|{pair[1]}",
                 "source": "corpus_join_pattern",
             })
@@ -486,7 +498,7 @@ def generate_correctness_criteria(
         total = sum(fns.values())
         if total >= 10 and dominant_cnt / total >= 0.80:
             criteria.append({
-                "rule": f"Column `{col}` is typically aggregated with {dominant_fn}()",
+                "rule": f"Column {col} is typically aggregated with {dominant_fn}()",
                 "scope": f"column:{col}",
                 "source": "dominant_aggregation",
             })
@@ -497,7 +509,7 @@ def generate_correctness_criteria(
             for col in table.columns:
                 if col.data_type and col.data_type.upper() in ("DATE", "TIMESTAMP"):
                     criteria.append({
-                        "rule": f"`{table.name}.{col.name}` is {col.data_type} — "
+                        "rule": f"{table.name}.{col.name} is {col.data_type} — "
                                 f"use date functions, not string comparisons",
                         "scope": f"column:{table.name}.{col.name}",
                         "source": "thrift_schema_type",
@@ -552,7 +564,7 @@ def generate_business_evidence(
             top_vals = [str(v) for v in list(vals.keys())[:5]]
             if all(len(str(v)) == 2 and str(v).isupper() for v in list(vals.keys())[:10]):
                 evidence.append({
-                    "evidence": f"`{col}` values are 2-letter uppercase codes "
+                    "evidence": f"{col} values are 2-letter uppercase codes "
                                 f"(e.g., {', '.join(top_vals[:3])})",
                     "type": "value_pattern",
                     "confidence": "corpus_derived",
@@ -564,7 +576,7 @@ def generate_business_evidence(
             for col in table.columns:
                 if col.description and len(col.description) > 10:
                     evidence.append({
-                        "evidence": f"`{table.name}.{col.name}`: {col.description}",
+                        "evidence": f"{table.name}.{col.name}: {col.description}",
                         "type": "schema_description",
                         "confidence": "confirmed",
                     })

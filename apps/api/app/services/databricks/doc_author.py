@@ -79,6 +79,9 @@ WRITING QUALITY:
 - Do NOT explain what SQL is, what a JOIN does, or other basics. The reader is an AI.
 - Jump straight to the specific tables, columns, filters, metrics, and queries.
 - Use exact identifiers from the data — never paraphrase.
+- NEVER use backticks (`) to quote identifiers. This environment does NOT support backtick quoting.
+  Write table and column names unquoted: table_name.column_name, NOT `table_name`.`column_name`.
+  This applies to ALL SQL examples, filter conditions, join syntax, and identifier references.
 """
 
 
@@ -89,7 +92,7 @@ SYSTEM_PROMPTS = {
 
 This brand has two types of tables:
 - STANDARD TABLES (read_api databases): Their full schema, columns, data types, and
-  relationships are documented in `db_schema/` prefix docs in RAG. Do NOT re-document them.
+  relationships are documented in db_schema/ prefix docs in RAG. Do NOT re-document them.
 - CUSTOM TABLES (write_db databases): These are brand-specific derived/aggregated tables
   NOT covered by db_schema/. This document must fully describe them.
 
@@ -193,7 +196,7 @@ def build_preamble(column_freq: list) -> str:
             tbl, col = parts[0], ".".join(parts[1:])
         else:
             tbl, col = "?", entry_str
-        glossary.append(f'      "{col.replace("_", " ")}" for column `{col}` in `{tbl}`')
+        glossary.append(f'      "{col.replace("_", " ")}" for column {col} in {tbl}')
     gloss_block = "\n".join(glossary) if glossary else "      (auto-populated)"
 
     doc_list = "\n".join(f"  {k} -> {DOC_NAMES[k]}" for k in CORE_DOC_KEYS)
@@ -202,7 +205,7 @@ def build_preamble(column_freq: list) -> str:
 system that generates SparkSQL queries from natural language.
 
 All docs will be loaded together into the AI's system prompt at query time.
-Standard tables (read_api databases) have their schema in `db_schema/` prefix docs in RAG.
+Standard tables (read_api databases) have their schema in db_schema/ prefix docs in RAG.
 NEVER re-document standard table schemas — always reference db_schema/ for them.
 
 THE CORE DOCUMENTS AND THEIR BOUNDARIES:
@@ -216,6 +219,7 @@ CRITICAL WRITING RULES:
   - MANDATORY OPENING: Begin with a 2-4 sentence description (100-200 chars) explaining:
     (a) What this document contains, (b) When to load it, (c) What questions it answers.
   - NEVER mention query counts, usage percentages, or frequency stats.
+  - NEVER use backticks (`) to quote identifiers. Write unquoted: table_name.column_name.
   - Be EXHAUSTIVE — every table, pattern, and business concept must be captured.
   - Use these canonical terms:
 {gloss_block}
@@ -435,6 +439,6 @@ def build_index_document(docs: dict, payloads: dict) -> str:
         lines.append(f"| {key} | {name} | {first_line} | ~{word_count} |")
 
     lines.append("")
-    lines.append("Standard table schemas are in `db_schema/` prefix docs (loaded separately).")
+    lines.append("Standard table schemas are in db_schema/ prefix docs (loaded separately).")
 
     return "\n".join(lines)

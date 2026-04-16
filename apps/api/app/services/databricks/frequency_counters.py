@@ -8,6 +8,11 @@ Pure logic — no I/O changes needed.
 from collections import Counter, defaultdict
 
 from app.services.databricks.qfp import QFP
+
+
+def _bt(s: str) -> str:
+    """Strip backticks from any string — backticks don't work in this env."""
+    return s.replace("`", "") if isinstance(s, str) else s
 from app.services.databricks.fingerprint_engine import _norm
 
 
@@ -39,18 +44,18 @@ def build_counters(fps: list[QFP]) -> tuple[dict, dict, dict, int]:
         total_w += w
 
         for t in fp.tables:
-            C["table"][t] += w
+            C["table"][_bt(t)] += w
         for ta, col in fp.qualified_columns:
             resolved = fp.alias_map.get(ta, ta)
-            C["column"][(resolved, col)] += w
+            C["column"][(_bt(resolved), _bt(col))] += w
             for fn in fp.functions:
                 if fn in ("SUM", "COUNT", "AVG", "MIN", "MAX"):
-                    C["agg_pattern"][(fn, col)] += w
+                    C["agg_pattern"][(fn, _bt(col))] += w
         for fn in fp.functions:
             C["function"][fn] += w
         for e in fp.join_graph:
             if e.left:
-                pair = tuple(sorted([e.left, e.right]))
+                pair = tuple(sorted([_bt(e.left), _bt(e.right)]))
                 C["join_pair"][pair] += w
                 C["join_cond"][(*pair, e.on_condition)] += w
             else:

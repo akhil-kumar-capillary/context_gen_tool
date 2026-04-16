@@ -141,11 +141,24 @@ def run_schema_validation(
     all_doc_text = " ".join(d for d in docs.values() if d)
 
     import re
-    backtick_refs = re.findall(r'`(\w+)`', all_doc_text)
+
+    # Check for backtick leakage — backticks should never appear in generated docs
+    backtick_count = all_doc_text.count("`")
+    if backtick_count > 0:
+        issues.append({
+            "type": "backtick_leakage",
+            "severity": "high",
+            "message": f"Found {backtick_count} backtick(s) in generated docs. "
+                       f"Backticks are not supported in this environment.",
+        })
+
+    # Extract identifier references (word boundaries for table/column names)
+    # Use dot-separated identifiers like table_name.column_name
+    identifier_refs = re.findall(r'\b([a-zA-Z_]\w+(?:\.\w+)?)\b', all_doc_text)
 
     unknown_tables = set()
-    for ref in backtick_refs:
-        if len(ref) < 3:
+    for ref in identifier_refs:
+        if len(ref) < 3 or "." in ref:
             continue
         if ref in all_table_names:
             continue
@@ -164,13 +177,13 @@ def run_schema_validation(
             "type": "unknown_table",
             "table": t,
             "severity": "warning",
-            "message": f"Table `{t}` referenced in docs but not found in Thrift schema",
+            "message": f"Table {t} referenced in docs but not found in Thrift schema",
         })
 
     return {
         "status": "completed",
         "issues": issues,
-        "tables_checked": len(backtick_refs),
+        "tables_checked": len(identifier_refs),
         "unknown_count": len(unknown_tables),
     }
 

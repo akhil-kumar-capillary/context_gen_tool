@@ -23,6 +23,14 @@ VALID_SQL_KEYWORDS = frozenset(
 ORG_DB_PATTERN = re.compile(r"\b(read_api|write_db)_(\d+)\b", re.IGNORECASE)
 
 
+def strip_backticks(sql: str) -> str:
+    """Remove all backtick quoting from SQL identifiers.
+
+    Backticks don't work in this Databricks/SparkSQL environment.
+    """
+    return sql.replace("`", "")
+
+
 # --- Utility Functions ---
 
 
@@ -264,14 +272,14 @@ def validate_and_format_sql(sql: str) -> tuple[bool, Optional[str]]:
     """
     if not sql or not sql.strip():
         return False, None
-    cleaned_sql = sql.strip()
+    cleaned_sql = strip_backticks(sql.strip())
     first_word = cleaned_sql.split()[0].upper() if cleaned_sql.split() else ""
 
     if first_word in VALID_SQL_KEYWORDS:
         try:
             parsed = sqlglot.parse_one(cleaned_sql, read="spark")
             if parsed:
-                return True, parsed.sql(dialect="spark")
+                return True, strip_backticks(parsed.sql(dialect="spark"))
         except Exception:
             pass
         return True, cleaned_sql
@@ -280,7 +288,7 @@ def validate_and_format_sql(sql: str) -> tuple[bool, Optional[str]]:
         try:
             parsed = sqlglot.parse_one(cleaned_sql, read="spark")
             if parsed and hasattr(parsed, "expression") and parsed.expression:
-                embedded_sql = parsed.expression.sql(dialect="spark")
+                embedded_sql = strip_backticks(parsed.expression.sql(dialect="spark"))
                 if embedded_sql and embedded_sql.strip():
                     upper_embedded = embedded_sql.strip().upper()
                     if upper_embedded.startswith("SELECT") or upper_embedded.startswith(
