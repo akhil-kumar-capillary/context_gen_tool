@@ -12,6 +12,7 @@ import logging
 import re
 
 from app.config import settings
+from app.services.file_ingest.converter import sanitize_html
 from app.services.llm_service import call_llm
 
 logger = logging.getLogger(__name__)
@@ -100,6 +101,10 @@ async def refactor_document(
         return html_content, result.get("usage", {})
 
     refactored_html = _strip_codefence(refactored_html)
+    # Defense-in-depth: the LLM could theoretically emit <script>, event
+    # handlers, or javascript: URLs even though the input was clean, so
+    # re-apply the same allowlist sanitizer used for the initial conversion.
+    refactored_html = sanitize_html(refactored_html)
 
     # Safety check: if the LLM somehow returned much less content, keep original.
     # Threshold is generous (30% of input size) to allow legitimate cleanup while

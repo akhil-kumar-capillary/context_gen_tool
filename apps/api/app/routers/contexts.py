@@ -411,8 +411,12 @@ async def convert_files(
             entry["status"] = "success"
             if token_usage:
                 entry["tokens"] = token_usage
-        except HTTPException:
-            raise
+        except HTTPException as e:
+            # Per-file errors (e.g. 413 from _stream_to_temp when a file exceeds
+            # the size cap) shouldn't abort the whole batch — let the other
+            # files keep converting and surface this one as an entry-level error.
+            entry["status"] = "error"
+            entry["error"] = e.detail if hasattr(e, "detail") else str(e)
         except UnsupportedFormatError as e:
             entry["status"] = "error"
             entry["error"] = str(e)
