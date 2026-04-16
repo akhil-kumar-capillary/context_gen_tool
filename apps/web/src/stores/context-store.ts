@@ -7,6 +7,17 @@ import type { Context, AiGeneratedContext, LLMUsage } from "@/types";
 
 export type ContextStatusFilter = "active" | "archived" | "all";
 
+/**
+ * Context upload/update calls can take a long time when the payload is large
+ * (PDFs with many images, long documents). The default 30s timeout is too
+ * aggressive and causes "zombie uploads": frontend aborts, backend and
+ * Capillary keep running, the context gets created server-side, but the user
+ * sees an error and may retry — producing a duplicate on their second attempt.
+ *
+ * 3 minutes gives slow Capillary saves a chance to finish before we bail.
+ */
+const UPLOAD_TIMEOUT_MS = 180_000;
+
 interface ContextState {
   // Context list
   contexts: Context[];
@@ -109,16 +120,45 @@ export const useContextStore = create<ContextState>((set, get) => ({
     if (!token || !orgId) return;
 
     set({ isLoading: true, error: null });
+
+    // Refetch before saving so we notice if a zombie upload already created
+    // this name server-side on a previous attempt. If it exists, update
+    // instead of creating a duplicate.
+    await get().fetchContexts();
+    const existing = get().contexts.find((c) => c.name === name);
+
     try {
-      await apiClient.post(
-        `/api/contexts/upload?org_id=${orgId}`,
-        { name, content, scope },
-        { token }
-      );
-      toast.success("Context created");
+      if (existing) {
+        await apiClient.put(
+          `/api/contexts/update?org_id=${orgId}`,
+          { context_id: existing.id, name, content, scope },
+          { token, timeoutMs: UPLOAD_TIMEOUT_MS },
+        );
+      } else {
+        await apiClient.post(
+          `/api/contexts/upload?org_id=${orgId}`,
+          { name, content, scope },
+          { token, timeoutMs: UPLOAD_TIMEOUT_MS },
+        );
+      }
+      toast.success(existing ? "Context updated" : "Context created");
       await get().fetchContexts();
       set({ isCreating: false });
     } catch (err) {
+      // Zombie-upload detection: the request may have timed out on our side
+      // but succeeded on Capillary's. Refetch and confirm before surfacing
+      // an error.
+      try {
+        await get().fetchContexts();
+        const landed = get().contexts.find((c) => c.name === name);
+        if (landed) {
+          toast.success("Context created (completed on server after slow response)");
+          set({ isCreating: false, isLoading: false });
+          return;
+        }
+      } catch {
+        // Ignore refetch errors — fall through to reporting the original error
+      }
       set({
         error: err instanceof Error ? err.message : "Failed to create context",
         isLoading: false,
@@ -136,7 +176,7 @@ export const useContextStore = create<ContextState>((set, get) => ({
       await apiClient.put(
         `/api/contexts/update?org_id=${orgId}`,
         { context_id: contextId, name, content, scope },
-        { token }
+        { token, timeoutMs: UPLOAD_TIMEOUT_MS },
       );
       toast.success("Context updated");
       await get().fetchContexts();
@@ -218,21 +258,23 @@ export const useContextStore = create<ContextState>((set, get) => ({
 
   bulkUpload: async () => {
     const { token, orgId } = useAuthStore.getState();
-    const { aiContexts, contexts } = get();
+    const { aiContexts } = get();
     if (!token || !orgId || !aiContexts) return;
 
-    // Build existing name map for conflict detection
+    // Refetch first so the existing-name map reflects any zombie uploads
+    // that landed on Capillary but errored on our side previously.
+    await get().fetchContexts();
+    const { contexts } = get();
+
     const existingNameMap: Record<string, string> = {};
     contexts.forEach((ctx) => {
       existingNameMap[ctx.name] = ctx.id;
     });
 
-    // Filter only contexts that haven't been uploaded yet
     const toUpload = aiContexts.filter(
       (c) => c.uploadStatus !== "success" && c.uploadStatus !== "uploading"
     );
 
-    // Mark all as uploading
     for (const ctx of toUpload) {
       get().setAiContextUploadStatus(ctx.id, "uploading");
     }
@@ -250,7 +292,7 @@ export const useContextStore = create<ContextState>((set, get) => ({
           })),
           existing_name_map: existingNameMap,
         },
-        { token }
+        { token, timeoutMs: UPLOAD_TIMEOUT_MS },
       );
 
       // Update individual upload statuses
@@ -363,13 +405,14 @@ export const useContextStore = create<ContextState>((set, get) => ({
 
   uploadSingleAiContext: async (aiCtx) => {
     const { token, orgId } = useAuthStore.getState();
-    const { contexts } = get();
     if (!token || !orgId) return;
 
     get().setAiContextUploadStatus(aiCtx.id, "uploading");
 
-    // Check if context with same name already exists
-    const existing = contexts.find((c) => c.name === aiCtx.name);
+    // Refresh before deciding create-vs-update — a zombie upload from a
+    // previous timed-out attempt may have already landed on Capillary.
+    await get().fetchContexts();
+    const existing = get().contexts.find((c) => c.name === aiCtx.name);
 
     try {
       if (existing) {
@@ -381,18 +424,31 @@ export const useContextStore = create<ContextState>((set, get) => ({
             content: aiCtx.content,
             scope: aiCtx.scope,
           },
-          { token }
+          { token, timeoutMs: UPLOAD_TIMEOUT_MS },
         );
       } else {
         await apiClient.post(
           `/api/contexts/upload?org_id=${orgId}`,
           { name: aiCtx.name, content: aiCtx.content, scope: aiCtx.scope },
-          { token }
+          { token, timeoutMs: UPLOAD_TIMEOUT_MS },
         );
       }
       get().setAiContextUploadStatus(aiCtx.id, "success");
       await get().fetchContexts();
     } catch (err) {
+      // Zombie-upload detection: if the call errored but Capillary still
+      // created/updated the context, treat it as success rather than prompting
+      // the user to retry (which would produce a duplicate).
+      try {
+        await get().fetchContexts();
+        const landed = get().contexts.find((c) => c.name === aiCtx.name);
+        if (landed) {
+          get().setAiContextUploadStatus(aiCtx.id, "success");
+          return;
+        }
+      } catch {
+        // Ignore refetch failures — fall through to marking the error
+      }
       get().setAiContextUploadStatus(
         aiCtx.id,
         "error",

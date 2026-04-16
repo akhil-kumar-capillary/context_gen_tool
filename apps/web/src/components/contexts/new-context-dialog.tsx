@@ -1,15 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { X, Loader2, AlertCircle } from "lucide-react";
+import { X, Loader2, AlertCircle, PenLine, UploadCloud } from "lucide-react";
 import { motion } from "framer-motion";
-import { CONTEXT_NAME_REGEX, CONTEXT_NAME_ERROR } from "@/lib/utils";
+import { cn, CONTEXT_NAME_REGEX, CONTEXT_NAME_ERROR } from "@/lib/utils";
 import { useContextStore } from "@/stores/context-store";
 import { RichTextEditor } from "@/components/shared/rich-text-editor";
+import { UploadFilesTab } from "./upload-files-tab";
+
+type TabId = "write" | "upload";
 
 export function NewContextDialog() {
   const { createContext, setIsCreating } = useContextStore();
 
+  const [tab, setTab] = useState<TabId>("write");
   const [name, setName] = useState("");
   const [content, setContent] = useState("");
   const [scope, setScope] = useState<"org" | "private">("org");
@@ -55,84 +59,139 @@ export function NewContextDialog() {
           </button>
         </div>
 
-        {/* Body — flex column so content area fills remaining height */}
+        {/* Tabs */}
+        <div className="flex items-center gap-1 border-b border-border px-6 pt-3">
+          <TabButton
+            active={tab === "write"}
+            onClick={() => setTab("write")}
+            icon={<PenLine className="h-3.5 w-3.5" />}
+            label="Write"
+          />
+          <TabButton
+            active={tab === "upload"}
+            onClick={() => setTab("upload")}
+            icon={<UploadCloud className="h-3.5 w-3.5" />}
+            label="Upload files"
+          />
+        </div>
+
+        {/* Body */}
         <div className="flex flex-1 flex-col overflow-hidden px-6 py-4 gap-3">
-          {/* Name + Scope row (compact) */}
-          <div className="flex gap-3 shrink-0">
-            <div className="flex-1">
-              <label htmlFor="new-name" className="mb-1 block text-xs font-medium text-foreground">
-                Name
-              </label>
-              <input
-                id="new-name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={100}
-                placeholder="e.g. 01_MASTER_RULES"
-                className="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm transition-colors"
-              />
-            </div>
-            <div className="w-36 shrink-0">
-              <label htmlFor="new-scope" className="mb-1 block text-xs font-medium text-foreground">
-                Scope
-              </label>
-              <select
-                id="new-scope"
-                value={scope}
-                onChange={(e) => setScope(e.target.value as "org" | "private")}
-                className="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm transition-colors"
-              >
-                <option value="org">Organization</option>
-                <option value="private">Private</option>
-              </select>
-            </div>
-          </div>
+          {tab === "write" ? (
+            <>
+              {/* Name + Scope row */}
+              <div className="flex gap-3 shrink-0">
+                <div className="flex-1">
+                  <label htmlFor="new-name" className="mb-1 block text-xs font-medium text-foreground">
+                    Name
+                  </label>
+                  <input
+                    id="new-name"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    maxLength={100}
+                    placeholder="e.g. 01_MASTER_RULES"
+                    className="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm transition-colors"
+                  />
+                </div>
+                <div className="w-36 shrink-0">
+                  <label htmlFor="new-scope" className="mb-1 block text-xs font-medium text-foreground">
+                    Scope
+                  </label>
+                  <select
+                    id="new-scope"
+                    value={scope}
+                    onChange={(e) => setScope(e.target.value as "org" | "private")}
+                    className="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm transition-colors"
+                  >
+                    <option value="org">Organization</option>
+                    <option value="private">Private</option>
+                  </select>
+                </div>
+              </div>
 
-          {/* Content — fills all remaining vertical space */}
-          <div className="flex flex-1 flex-col min-h-0">
-            <label className="mb-1.5 text-xs font-medium text-foreground shrink-0">Content</label>
-            <RichTextEditor
-              value={content}
-              onChange={setContent}
-              placeholder="Start writing your context..."
-              className="flex-1 min-h-0"
+              {/* Content */}
+              <div className="flex flex-1 flex-col min-h-0">
+                <label className="mb-1.5 text-xs font-medium text-foreground shrink-0">Content</label>
+                <RichTextEditor
+                  value={content}
+                  onChange={setContent}
+                  placeholder="Start writing your context..."
+                  className="flex-1 min-h-0"
+                />
+              </div>
+
+              {/* Error */}
+              {error && (
+                <div className="flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-2.5 text-sm text-destructive">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {error}
+                </div>
+              )}
+            </>
+          ) : (
+            <UploadFilesTab
+              scope={scope}
+              onScopeChange={setScope}
+              onDone={() => setIsCreating(false)}
             />
-          </div>
-
-          {/* Error */}
-          {error && (
-            <div className="flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-2.5 text-sm text-destructive">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              {error}
-            </div>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4">
-          <button
-            onClick={() => setIsCreating(false)}
-            className="rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleCreate}
-            disabled={saving}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-70 disabled:pointer-events-none"
-          >
-            {saving ? (
-              <span className="flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Creating...
-              </span>
-            ) : (
-              "Create"
-            )}
-          </button>
-        </div>
+        {/* Footer — only shown for Write tab; Upload tab has its own convert button */}
+        {tab === "write" && (
+          <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4">
+            <button
+              onClick={() => setIsCreating(false)}
+              className="rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleCreate}
+              disabled={saving}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-70 disabled:pointer-events-none"
+            >
+              {saving ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating...
+                </span>
+              ) : (
+                "Create"
+              )}
+            </button>
+          </div>
+        )}
       </motion.div>
     </div>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-1.5 rounded-t-md px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px",
+        active
+          ? "border-primary text-foreground"
+          : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+      )}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }

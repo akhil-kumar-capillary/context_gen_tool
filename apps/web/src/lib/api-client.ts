@@ -2,6 +2,8 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 interface FetchOptions extends RequestInit {
   token?: string;
+  /** Override the default 30s request timeout (ms). Use for slow endpoints like context upload. */
+  timeoutMs?: number;
 }
 
 class ApiClient {
@@ -15,7 +17,7 @@ class ApiClient {
     path: string,
     options: FetchOptions = {}
   ): Promise<T> {
-    const { token, ...fetchOptions } = options;
+    const { token, timeoutMs, ...fetchOptions } = options;
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -27,7 +29,7 @@ class ApiClient {
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30_000);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs ?? 30_000);
     let response: Response;
     try {
       response = await fetch(`${this.baseUrl}${path}`, {
@@ -98,6 +100,67 @@ class ApiClient {
 
   async delete<T>(path: string, options?: FetchOptions): Promise<T> {
     return this.request<T>(path, { ...options, method: "DELETE" });
+  }
+
+  /**
+   * Multipart POST for file uploads. Does NOT set Content-Type — the browser
+   * adds its own with the correct multipart boundary.
+   *
+   * `onProgress` receives values in the range [0, 1]. Progress is driven by
+   * XMLHttpRequest because fetch() has no native upload-progress event.
+   */
+  async postFormData<T>(
+    path: string,
+    formData: FormData,
+    options: { token?: string; onProgress?: (p: number) => void; timeoutMs?: number } = {}
+  ): Promise<T> {
+    const { token, onProgress, timeoutMs = 600_000 } = options;
+    const url = `${this.baseUrl}${path}`;
+
+    return new Promise<T>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", url, true);
+      xhr.timeout = timeoutMs;
+      if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+
+      if (onProgress) {
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) onProgress(e.loaded / e.total);
+        };
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText) as T);
+          } catch {
+            reject(new ApiError(xhr.status, "Invalid JSON response"));
+          }
+          return;
+        }
+        if (xhr.status === 401) {
+          import("@/stores/auth-store")
+            .then(({ useAuthStore }) => useAuthStore.getState().logout())
+            .catch(() => {});
+          if (typeof window !== "undefined") window.location.href = "/login";
+          reject(new ApiError(401, "Session expired"));
+          return;
+        }
+        let detail = xhr.statusText;
+        try {
+          const parsed = JSON.parse(xhr.responseText);
+          detail = parsed.detail || detail;
+        } catch {
+          // Use statusText as-is
+        }
+        reject(new ApiError(xhr.status, detail || "Upload failed"));
+      };
+
+      xhr.onerror = () => reject(new ApiError(0, "Network error"));
+      xhr.ontimeout = () => reject(new ApiError(0, "Upload timed out"));
+
+      xhr.send(formData);
+    });
   }
 }
 

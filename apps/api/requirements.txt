@@ -33,6 +33,11 @@ atlassian-python-api>=3.41.0
 markdownify>=0.13.0
 markdown-it-py>=3.0.0
 
+# File ingestion (PDF/DOCX/PPTX/XLSX/HTML/Image → HTML)
+docling>=2.70.0
+filetype>=1.2.0
+bleach>=6.2.0
+
 # Pydantic
 pydantic>=2.9.0
 pydantic-settings>=2.5.0
